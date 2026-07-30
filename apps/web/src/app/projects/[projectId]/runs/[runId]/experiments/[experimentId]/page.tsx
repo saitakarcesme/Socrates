@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { Metric, Panel, StatusBadge } from "@socrates/design-system";
 
 import { PageHeader } from "@/components/page-header";
+import { ExperimentWorkflowControls } from "@/components/forms/experiment-workflow-controls";
 import { ControlPlaneError } from "@/lib/api/client";
 import { getExperiment, getProject, getRun } from "@/lib/api/queries";
 import { formatDuration, formatMetric } from "@/lib/metric-presentation";
@@ -123,6 +124,13 @@ export default async function ExperimentPage({ params }: ExperimentPageProps) {
             )}
           />
         </section>
+
+        <div className="mt-6">
+          <ExperimentWorkflowControls
+            experiment={experiment}
+            project={project}
+          />
+        </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
           <div className="space-y-6">

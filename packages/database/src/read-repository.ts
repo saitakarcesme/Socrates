@@ -328,6 +328,14 @@ export class PostgresReadRepository implements ReadRepository {
         objective: schema.runs.objective,
         status: schema.runs.status,
         version: schema.runs.version,
+        latestEventSequence: sql<number>`coalesce(
+          (
+            select max(${schema.runEvents.sequence})
+            from ${schema.runEvents}
+            where ${schema.runEvents.runId} = ${schema.runs.id}
+          ),
+          0
+        )::integer`,
         startedAt: schema.runs.startedAt,
         completedAt: schema.runs.completedAt,
         createdAt: schema.runs.createdAt,

@@ -75,6 +75,7 @@ export type RunRead = {
     | "failed"
     | "budget_exhausted";
   version: number;
+  latestEventSequence: number;
   budget: {
     maximumExperiments: number;
     maximumDurationMs: number;

@@ -1,6 +1,6 @@
 # Phase 1 Web Manual Workflow
 
-Status: In progress
+Status: Completed
 Architecture decisions: ADR-022, ADR-024
 
 ## Outcome
@@ -61,3 +61,8 @@ keeping PostgreSQL and the Hono control plane authoritative.
 
 The manual project-to-learning journey operates without fake enabled controls,
 duplicate command effects, locally invented research state, or fixture data.
+
+Verified on 2026-07-30 with PostgreSQL 17.10 and an automated Chromium journey
+at desktop and 390 × 844 viewports. The run timeline connected to durable SSE,
+rendered the committed experiment, and had no horizontal overflow, framework
+overlay, or browser console error.

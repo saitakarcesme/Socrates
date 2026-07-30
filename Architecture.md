@@ -770,13 +770,14 @@ failure. Editing the payload allocates a new key. Validation and domain errors
 preserve input. A `version_conflict` preserves input, identifies the stale
 snapshot, and refreshes server data before another submission.
 
-The run timeline enhances its server snapshot with the durable SSE feed. The
-client stores only the highest contiguous event sequence and connection state;
-event payloads are invalidation signals, not a second experiment projection.
-Receiving a new durable event schedules one coalesced `router.refresh()`.
-EventSource reconnect supplies the last sequence through the query cursor, and
-the server remains responsible for replay. Zustand is not used for durable
-research facts.
+The run projection includes its latest durable event sequence. The timeline
+enhances that server snapshot with the SSE feed starting after this sequence.
+The client stores only the highest contiguous event sequence and connection
+state; event payloads are invalidation signals, not a second experiment
+projection. Receiving a new durable event schedules one coalesced
+`router.refresh()`. EventSource reconnect supplies the last sequence through
+the query cursor, and the server remains responsible for replay. Zustand is not
+used for durable research facts.
 
 ## 19. Explicit non-goals for the first commit
 

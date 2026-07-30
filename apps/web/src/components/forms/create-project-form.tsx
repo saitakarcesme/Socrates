@@ -3,9 +3,13 @@
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useRef, useState, useTransition } from "react";
+import { type FormEvent, useState } from "react";
 
-import { createProjectCommandSchema } from "@socrates/contracts";
+import {
+  createProjectCommandSchema,
+  type CreateProjectCommand,
+  type ProjectMutationResponse,
+} from "@socrates/contracts";
 import { Button, buttonClassName } from "@socrates/design-system";
 
 import {
@@ -14,12 +18,8 @@ import {
   FormSelect,
   FormTextarea,
 } from "@/components/forms/form-field";
-import { ControlPlaneContractError, ControlPlaneError } from "@/lib/api/client";
 import { createBrowserControlPlaneClient } from "@/lib/api/browser";
-import {
-  idempotencyKeyFor,
-  type IdempotencyKeyState,
-} from "@/lib/api/idempotency";
+import { useCommandSubmission } from "@/lib/api/use-command-submission";
 
 type FieldErrors = Record<string, string>;
 
@@ -32,15 +32,21 @@ function focusFirstError(errors: FieldErrors) {
 
 export function CreateProjectForm() {
   const router = useRouter();
-  const idempotency = useRef<IdempotencyKeyState | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [formError, setFormError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const {
+    clearError,
+    error: formError,
+    pending,
+    submit: submitCommand,
+  } = useCommandSubmission<CreateProjectCommand, ProjectMutationResponse>({
+    onSuccess: (response) =>
+      router.push(`/projects/${response.data.projectId}`),
+  });
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFieldErrors({});
-    setFormError(null);
+    clearError();
 
     const form = new FormData(event.currentTarget);
     const sourceReference = String(form.get("source.reference") ?? "").trim();
@@ -82,33 +88,12 @@ export function CreateProjectForm() {
       return;
     }
 
-    const submission = idempotencyKeyFor(parsed.data, idempotency.current);
-    idempotency.current = submission;
-
-    startTransition(async () => {
-      try {
-        const response = await createBrowserControlPlaneClient().createProject(
-          parsed.data,
-          submission.key,
-        );
-        idempotency.current = null;
-        router.push(`/projects/${response.data.projectId}`);
-      } catch (error) {
-        if (error instanceof ControlPlaneError) {
-          setFormError(error.message);
-          return;
-        }
-        if (error instanceof ControlPlaneContractError) {
-          setFormError(
-            "The control plane returned an unexpected response. Your input is preserved.",
-          );
-          return;
-        }
-        setFormError(
-          "The control plane could not be reached. Retry to safely replay this submission.",
-        );
-      }
-    });
+    submitCommand(parsed.data, (idempotencyKey) =>
+      createBrowserControlPlaneClient().createProject(
+        parsed.data,
+        idempotencyKey,
+      ),
+    );
   }
 
   return (

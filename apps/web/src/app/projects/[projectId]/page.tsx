@@ -3,7 +3,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { Button, Metric, Panel, StatusBadge } from "@socrates/design-system";
+import {
+  Button,
+  Metric,
+  Panel,
+  StatusBadge,
+  buttonClassName,
+} from "@socrates/design-system";
 
 import { PageHeader } from "@/components/page-header";
 import { ControlPlaneError } from "@/lib/api/client";
@@ -34,13 +40,6 @@ function runTone(status: string) {
     return "danger" as const;
   }
   return "neutral" as const;
-}
-
-function formatCost(minor: number) {
-  return new Intl.NumberFormat("en", {
-    style: "currency",
-    currency: "USD",
-  }).format(minor / 100);
 }
 
 export async function generateMetadata({
@@ -76,14 +75,13 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             >
               <MoreHorizontal className="size-3.5" />
             </Button>
-            <Button
-              disabled
-              title="Run creation form is being connected"
-              variant="primary"
+            <Link
+              className={buttonClassName({ variant: "primary" })}
+              href={`/projects/${projectId}/runs/new`}
             >
               <Plus className="size-3.5" />
               New run
-            </Button>
+            </Link>
           </div>
         }
         description={project.objective}
@@ -160,7 +158,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                         : "No baseline"}
                     </span>
                     <span className="font-mono text-xs text-[var(--text-muted)]">
-                      {formatCost(run.budget.maximumCostMinor)} max
+                      {run.budget.maximumCostMinor} minor units max
                     </span>
                   </Link>
                 ))

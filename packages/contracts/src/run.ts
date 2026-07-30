@@ -5,6 +5,7 @@ import {
   entityIdSchema,
   expectedVersionSchema,
   metricValueSchema,
+  nonNegativeSafeIntegerSchema,
   positiveSafeIntegerSchema,
 } from "./common";
 import { pageInfoSchema } from "./pagination";
@@ -62,6 +63,7 @@ export const runResourceSchema = z
     objective: z.string(),
     status: runStatusSchema,
     version: expectedVersionSchema,
+    latestEventSequence: nonNegativeSafeIntegerSchema,
     budget: budgetLimitSchema,
     baseline: metricValueSchema.nullable(),
     startedAt: z.iso.datetime().nullable(),

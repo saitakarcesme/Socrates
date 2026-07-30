@@ -5,7 +5,10 @@ import { notFound } from "next/navigation";
 import { Button, Metric, Panel, StatusBadge } from "@socrates/design-system";
 
 import { ExperimentTimeline } from "@/components/experiment-timeline";
+import { RunSetupControls } from "@/components/forms/run-setup-controls";
+import { ProposeExperimentForm } from "@/components/forms/propose-experiment-form";
 import { PageHeader } from "@/components/page-header";
+import { RunEventReconciler } from "@/components/run-event-reconciler";
 import { ControlPlaneError } from "@/lib/api/client";
 import {
   getExperiments,
@@ -143,13 +146,19 @@ export default async function RunPage({ params }: RunPageProps) {
 
       <div className="mx-auto grid max-w-[1560px] xl:grid-cols-[minmax(0,1fr)_304px]">
         <section className="min-w-0 p-6 sm:p-8 xl:border-r xl:border-[var(--border)]">
-          <div className="mb-6 flex items-end justify-between">
+          <RunSetupControls run={run} unit={project.currentMetric.unit} />
+          <ProposeExperimentForm projectId={projectId} run={run} />
+          <div className="mb-6 flex items-end justify-between gap-4">
             <div>
               <h2 className="text-sm font-semibold">Experiment timeline</h2>
               <p className="mt-1 text-xs text-[var(--text-muted)]">
                 {experiments.length} experiments · newest first
               </p>
             </div>
+            <RunEventReconciler
+              initialSequence={run.latestEventSequence}
+              runId={run.id}
+            />
           </div>
           {experiments.length > 0 ? (
             <ExperimentTimeline items={experiments} runHref={runHref} />

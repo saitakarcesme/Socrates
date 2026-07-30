@@ -74,6 +74,7 @@ export function streamRunEvents(options: RunEventStreamOptions) {
     let lastWriteAt = Date.now();
 
     stream.onAbort(() => abortController.abort());
+    await stream.write(": connected\n\n");
 
     while (!stream.aborted && !abortController.signal.aborted) {
       let hasMore = true;

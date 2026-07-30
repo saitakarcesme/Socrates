@@ -217,8 +217,18 @@ integration("command API with PostgreSQL", () => {
       runMutationResponseSchema.parse(await baselineResponse.json()).data,
     ).toMatchObject({ version: 1, status: "draft" });
 
-    const liveChunk = await streamReader?.read();
-    const liveEvent = new TextDecoder().decode(liveChunk?.value);
+    const decoder = new TextDecoder();
+    let liveEvent = "";
+    for (
+      let attempt = 0;
+      attempt < 5 && !liveEvent.includes("event: run-event");
+      attempt++
+    ) {
+      const liveChunk = await streamReader?.read();
+      if (liveChunk?.value) {
+        liveEvent += decoder.decode(liveChunk.value);
+      }
+    }
     expect(liveEvent).toContain("event: run-event");
     expect(liveEvent).toContain("id: 2");
     expect(liveEvent).toContain("run.baseline_recorded");

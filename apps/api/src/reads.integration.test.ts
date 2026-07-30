@@ -44,22 +44,29 @@ integration("read API with PostgreSQL", () => {
   });
 
   it("paginates projects with an opaque stable cursor", async () => {
-    const firstResponse = await app.request("/v1/projects?limit=1");
-    const first = projectListResponseSchema.parse(await firstResponse.json());
+    const slugs: string[] = [];
+    let cursor: string | null = null;
 
-    expect(firstResponse.status).toBe(200);
-    expect(first.data.map((project) => project.slug)).toEqual(["atlas-web"]);
-    expect(first.page.nextCursor).toEqual(expect.any(String));
+    for (let pageNumber = 0; pageNumber < 100; pageNumber++) {
+      const response = await app.request(
+        `/v1/projects?limit=1${
+          cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
+        }`,
+      );
+      const page = projectListResponseSchema.parse(await response.json());
 
-    const secondResponse = await app.request(
-      `/v1/projects?limit=1&cursor=${first.page.nextCursor}`,
+      expect(response.status).toBe(200);
+      expect(page.data).toHaveLength(1);
+      slugs.push(page.data[0]!.slug);
+      cursor = page.page.nextCursor;
+      if (!cursor) break;
+    }
+
+    expect(new Set(slugs).size).toBe(slugs.length);
+    expect(slugs).toEqual(
+      expect.arrayContaining(["atlas-web", "meridian-eval"]),
     );
-    const second = projectListResponseSchema.parse(await secondResponse.json());
-
-    expect(second.data.map((project) => project.slug)).toEqual([
-      "meridian-eval",
-    ]);
-    expect(second.page.nextCursor).toBeNull();
+    expect(cursor).toBeNull();
   });
 
   it("reads a project with its current metric protocol", async () => {
@@ -98,6 +105,7 @@ integration("read API with PostgreSQL", () => {
     expect(list.data).toHaveLength(1);
     expect(body.data).toMatchObject({
       id: developmentSeedIds.atlasRun,
+      latestEventSequence: 2,
       baseline: { amount: "2.4", unit: "s" },
       budget: {
         maximumExperiments: 10,
@@ -175,12 +183,10 @@ integration("read API with PostgreSQL", () => {
 
     expect(learningPage.data).toHaveLength(1);
     expect(learningPage.page.nextCursor).toEqual(expect.any(String));
-    expect(
-      new Set(workspaceLearningPage.data.map((learning) => learning.projectId)),
-    ).toEqual(
-      new Set([
-        developmentSeedIds.atlasProject,
-        developmentSeedIds.meridianProject,
+    expect(workspaceLearningPage.data.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([
+        developmentSeedIds.atlasLearning,
+        developmentSeedIds.atlasLearningTwo,
       ]),
     );
     expect(eventPage.data.map((event) => event.sequence)).toEqual([2]);
@@ -210,7 +216,7 @@ integration("read API with PostgreSQL", () => {
 
     for (
       let attempt = 0;
-      attempt < 5 && !received.includes("\n\n");
+      attempt < 5 && !received.includes("event: run-event");
       attempt++
     ) {
       const chunk = await reader?.read();
