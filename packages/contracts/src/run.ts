@@ -9,6 +9,7 @@ import {
   positiveSafeIntegerSchema,
 } from "./common";
 import { pageInfoSchema } from "./pagination";
+import { metricDefinitionResourceSchema } from "./project";
 
 export const runStatusSchema = z.enum([
   "draft",
@@ -74,7 +75,16 @@ export const runResourceSchema = z
   .strict();
 export type RunResource = z.infer<typeof runResourceSchema>;
 
-export const runResponseSchema = z.object({ data: runResourceSchema }).strict();
+export const runDetailResourceSchema = runResourceSchema
+  .extend({
+    metricDefinition: metricDefinitionResourceSchema,
+  })
+  .strict();
+export type RunDetailResource = z.infer<typeof runDetailResourceSchema>;
+
+export const runResponseSchema = z
+  .object({ data: runDetailResourceSchema })
+  .strict();
 
 export const runListResponseSchema = z
   .object({

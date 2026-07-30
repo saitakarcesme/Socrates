@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Plus, X } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useRef, useState } from "react";
@@ -18,6 +18,11 @@ import {
   FormSelect,
   FormTextarea,
 } from "@/components/forms/form-field";
+import {
+  type GuardrailField,
+  MetricDefinitionFields,
+  readMetricDefinitionFields,
+} from "@/components/forms/metric-definition-fields";
 import { createBrowserControlPlaneClient } from "@/lib/api/browser";
 import { useCommandSubmission } from "@/lib/api/use-command-submission";
 
@@ -33,7 +38,7 @@ function focusFirstError(errors: FieldErrors) {
 export function CreateProjectForm() {
   const router = useRouter();
   const nextGuardrailId = useRef(1);
-  const [guardrailIds, setGuardrailIds] = useState<number[]>([]);
+  const [guardrails, setGuardrails] = useState<GuardrailField[]>([]);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const {
     clearError,
@@ -46,15 +51,15 @@ export function CreateProjectForm() {
   });
 
   function addGuardrail() {
-    const id = nextGuardrailId.current++;
-    setGuardrailIds((current) => [...current, id]);
+    const key = nextGuardrailId.current++;
+    setGuardrails((current) => [...current, { key }]);
     setFieldErrors({});
     clearError();
   }
 
-  function removeGuardrail(id: number) {
-    setGuardrailIds((current) =>
-      current.filter((candidate) => candidate !== id),
+  function removeGuardrail(key: number) {
+    setGuardrails((current) =>
+      current.filter((candidate) => candidate.key !== key),
     );
     setFieldErrors({});
     clearError();
@@ -78,20 +83,7 @@ export function CreateProjectForm() {
             },
           }
         : {}),
-      metric: {
-        name: String(form.get("metric.name") ?? ""),
-        unit: String(form.get("metric.unit") ?? ""),
-        direction: String(form.get("metric.direction") ?? ""),
-        minimumImprovement: String(form.get("metric.minimumImprovement") ?? ""),
-        noiseTolerance: String(form.get("metric.noiseTolerance") ?? ""),
-        guardrails: guardrailIds.map((id) => ({
-          name: String(form.get(`guardrail.${id}.name`) ?? ""),
-          unit: String(form.get(`guardrail.${id}.unit`) ?? ""),
-          operator: String(form.get(`guardrail.${id}.operator`) ?? ""),
-          threshold: String(form.get(`guardrail.${id}.threshold`) ?? ""),
-          hard: form.get(`guardrail.${id}.hard`) === "on",
-        })),
-      },
+      metric: readMetricDefinitionFields(form, guardrails),
     };
     const parsed = createProjectCommandSchema.safeParse(candidate);
 
@@ -192,202 +184,12 @@ export function CreateProjectForm() {
         </div>
       </section>
 
-      <section>
-        <div className="border-b border-[var(--border)] pb-3">
-          <h2 className="text-sm font-semibold">Primary metric</h2>
-          <p className="mt-1 text-xs text-[var(--text-muted)]">
-            Decimal values use exact string arithmetic in the decision policy.
-          </p>
-        </div>
-        <div className="grid gap-5 pt-5 sm:grid-cols-2">
-          <FormField
-            error={fieldErrors["metric.name"]}
-            htmlFor="metric.name"
-            label="Metric name"
-          >
-            <FormInput
-              id="metric.name"
-              maxLength={120}
-              name="metric.name"
-              placeholder="Mobile LCP"
-              required
-            />
-          </FormField>
-          <FormField
-            error={fieldErrors["metric.unit"]}
-            htmlFor="metric.unit"
-            label="Unit"
-          >
-            <FormInput
-              id="metric.unit"
-              maxLength={32}
-              name="metric.unit"
-              placeholder="s"
-              required
-            />
-          </FormField>
-          <FormField
-            error={fieldErrors["metric.direction"]}
-            htmlFor="metric.direction"
-            label="Direction"
-          >
-            <FormSelect
-              defaultValue="minimize"
-              id="metric.direction"
-              name="metric.direction"
-            >
-              <option value="minimize">Minimize</option>
-              <option value="maximize">Maximize</option>
-            </FormSelect>
-          </FormField>
-          <FormField
-            error={fieldErrors["metric.minimumImprovement"]}
-            htmlFor="metric.minimumImprovement"
-            label="Minimum improvement"
-          >
-            <FormInput
-              defaultValue="0"
-              id="metric.minimumImprovement"
-              inputMode="decimal"
-              name="metric.minimumImprovement"
-              required
-            />
-          </FormField>
-          <FormField
-            description="Changes within this absolute tolerance are inconclusive."
-            error={fieldErrors["metric.noiseTolerance"]}
-            htmlFor="metric.noiseTolerance"
-            label="Noise tolerance"
-          >
-            <FormInput
-              defaultValue="0"
-              id="metric.noiseTolerance"
-              inputMode="decimal"
-              name="metric.noiseTolerance"
-              required
-            />
-          </FormField>
-        </div>
-      </section>
-
-      <section>
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-3">
-          <div>
-            <h2 className="text-sm font-semibold">Guardrails</h2>
-            <p className="mt-1 text-xs text-[var(--text-muted)]">
-              Optional constraints measured alongside the primary metric.
-            </p>
-          </div>
-          <Button
-            disabled={guardrailIds.length >= 20}
-            onClick={addGuardrail}
-            size="sm"
-            type="button"
-          >
-            <Plus className="size-3.5" />
-            Add guardrail
-          </Button>
-        </div>
-        {guardrailIds.length > 0 ? (
-          <div className="divide-y divide-[var(--border)]">
-            {guardrailIds.map((id, index) => {
-              const errorPrefix = `metric.guardrails.${index}`;
-              return (
-                <div className="py-5" key={id}>
-                  <div className="mb-4 flex items-center justify-between">
-                    <h3 className="font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--text-subtle)]">
-                      Guardrail {index + 1}
-                    </h3>
-                    <Button
-                      aria-label={`Remove guardrail ${index + 1}`}
-                      onClick={() => removeGuardrail(id)}
-                      size="sm"
-                      type="button"
-                      variant="ghost"
-                    >
-                      <X className="size-3.5" />
-                    </Button>
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <FormField
-                      error={fieldErrors[`${errorPrefix}.name`]}
-                      htmlFor={`guardrail.${id}.name`}
-                      label="Name"
-                    >
-                      <FormInput
-                        id={`guardrail.${id}.name`}
-                        maxLength={120}
-                        name={`guardrail.${id}.name`}
-                        placeholder="Error rate"
-                        required
-                      />
-                    </FormField>
-                    <FormField
-                      error={fieldErrors[`${errorPrefix}.unit`]}
-                      htmlFor={`guardrail.${id}.unit`}
-                      label="Unit"
-                    >
-                      <FormInput
-                        id={`guardrail.${id}.unit`}
-                        maxLength={32}
-                        name={`guardrail.${id}.unit`}
-                        placeholder="%"
-                        required
-                      />
-                    </FormField>
-                    <FormField
-                      error={fieldErrors[`${errorPrefix}.operator`]}
-                      htmlFor={`guardrail.${id}.operator`}
-                      label="Operator"
-                    >
-                      <FormSelect
-                        defaultValue="less_than_or_equal"
-                        id={`guardrail.${id}.operator`}
-                        name={`guardrail.${id}.operator`}
-                      >
-                        <option value="less_than">Less than</option>
-                        <option value="less_than_or_equal">
-                          Less than or equal
-                        </option>
-                        <option value="greater_than">Greater than</option>
-                        <option value="greater_than_or_equal">
-                          Greater than or equal
-                        </option>
-                      </FormSelect>
-                    </FormField>
-                    <FormField
-                      error={fieldErrors[`${errorPrefix}.threshold`]}
-                      htmlFor={`guardrail.${id}.threshold`}
-                      label="Threshold"
-                    >
-                      <FormInput
-                        id={`guardrail.${id}.threshold`}
-                        inputMode="decimal"
-                        name={`guardrail.${id}.threshold`}
-                        required
-                      />
-                    </FormField>
-                  </div>
-                  <label className="mt-4 flex items-center gap-2 text-xs text-[var(--text-muted)]">
-                    <input
-                      className="size-3.5 accent-white"
-                      defaultChecked
-                      name={`guardrail.${id}.hard`}
-                      type="checkbox"
-                    />
-                    Hard guardrail — a failed or missing measurement prevents a
-                    kept decision.
-                  </label>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="pt-4 text-xs text-[var(--text-subtle)]">
-            No guardrails. The decision will use only the primary metric.
-          </p>
-        )}
-      </section>
+      <MetricDefinitionFields
+        errors={fieldErrors}
+        guardrails={guardrails}
+        onAddGuardrail={addGuardrail}
+        onRemoveGuardrail={removeGuardrail}
+      />
 
       {formError ? (
         <div

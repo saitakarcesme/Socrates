@@ -88,6 +88,10 @@ export type RunRead = {
   updatedAt: Date;
 };
 
+export type RunDetailRead = RunRead & {
+  metricDefinition: MetricDefinitionRead;
+};
+
 export type ExperimentRead = {
   id: string;
   runId: string;
@@ -186,7 +190,7 @@ export interface ReadRepository {
     cursor: CreatedCursor | null;
     limit: number;
   }): Promise<ReadPage<RunRead>>;
-  getRun(workspaceId: string, runId: string): Promise<RunRead | null>;
+  getRun(workspaceId: string, runId: string): Promise<RunDetailRead | null>;
   listExperiments(input: {
     workspaceId: string;
     runId: string;

@@ -112,6 +112,12 @@ integration("read API with PostgreSQL", () => {
         maximumDurationMs: 3_600_000,
         maximumCostMinor: 2_000,
       },
+      metricDefinition: {
+        id: developmentSeedIds.atlasMetric,
+        version: 1,
+        name: "p75 LCP",
+        guardrails: [{ id: developmentSeedIds.atlasGuardrail }],
+      },
     });
   });
 

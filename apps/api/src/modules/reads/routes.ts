@@ -18,6 +18,7 @@ import {
   mapProjectDetail,
   mapProjectSummary,
   mapRun,
+  mapRunDetail,
   mapRunEvent,
 } from "./mappers";
 import {
@@ -141,7 +142,7 @@ export function createReadRoutes(options: ReadRoutesOptions) {
         );
       }
 
-      return context.json({ data: mapRun(run) });
+      return context.json({ data: mapRunDetail(run) });
     },
   );
 

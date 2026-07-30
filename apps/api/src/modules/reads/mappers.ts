@@ -2,6 +2,7 @@ import type {
   ExperimentRead,
   LearningRead,
   ProjectRead,
+  RunDetailRead,
   RunEventRead,
   RunRead,
 } from "@socrates/database";
@@ -74,6 +75,24 @@ export function mapRun(run: RunRead) {
     completedAt: nullableIso(run.completedAt),
     createdAt: iso(run.createdAt),
     updatedAt: iso(run.updatedAt),
+  };
+}
+
+export function mapRunDetail(run: RunDetailRead) {
+  const evaluatorConfig = run.metricDefinition.evaluatorConfig;
+
+  return {
+    ...mapRun(run),
+    metricDefinition: {
+      ...run.metricDefinition,
+      evaluatorConfig:
+        evaluatorConfig &&
+        typeof evaluatorConfig === "object" &&
+        !Array.isArray(evaluatorConfig)
+          ? evaluatorConfig
+          : {},
+      createdAt: iso(run.metricDefinition.createdAt),
+    },
   };
 }
 

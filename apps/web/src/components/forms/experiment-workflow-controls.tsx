@@ -14,8 +14,8 @@ import {
   type ExperimentLifecycleCommand,
   type ExperimentMutationResponse,
   type LearningMutationResponse,
+  type MetricDefinitionResource,
   type ObservationMutationResponse,
-  type ProjectDetailResource,
   type RecordObservationCommand,
 } from "@socrates/contracts";
 import { Button, Panel } from "@socrates/design-system";
@@ -391,10 +391,10 @@ function LearningForm({
 
 export function ExperimentWorkflowControls({
   experiment,
-  project,
+  metricDefinition,
 }: {
   experiment: ExperimentDetailResource;
-  project: ProjectDetailResource;
+  metricDefinition: MetricDefinitionResource;
 }) {
   if (experiment.status === "proposed") {
     return <StartExperiment experiment={experiment} />;
@@ -406,7 +406,7 @@ export function ExperimentWorkflowControls({
   const after = experiment.observations.find(
     (observation) => observation.kind === "after",
   );
-  const missingGuardrails = project.currentMetric.guardrails.filter(
+  const missingGuardrails = metricDefinition.guardrails.filter(
     (guardrail) =>
       !experiment.observations.some(
         (observation) => observation.constraintDefinitionId === guardrail.id,
@@ -421,15 +421,15 @@ export function ExperimentWorkflowControls({
           kind: "before",
           id: "before",
           label: "Record metric before",
-          unit: project.currentMetric.unit,
-          metricDefinitionId: project.currentMetric.id,
+          unit: metricDefinition.unit,
+          metricDefinitionId: metricDefinition.id,
         }}
       />
     );
   }
 
   if (["executing", "measuring"].includes(experiment.status)) {
-    const hardGuardrailsReady = project.currentMetric.guardrails
+    const hardGuardrailsReady = metricDefinition.guardrails
       .filter(({ hard }) => hard)
       .every((guardrail) => !missingGuardrails.includes(guardrail));
 
@@ -442,8 +442,8 @@ export function ExperimentWorkflowControls({
               kind: "after",
               id: "after",
               label: "Record metric after",
-              unit: project.currentMetric.unit,
-              metricDefinitionId: project.currentMetric.id,
+              unit: metricDefinition.unit,
+              metricDefinitionId: metricDefinition.id,
             }}
           />
         ) : null}

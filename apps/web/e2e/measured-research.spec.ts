@@ -29,6 +29,7 @@ test("completes a measured project-to-learning journey", async ({ page }) => {
   await page.getByRole("button", { name: "Create project" }).click();
 
   await expect(page.getByRole("heading", { name: uniqueName })).toBeVisible();
+  const projectUrl = page.url();
 
   await page.getByRole("link", { name: "New run" }).click();
   await page.getByLabel("Title").fill("Acceptance run");
@@ -96,12 +97,51 @@ test("completes a measured project-to-learning journey", async ({ page }) => {
   await expect(
     page.getByText("completed", { exact: true }).first(),
   ).toBeVisible();
+  await expect(
+    page.getByText("v1 · p95 latency", { exact: true }),
+  ).toBeVisible();
+
+  await page.goto(projectUrl);
+  await page.getByRole("link", { name: "Revise metric" }).click();
+  await page.getByLabel("Metric name").fill("Median latency");
+  await page.getByLabel("Minimum improvement").fill("2");
+  await page.getByRole("button", { name: "Review revision" }).click();
+  await expect(page.getByText("Confirm protocol v2")).toBeVisible();
+  await page.getByRole("button", { name: "Confirm revision" }).click();
+  await expect(page.getByRole("heading", { name: uniqueName })).toBeVisible();
+  await expect(page.getByText("v2", { exact: true })).toBeVisible();
+
+  await page.goto(runUrl);
+  await expect(
+    page.getByText("v1 · p95 latency", { exact: true }),
+  ).toBeVisible();
+
+  await page.goto(projectUrl);
+  await page.getByRole("link", { name: "New run" }).click();
+  await page.getByLabel("Title").fill("Revised protocol run");
+  await page.getByRole("button", { name: "Create draft run" }).click();
+  await page.waitForURL((url) => !url.pathname.endsWith("/runs/new"));
+  await expect(
+    page.getByText("v2 · Median latency", { exact: true }),
+  ).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
   const hasHorizontalOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth,
   );
   expect(hasHorizontalOverflow).toBe(false);
+  await page.goto(projectUrl);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth,
+    ),
+  ).toBe(false);
+  await page.getByRole("link", { name: "Revise metric" }).click();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth,
+    ),
+  ).toBe(false);
   await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
   expect(browserErrors).toEqual([]);
 });

@@ -1,4 +1,4 @@
-import { GitBranch, MoreHorizontal, Play, Plus } from "lucide-react";
+import { GitBranch, Play, Plus, SlidersHorizontal } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -68,13 +68,13 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       <PageHeader
         actions={
           <div className="flex gap-2">
-            <Button
-              aria-label="More project actions"
-              disabled
-              title="Additional project actions are not enabled"
+            <Link
+              className={buttonClassName()}
+              href={`/projects/${projectId}/metric-definitions/new`}
             >
-              <MoreHorizontal className="size-3.5" />
-            </Button>
+              <SlidersHorizontal className="size-3.5" />
+              Revise metric
+            </Link>
             <Link
               className={buttonClassName({ variant: "primary" })}
               href={`/projects/${projectId}/runs/new`}

@@ -7,7 +7,7 @@ import { Metric, Panel, StatusBadge } from "@socrates/design-system";
 import { PageHeader } from "@/components/page-header";
 import { ExperimentWorkflowControls } from "@/components/forms/experiment-workflow-controls";
 import { ControlPlaneError } from "@/lib/api/client";
-import { getExperiment, getProject, getRun } from "@/lib/api/queries";
+import { getExperiment, getRun } from "@/lib/api/queries";
 import { formatDuration, formatMetric } from "@/lib/metric-presentation";
 
 type ExperimentPageProps = {
@@ -26,8 +26,7 @@ async function loadExperiment(
   experimentId: string,
 ) {
   try {
-    const [project, run, experiment] = await Promise.all([
-      getProject(projectId),
+    const [run, experiment] = await Promise.all([
       getRun(runId),
       getExperiment(experimentId),
     ]);
@@ -36,7 +35,7 @@ async function loadExperiment(
       notFound();
     }
 
-    return { project, run, experiment };
+    return { run, experiment };
   } catch (error) {
     if (error instanceof ControlPlaneError && error.status === 404) {
       notFound();
@@ -59,7 +58,7 @@ export async function generateMetadata({
 
 export default async function ExperimentPage({ params }: ExperimentPageProps) {
   const { projectId, runId, experimentId } = await params;
-  const { project, run, experiment } = await loadExperiment(
+  const { run, experiment } = await loadExperiment(
     projectId,
     runId,
     experimentId,
@@ -110,7 +109,7 @@ export default async function ExperimentPage({ params }: ExperimentPageProps) {
           />
           <Metric
             className="mt-5 border-t border-[var(--border)] pt-5 md:mt-0 md:border-l md:border-t-0 md:pl-5 md:pt-0"
-            detail={project.currentMetric.unit}
+            detail={run.metricDefinition.unit}
             label="Improvement"
             value={experiment.decision?.calculatedImprovement ?? "Pending"}
           />
@@ -128,7 +127,7 @@ export default async function ExperimentPage({ params }: ExperimentPageProps) {
         <div className="mt-6">
           <ExperimentWorkflowControls
             experiment={experiment}
-            project={project}
+            metricDefinition={run.metricDefinition}
           />
         </div>
 
@@ -217,7 +216,7 @@ export default async function ExperimentPage({ params }: ExperimentPageProps) {
               </div>
               <dl className="divide-y divide-[var(--border)]">
                 {[
-                  ["Protocol", `v${project.currentMetric.version}`],
+                  ["Protocol", `v${run.metricDefinition.version}`],
                   [
                     "Samples",
                     String(
@@ -227,14 +226,14 @@ export default async function ExperimentPage({ params }: ExperimentPageProps) {
                       ),
                     ),
                   ],
-                  ["Direction", project.currentMetric.direction],
+                  ["Direction", run.metricDefinition.direction],
                   [
                     "Threshold",
-                    `${project.currentMetric.minimumImprovement} ${project.currentMetric.unit}`,
+                    `${run.metricDefinition.minimumImprovement} ${run.metricDefinition.unit}`,
                   ],
                   [
                     "Guardrails",
-                    `${guardrailObservations.length} / ${project.currentMetric.guardrails.length} measured`,
+                    `${guardrailObservations.length} / ${run.metricDefinition.guardrails.length} measured`,
                   ],
                   ["Policy", experiment.decision?.policyVersion ?? "Pending"],
                 ].map(([term, value]) => (

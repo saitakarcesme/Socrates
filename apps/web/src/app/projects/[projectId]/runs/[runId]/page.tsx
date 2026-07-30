@@ -80,7 +80,7 @@ export default async function RunPage({ params }: RunPageProps) {
   const best = selectBestMetric(
     run.baseline,
     experiments,
-    project.currentMetric.direction,
+    run.metricDefinition.direction,
   );
   const estimatedCost = experiments.reduce(
     (total, experiment) => total + experiment.estimatedCostMinor,
@@ -140,7 +140,7 @@ export default async function RunPage({ params }: RunPageProps) {
 
       <div className="mx-auto grid max-w-[1560px] xl:grid-cols-[minmax(0,1fr)_304px]">
         <section className="min-w-0 p-6 sm:p-8 xl:border-r xl:border-[var(--border)]">
-          <RunSetupControls run={run} unit={project.currentMetric.unit} />
+          <RunSetupControls run={run} unit={run.metricDefinition.unit} />
           <ProposeExperimentForm projectId={projectId} run={run} />
           <div className="mb-6 flex items-end justify-between gap-4">
             <div>
@@ -178,14 +178,14 @@ export default async function RunPage({ params }: RunPageProps) {
           <div className="grid grid-cols-2 border-b border-[var(--border)]">
             <div className="border-r border-[var(--border)] p-4">
               <Metric
-                detail={project.currentMetric.name}
+                detail={`v${run.metricDefinition.version} · ${run.metricDefinition.name}`}
                 label="Current metric"
                 value={formatMetric(latestAfter ?? run.baseline)}
               />
             </div>
             <div className="p-4">
               <Metric
-                detail={project.currentMetric.direction}
+                detail={run.metricDefinition.direction}
                 label="Best result"
                 value={formatMetric(best)}
               />

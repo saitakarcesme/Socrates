@@ -145,6 +145,22 @@ integration("command API with PostgreSQL", () => {
     expect(runResponse.status).toBe(201);
     expect(createdRun.data).toMatchObject({ version: 0, status: "draft" });
 
+    const revisedMetricResponse = await command(
+      `/projects/${createdProject.data.projectId}/metric-definitions`,
+      "metric-revision",
+      {
+        expectedProjectVersion: 2,
+        metric: {
+          ...projectCommand.metric,
+          name: "Revised p75 LCP",
+        },
+      },
+    );
+    const revisedMetric = projectMutationResponseSchema.parse(
+      await revisedMetricResponse.json(),
+    );
+    expect(revisedMetric.data).toMatchObject({ projectVersion: 3 });
+
     const staleRunResponse = await command(
       `/projects/${createdProject.data.projectId}/runs`,
       "stale-run",
@@ -189,6 +205,11 @@ integration("command API with PostgreSQL", () => {
       version: 0,
       baseline: null,
       status: "draft",
+      metricDefinition: {
+        id: activeMetric.data.currentMetricDefinitionId,
+        version: 2,
+        name: "p75 LCP",
+      },
     });
 
     const streamController = new AbortController();
@@ -409,10 +430,10 @@ integration("command API with PostgreSQL", () => {
       `/projects/${createdProject.data.projectId}/runs`,
       "cancel-run-create",
       {
-        expectedProjectVersion: 2,
+        expectedProjectVersion: 3,
         title: "Cancellation path",
         objective: "Verify controlled cancellation.",
-        metricDefinitionId: activeMetric.data.currentMetricDefinitionId,
+        metricDefinitionId: revisedMetric.data.currentMetricDefinitionId,
         budget: {
           maximumExperiments: 1,
           maximumDurationMs: 1_000,

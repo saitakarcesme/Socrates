@@ -796,6 +796,28 @@ overlays, and horizontal overflow at a 390-pixel viewport. Unit and API tests
 remain the primary exhaustive coverage; browser tests cover one critical
 cross-process story rather than duplicating every domain permutation.
 
+### ADR-026: Run detail projections carry their frozen metric protocol
+
+Creating a metric revision appends an immutable definition and advances the
+project's current protocol. It never mutates an existing run. New runs must
+reference the latest project definition, while every existing run continues to
+measure and decide against the definition captured by its
+`metric_definition_id`.
+
+The run detail API therefore includes the complete frozen metric definition,
+including guardrails. Run list resources remain compact and expose only the
+definition ID. Run and experiment screens must use the run detail protocol for
+labels, observation commands, decision presentation, and guardrail collection;
+they must not read those values from the project's current metric. This makes a
+project revision safe while older draft, active, or completed runs remain
+viewable and operable.
+
+The project screen owns metric revision. The form starts from the current
+definition, submits the complete next definition with the expected project
+version, and treats guardrails as a full replacement for the new version.
+Revision is explicit and confirmed because it changes the protocol used by all
+subsequently created runs.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

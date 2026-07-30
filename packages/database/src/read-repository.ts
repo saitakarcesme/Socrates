@@ -10,6 +10,7 @@ import type {
   ProjectRead,
   ReadPage,
   ReadRepository,
+  RunDetailRead,
   RunEventRead,
   RunRead,
 } from "./read-model";
@@ -287,6 +288,51 @@ export class PostgresReadRepository implements ReadRepository {
     };
   }
 
+  private async getMetricDefinition(
+    metricDefinitionId: string,
+  ): Promise<MetricDefinitionRead | null> {
+    const [row] = await this.database
+      .select({
+        id: schema.metricDefinitions.id,
+        projectId: schema.metricDefinitions.projectId,
+        version: schema.metricDefinitions.version,
+        name: schema.metricDefinitions.name,
+        unit: schema.metricDefinitions.unit,
+        direction: schema.metricDefinitions.direction,
+        minimumImprovement: schema.metricDefinitions.minimumImprovement,
+        noiseTolerance: schema.metricDefinitions.noiseTolerance,
+        evaluatorConfig: schema.metricDefinitions.evaluatorConfig,
+        createdAt: schema.metricDefinitions.createdAt,
+      })
+      .from(schema.metricDefinitions)
+      .where(eq(schema.metricDefinitions.id, metricDefinitionId))
+      .limit(1);
+
+    if (!row) return null;
+
+    const guardrails = await this.database
+      .select({
+        id: schema.constraintDefinitions.id,
+        metricDefinitionId: schema.constraintDefinitions.metricDefinitionId,
+        name: schema.constraintDefinitions.name,
+        unit: schema.constraintDefinitions.unit,
+        operator: schema.constraintDefinitions.operator,
+        threshold: schema.constraintDefinitions.threshold,
+        hard: schema.constraintDefinitions.hard,
+      })
+      .from(schema.constraintDefinitions)
+      .where(
+        eq(schema.constraintDefinitions.metricDefinitionId, metricDefinitionId),
+      )
+      .orderBy(schema.constraintDefinitions.id);
+
+    return {
+      ...row,
+      evaluatorConfig: row.evaluatorConfig as JsonValue,
+      guardrails,
+    };
+  }
+
   async listRuns(input: {
     workspaceId: string;
     projectId: string;
@@ -305,7 +351,10 @@ export class PostgresReadRepository implements ReadRepository {
     return pageFromRows(rows, input.limit);
   }
 
-  async getRun(workspaceId: string, runId: string): Promise<RunRead | null> {
+  async getRun(
+    workspaceId: string,
+    runId: string,
+  ): Promise<RunDetailRead | null> {
     const [row] = await this.runQuery(
       and(
         eq(schema.projects.workspaceId, workspaceId),
@@ -314,7 +363,13 @@ export class PostgresReadRepository implements ReadRepository {
       1,
     );
 
-    return row ?? null;
+    if (!row) return null;
+    const metricDefinition = await this.getMetricDefinition(
+      row.metricDefinitionId,
+    );
+    if (!metricDefinition) return null;
+
+    return { ...row, metricDefinition };
   }
 
   private async runQuery(where: SQL | undefined, limit: number) {
