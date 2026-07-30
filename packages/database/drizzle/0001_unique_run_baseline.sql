@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "observations_run_baseline_unique" ON "observations" USING btree ("run_id") WHERE "observations"."kind" = 'baseline';

@@ -19,6 +19,23 @@ jobs:
     name: Quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://socrates:socrates@localhost:5432/socrates_ci
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: socrates_ci
+          POSTGRES_PASSWORD: socrates
+          POSTGRES_USER: socrates
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U socrates -d socrates_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Check out repository
@@ -48,6 +65,9 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      - name: Apply database migrations
+        run: pnpm --filter @socrates/database db:migrate
 
       - name: Test
         run: pnpm test

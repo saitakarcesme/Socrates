@@ -56,8 +56,10 @@ export type TransactionRepositories = {
 };
 
 export interface Persistence {
+  readonly reads: ReadRepository;
   transaction<T>(
     work: (repositories: TransactionRepositories) => Promise<T>,
   ): Promise<T>;
   close(): Promise<void>;
 }
+import type { ReadRepository } from "./read-model";

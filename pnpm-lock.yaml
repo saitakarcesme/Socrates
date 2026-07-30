@@ -43,9 +43,15 @@ importers:
       "@hono/node-server":
         specifier: ^1.18.0
         version: 1.19.17(hono@4.12.32)
+      "@hono/standard-validator":
+        specifier: ^0.3.0
+        version: 0.3.0(@standard-schema/spec@1.1.0)(hono@4.12.32)
       "@socrates/contracts":
         specifier: workspace:*
         version: link:../../packages/contracts
+      "@socrates/database":
+        specifier: workspace:*
+        version: link:../../packages/database
       "@socrates/domain":
         specifier: workspace:*
         version: link:../../packages/domain
@@ -53,6 +59,9 @@ importers:
         specifier: ^4.12.32
         version: 4.12.32
     devDependencies:
+      esbuild:
+        specifier: ^0.25.12
+        version: 0.25.12
       tsx:
         specifier: ^4.20.3
         version: 4.23.1
@@ -1066,6 +1075,15 @@ packages:
     peerDependencies:
       hono: ^4
 
+  "@hono/standard-validator@0.3.0":
+    resolution:
+      {
+        integrity: sha512-tHLKEjKXDcHImj0XTFWW4Hr0ev+1G5GxnBZrGdpg/7NLy9s9meFPTSCOkw++ZzZKom3FjrMw2e0nFQpPPvwUVQ==,
+      }
+    peerDependencies:
+      "@standard-schema/spec": ^1.0.0
+      hono: ">=4.11.2"
+
   "@humanfs/core@0.19.2":
     resolution:
       {
@@ -1703,6 +1721,12 @@ packages:
     resolution:
       {
         integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==,
+      }
+
+  "@standard-schema/spec@1.1.0":
+    resolution:
+      {
+        integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==,
       }
 
   "@swc/helpers@0.5.15":
@@ -5361,6 +5385,11 @@ snapshots:
     dependencies:
       hono: 4.12.32
 
+  "@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.12.32)":
+    dependencies:
+      "@standard-schema/spec": 1.1.0
+      hono: 4.12.32
+
   "@humanfs/core@0.19.2":
     dependencies:
       "@humanfs/types": 0.15.0
@@ -5620,6 +5649,8 @@ snapshots:
     optional: true
 
   "@rtsao/scc@1.1.0": {}
+
+  "@standard-schema/spec@1.1.0": {}
 
   "@swc/helpers@0.5.15":
     dependencies:

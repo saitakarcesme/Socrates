@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node build.mjs && node smoke.mjs",
     "dev": "tsx watch src/server.ts",
     "lint": "eslint src",
     "start": "node dist/server.js",
@@ -13,11 +13,14 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.18.0",
+    "@hono/standard-validator": "^0.3.0",
     "@socrates/contracts": "workspace:*",
+    "@socrates/database": "workspace:*",
     "@socrates/domain": "workspace:*",
     "hono": "^4.12.32"
   },
   "devDependencies": {
+    "esbuild": "^0.25.12",
     "tsx": "^4.20.3"
   }
 }

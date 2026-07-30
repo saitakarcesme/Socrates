@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { drizzle } from "drizzle-orm/postgres-js";
 import { count, eq } from "drizzle-orm";
 import postgres from "postgres";
@@ -18,10 +20,10 @@ const connectionString = process.env["DATABASE_URL"];
 const integration = describe.skipIf(!connectionString);
 
 integration("PostgreSQL persistence", () => {
-  const workspaceId = "019c1170-8b7a-7a60-b7f8-f35c85d73742";
-  const projectId = "019c1170-8b7a-7a60-b7f8-f35c85d73743";
-  const metricDefinitionId = "019c1170-8b7a-7a60-b7f8-f35c85d73744";
-  const runId = "019c1170-8b7a-7a60-b7f8-f35c85d73745";
+  const workspaceId = randomUUID();
+  const projectId = randomUUID();
+  const metricDefinitionId = randomUUID();
+  const runId = randomUUID();
   const idempotencyInput = {
     workspaceId,
     key: "project:create:atlas",

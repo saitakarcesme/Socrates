@@ -591,6 +591,31 @@ grouped by domain, re-exported from one migration entry point, and validated
 with `drizzle-kit check`. Application code may apply committed migrations but
 must never use `drizzle-kit push` against shared environments.
 
+### ADR-015: Workspace-scoped reads with opaque cursors
+
+Phase 1 read APIs receive their workspace scope as an application dependency;
+clients cannot select a workspace through query parameters before
+authentication exists. Database adapters return plain persistence records and
+remain the only code allowed to import Drizzle schema objects. Hono modules map
+those records to response contracts and centralize not-found, validation, and
+dependency-unavailable errors.
+
+List resources use a stable descending `(created_at, id)` keyset. Public cursors
+are versioned base64url values owned by the API, not serialized database types.
+Run event replay is the exception: its durable, monotonically increasing
+run-local sequence is already the public cursor. List queries fetch one extra
+row to derive `nextCursor` without a count query.
+
+### ADR-016: Bundled Node control-plane artifact
+
+The Hono control plane builds as one Node 22 ESM artifact. The bundle includes
+workspace packages and runtime dependencies, so production execution does not
+depend on TypeScript source exports or extensionless TypeScript emit resolving
+inside `node_modules`. Type checking remains a separate required gate; bundling
+does not replace it. The build script may clean only `apps/api/dist`, emits a
+source map, and the production `start` command runs the generated JavaScript
+with plain Node.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

@@ -5,6 +5,7 @@ import {
   entityIdSchema,
   nonNegativeSafeIntegerSchema,
 } from "./common";
+import { eventPageInfoSchema } from "./pagination";
 
 const runnerEventEnvelopeSchema = z.object({
   version: z.literal("1"),
@@ -59,3 +60,23 @@ export const runnerEventV1Schema = z.discriminatedUnion("type", [
   }),
 ]);
 export type RunnerEventV1 = z.infer<typeof runnerEventV1Schema>;
+
+export const runEventResourceSchema = z
+  .object({
+    id: entityIdSchema,
+    runId: entityIdSchema,
+    sequence: nonNegativeSafeIntegerSchema.min(1),
+    type: z.string().min(1),
+    schemaVersion: z.string().min(1),
+    payload: z.unknown(),
+    occurredAt: z.iso.datetime(),
+  })
+  .strict();
+export type RunEventResource = z.infer<typeof runEventResourceSchema>;
+
+export const runEventListResponseSchema = z
+  .object({
+    data: z.array(runEventResourceSchema),
+    page: eventPageInfoSchema,
+  })
+  .strict();

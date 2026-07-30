@@ -2,6 +2,7 @@ import { and, eq, isNull, max } from "drizzle-orm";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
+import { PostgresReadRepository } from "./read-repository";
 import type {
   AppendRunEventInput,
   IdempotencyClaim,
@@ -163,6 +164,7 @@ export function createPersistence(options: PersistenceOptions): Persistence {
   const database = drizzle(client, { schema });
 
   return {
+    reads: new PostgresReadRepository(database),
     transaction: (work) =>
       database.transaction((transaction) =>
         work(createRepositories(transaction)),

@@ -6,6 +6,7 @@ import {
   expectedVersionSchema,
   metricDirectionSchema,
 } from "./common";
+import { pageInfoSchema } from "./pagination";
 
 export const projectStatusSchema = z.enum([
   "active",
@@ -41,6 +42,20 @@ export const metricDefinitionInputSchema = z
   })
   .strict();
 export type MetricDefinitionInput = z.infer<typeof metricDefinitionInputSchema>;
+
+export const metricDefinitionResourceSchema = metricDefinitionInputSchema
+  .omit({ guardrails: true })
+  .extend({
+    id: entityIdSchema,
+    projectId: entityIdSchema,
+    version: z.number().int().positive(),
+    evaluatorConfig: z.record(z.string(), z.unknown()),
+    createdAt: z.iso.datetime(),
+  })
+  .strict();
+export type MetricDefinitionResource = z.infer<
+  typeof metricDefinitionResourceSchema
+>;
 
 export const createProjectCommandSchema = z
   .object({
@@ -83,3 +98,28 @@ export const projectResourceSchema = z
   })
   .strict();
 export type ProjectResource = z.infer<typeof projectResourceSchema>;
+
+export const projectDetailResourceSchema = projectResourceSchema
+  .extend({
+    source: z
+      .object({
+        type: z.enum(["repository", "website", "dataset", "model", "other"]),
+        reference: z.string(),
+      })
+      .strict()
+      .nullable(),
+    currentMetric: metricDefinitionResourceSchema,
+  })
+  .strict();
+export type ProjectDetailResource = z.infer<typeof projectDetailResourceSchema>;
+
+export const projectResponseSchema = z
+  .object({ data: projectDetailResourceSchema })
+  .strict();
+
+export const projectListResponseSchema = z
+  .object({
+    data: z.array(projectResourceSchema),
+    page: pageInfoSchema,
+  })
+  .strict();

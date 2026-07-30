@@ -8,6 +8,7 @@ export const apiErrorCodeSchema = z.enum([
   "idempotency_conflict",
   "budget_exhausted",
   "protocol_mismatch",
+  "service_unavailable",
   "internal_error",
 ]);
 export type ApiErrorCode = z.infer<typeof apiErrorCodeSchema>;

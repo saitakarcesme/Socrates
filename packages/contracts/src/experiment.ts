@@ -10,6 +10,7 @@ import {
   nonNegativeSafeIntegerSchema,
   positiveSafeIntegerSchema,
 } from "./common";
+import { pageInfoSchema } from "./pagination";
 
 export const experimentStatusSchema = z.enum([
   "proposed",
@@ -84,6 +85,37 @@ export const decideExperimentCommandSchema = z
 export type DecideExperimentCommand = z.infer<
   typeof decideExperimentCommandSchema
 >;
+
+export const experimentResourceSchema = z
+  .object({
+    id: entityIdSchema,
+    runId: entityIdSchema,
+    parentExperimentId: entityIdSchema.nullable(),
+    sequence: positiveSafeIntegerSchema,
+    hypothesis: z.string(),
+    action: z.string(),
+    status: experimentStatusSchema,
+    version: expectedVersionSchema,
+    estimatedDurationMs: positiveSafeIntegerSchema,
+    estimatedCostMinor: nonNegativeSafeIntegerSchema,
+    startedAt: z.iso.datetime().nullable(),
+    completedAt: z.iso.datetime().nullable(),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  })
+  .strict();
+export type ExperimentResource = z.infer<typeof experimentResourceSchema>;
+
+export const experimentResponseSchema = z
+  .object({ data: experimentResourceSchema })
+  .strict();
+
+export const experimentListResponseSchema = z
+  .object({
+    data: z.array(experimentResourceSchema),
+    page: pageInfoSchema,
+  })
+  .strict();
 
 export const experimentTaskV1Schema = z
   .object({

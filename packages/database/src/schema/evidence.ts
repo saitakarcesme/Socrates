@@ -42,6 +42,9 @@ export const observations = pgTable(
   (table) => [
     index("observations_run_recorded_idx").on(table.runId, table.recordedAt),
     index("observations_experiment_idx").on(table.experimentId),
+    uniqueIndex("observations_run_baseline_unique")
+      .on(table.runId)
+      .where(sql`${table.kind} = 'baseline'`),
     foreignKey({
       name: "observations_experiment_same_run_fk",
       columns: [table.runId, table.experimentId],

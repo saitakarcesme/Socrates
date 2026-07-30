@@ -7,6 +7,7 @@ import {
   metricValueSchema,
   positiveSafeIntegerSchema,
 } from "./common";
+import { pageInfoSchema } from "./pagination";
 
 export const runStatusSchema = z.enum([
   "draft",
@@ -65,6 +66,17 @@ export const runResourceSchema = z
     baseline: metricValueSchema.nullable(),
     startedAt: z.iso.datetime().nullable(),
     completedAt: z.iso.datetime().nullable(),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
   })
   .strict();
 export type RunResource = z.infer<typeof runResourceSchema>;
+
+export const runResponseSchema = z.object({ data: runResourceSchema }).strict();
+
+export const runListResponseSchema = z
+  .object({
+    data: z.array(runResourceSchema),
+    page: pageInfoSchema,
+  })
+  .strict();
