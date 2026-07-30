@@ -1,49 +1,93 @@
 import { GitBranch, MoreHorizontal, Play, Plus } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { Button, Metric, Panel, StatusBadge } from "@socrates/design-system";
 
 import { PageHeader } from "@/components/page-header";
+import { getProject, getRunsForProject, projects } from "@/lib/fixtures";
 
-export default async function ProjectPage({
-  params,
-}: {
+type ProjectPageProps = {
   params: Promise<{ projectId: string }>;
-}) {
+};
+
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return projects.map((project) => ({ projectId: project.id }));
+}
+
+export async function generateMetadata({
+  params,
+}: ProjectPageProps): Promise<Metadata> {
   const { projectId } = await params;
+  const project = getProject(projectId);
+
+  if (!project) {
+    return { title: "Project not found" };
+  }
+
+  return {
+    title: project.name,
+    description: project.description,
+  };
+}
+
+export default async function ProjectPage({ params }: ProjectPageProps) {
+  const { projectId } = await params;
+  const project = getProject(projectId);
+
+  if (!project) {
+    notFound();
+  }
+
+  const projectRuns = getRunsForProject(projectId);
 
   return (
     <>
       <PageHeader
         actions={
           <div className="flex gap-2">
-            <Button aria-label="More project actions">
+            <Button
+              aria-label="More project actions"
+              disabled
+              title="Project actions are planned for Phase 1"
+            >
               <MoreHorizontal className="size-3.5" />
             </Button>
-            <Button variant="primary">
+            <Button
+              disabled
+              title="Run creation is planned for Phase 1"
+              variant="primary"
+            >
               <Plus className="size-3.5" />
               New run
             </Button>
           </div>
         }
-        description="Reduce p75 Largest Contentful Paint without regressing conversion."
+        description={project.description}
         eyebrow={
           <span className="flex items-center gap-2">
             Projects <span className="text-[var(--text-subtle)]">/</span>{" "}
             {projectId}
           </span>
         }
-        title="Atlas Web"
+        title={project.name}
       />
 
       <div className="mx-auto max-w-[1440px] p-6 sm:p-8">
         <section className="grid gap-px overflow-hidden rounded-[6px] border border-[var(--border)] bg-[var(--border)] sm:grid-cols-2 xl:grid-cols-4">
           {(
             [
-              ["Primary metric", "1.82s", "p75 LCP · minimize"],
-              ["Improvement", "−24.8%", "from 2.42s baseline"],
-              ["Experiments", "42", "12 kept · 28.6%"],
-              ["Knowledge", "9", "7 high confidence"],
+              ["Primary metric", project.best, project.metric],
+              [
+                "Improvement",
+                project.change,
+                `from ${project.baseline} baseline`,
+              ],
+              ["Experiments", project.experimentCount, `${project.runs} runs`],
+              ["Knowledge", project.learningCount, "Evidence-backed items"],
             ] as const
           ).map(([label, value, detail]) => (
             <div className="bg-[var(--surface)] p-4" key={label}>
@@ -63,38 +107,7 @@ export default async function ProjectPage({
               </div>
             </div>
             <Panel className="overflow-hidden">
-              {[
-                {
-                  id: "run-042",
-                  number: 7,
-                  status: "running",
-                  metric: "1.94s",
-                  change: "−19.8%",
-                  experiments: "4 / 12",
-                  budget: "$4.82 / $12",
-                  time: "38 min",
-                },
-                {
-                  id: "run-038",
-                  number: 6,
-                  status: "completed",
-                  metric: "2.03s",
-                  change: "−16.1%",
-                  experiments: "12 / 12",
-                  budget: "$10.46 / $12",
-                  time: "2h 14m",
-                },
-                {
-                  id: "run-026",
-                  number: 5,
-                  status: "completed",
-                  metric: "2.18s",
-                  change: "−9.9%",
-                  experiments: "10 / 10",
-                  budget: "$8.31 / $10",
-                  time: "1h 46m",
-                },
-              ].map((run) => (
+              {projectRuns.map((run) => (
                 <Link
                   className="grid gap-4 border-b border-[var(--border)] p-4 last:border-0 hover:bg-[var(--surface-hover)] md:grid-cols-[minmax(130px,1fr)_100px_110px_110px_100px] md:items-center"
                   href={`/projects/${projectId}/runs/${run.id}`}
@@ -109,7 +122,13 @@ export default async function ProjectPage({
                     </span>
                   </span>
                   <StatusBadge
-                    tone={run.status === "running" ? "running" : "success"}
+                    tone={
+                      run.status === "running"
+                        ? "running"
+                        : run.status === "paused"
+                          ? "warning"
+                          : "success"
+                    }
                   >
                     {run.status}
                   </StatusBadge>
@@ -138,14 +157,7 @@ export default async function ProjectPage({
                 Research protocol
               </div>
               <dl className="divide-y divide-[var(--border)]">
-                {[
-                  ["Source", "acme/atlas-web"],
-                  ["Branch", "socrates/lcp"],
-                  ["Metric", "Lighthouse p75 LCP"],
-                  ["Direction", "Minimize"],
-                  ["Min. change", "0.05s"],
-                  ["Sample", "3 × Mobile"],
-                ].map(([term, value]) => (
+                {project.protocol.map(([term, value]) => (
                   <div
                     className="flex justify-between gap-4 px-4 py-3"
                     key={term}
@@ -166,11 +178,16 @@ export default async function ProjectPage({
                 <GitBranch className="size-3.5 text-[var(--text-muted)]" />
                 Baseline
               </div>
-              <div className="mt-4 font-mono text-2xl">2.42s</div>
+              <div className="mt-4 font-mono text-2xl">{project.baseline}</div>
               <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
                 Recorded on commit 9e42a1c with protocol v3.
               </p>
-              <Button className="mt-4 w-full" size="sm">
+              <Button
+                className="mt-4 w-full"
+                disabled
+                size="sm"
+                title="Baseline artifacts are planned for Phase 1"
+              >
                 <Play className="size-3" />
                 View baseline
               </Button>

@@ -20,7 +20,7 @@ import { useUiStore } from "@/store/ui-store";
 
 const navigation = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Projects", href: "/projects/atlas-web", icon: FlaskConical },
+  { label: "Projects", href: "/projects", icon: FlaskConical },
   { label: "Learnings", href: "/learnings", icon: BookOpen },
 ];
 

@@ -1,4 +1,5 @@
 import { ArrowRight, Plus } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button, Metric, Panel, StatusBadge } from "@socrates/design-system";
@@ -6,12 +7,21 @@ import { Button, Metric, Panel, StatusBadge } from "@socrates/design-system";
 import { PageHeader } from "@/components/page-header";
 import { projects } from "@/lib/fixtures";
 
+export const metadata: Metadata = {
+  title: "Dashboard",
+  description: "Monitor active optimization work in Socrates.",
+};
+
 export default function DashboardPage() {
   return (
     <>
       <PageHeader
         actions={
-          <Button variant="primary">
+          <Button
+            disabled
+            title="Project creation is planned for Phase 1"
+            variant="primary"
+          >
             <Plus className="size-3.5" />
             New project
           </Button>

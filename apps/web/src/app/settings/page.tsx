@@ -1,8 +1,14 @@
 import { Check } from "lucide-react";
+import type { Metadata } from "next";
 
 import { Button, Panel, StatusBadge } from "@socrates/design-system";
 
 import { PageHeader } from "@/components/page-header";
+
+export const metadata: Metadata = {
+  title: "Settings",
+  description: "Workspace defaults, limits, and execution connections.",
+};
 
 function SettingRow({
   title,

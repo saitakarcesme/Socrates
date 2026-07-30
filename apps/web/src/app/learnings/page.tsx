@@ -1,9 +1,15 @@
 import { Filter, Search } from "lucide-react";
+import type { Metadata } from "next";
 
 import { Button, Panel, StatusBadge } from "@socrates/design-system";
 
 import { PageHeader } from "@/components/page-header";
 import { learnings } from "@/lib/fixtures";
+
+export const metadata: Metadata = {
+  title: "Learnings",
+  description: "Evidence-backed knowledge accumulated by Socrates.",
+};
 
 export default function LearningsPage() {
   return (
@@ -23,7 +29,7 @@ export default function LearningsPage() {
               placeholder="Search accumulated knowledge"
             />
           </label>
-          <Button>
+          <Button disabled title="Learning filters are planned for Phase 1">
             <Filter className="size-3.5" />
             Filter
           </Button>

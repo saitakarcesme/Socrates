@@ -1,24 +1,56 @@
 import { Check, Copy, ExternalLink, FileDiff } from "lucide-react";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { Button, Metric, Panel, StatusBadge } from "@socrates/design-system";
 
 import { PageHeader } from "@/components/page-header";
-import { experiments } from "@/lib/fixtures";
+import { experiments, getExperiment, getRun, runs } from "@/lib/fixtures";
 
-export default async function ExperimentPage({
-  params,
-}: {
+type ExperimentPageProps = {
   params: Promise<{
     projectId: string;
     runId: string;
     experimentId: string;
   }>;
-}) {
-  const { experimentId } = await params;
-  const experiment = experiments.find((item) => item.id === experimentId);
+};
+
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return runs.flatMap((run) =>
+    experiments
+      .filter((experiment) => run.experimentIds.includes(experiment.id))
+      .map((experiment) => ({
+        projectId: run.projectId,
+        runId: run.id,
+        experimentId: experiment.id,
+      })),
+  );
+}
+
+export async function generateMetadata({
+  params,
+}: ExperimentPageProps): Promise<Metadata> {
+  const { projectId, runId, experimentId } = await params;
+  const experiment = getExperiment(projectId, runId, experimentId);
 
   if (!experiment) {
+    return { title: "Experiment not found" };
+  }
+
+  return {
+    title: `Experiment ${experiment.sequence}`,
+    description: experiment.hypothesis,
+  };
+}
+
+export default async function ExperimentPage({ params }: ExperimentPageProps) {
+  const { projectId, runId, experimentId } = await params;
+  const run = getRun(projectId, runId);
+  const experiment = getExperiment(projectId, runId, experimentId);
+
+  if (!run || !experiment) {
     notFound();
   }
 
@@ -27,11 +59,11 @@ export default async function ExperimentPage({
       <PageHeader
         actions={
           <div className="flex gap-2">
-            <Button>
+            <Button disabled title="Clipboard actions are planned for Phase 1">
               <Copy className="size-3.5" />
               Copy ID
             </Button>
-            <Button>
+            <Button disabled title="Artifact storage is planned for Phase 1">
               <ExternalLink className="size-3.5" />
               Open artifact
             </Button>
@@ -40,8 +72,9 @@ export default async function ExperimentPage({
         description={experiment.hypothesis}
         eyebrow={
           <span className="flex items-center gap-2">
-            Run 7 <span className="text-[var(--text-subtle)]">/</span>{" "}
-            Experiment {experiment.sequence}
+            Run {run.number}{" "}
+            <span className="text-[var(--text-subtle)]">/</span> Experiment{" "}
+            {experiment.sequence}
             <StatusBadge
               tone={
                 experiment.decision === "kept"

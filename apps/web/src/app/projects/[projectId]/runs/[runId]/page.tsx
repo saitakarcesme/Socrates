@@ -1,17 +1,61 @@
 import { MoreHorizontal, Pause, Square } from "lucide-react";
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 
 import { Button, Metric, Panel, StatusBadge } from "@socrates/design-system";
 
 import { ExperimentTimeline } from "@/components/experiment-timeline";
 import { PageHeader } from "@/components/page-header";
-import { experiments } from "@/lib/fixtures";
+import {
+  getExperimentsForRun,
+  getProject,
+  getRun,
+  learnings,
+  runs,
+} from "@/lib/fixtures";
 
-export default async function RunPage({
-  params,
-}: {
+type RunPageProps = {
   params: Promise<{ projectId: string; runId: string }>;
-}) {
+};
+
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return runs.map((run) => ({
+    projectId: run.projectId,
+    runId: run.id,
+  }));
+}
+
+export async function generateMetadata({
+  params,
+}: RunPageProps): Promise<Metadata> {
   const { projectId, runId } = await params;
+  const run = getRun(projectId, runId);
+
+  if (!run) {
+    return { title: "Run not found" };
+  }
+
+  return {
+    title: `Run ${run.number} · ${run.title}`,
+    description: run.description,
+  };
+}
+
+export default async function RunPage({ params }: RunPageProps) {
+  const { projectId, runId } = await params;
+  const project = getProject(projectId);
+  const run = getRun(projectId, runId);
+
+  if (!project || !run) {
+    notFound();
+  }
+
+  const runExperiments = getExperimentsForRun(projectId, runId);
+  const projectLearnings = learnings
+    .filter((learning) => learning.project === project.name)
+    .slice(0, 3);
   const runHref = `/projects/${projectId}/runs/${runId}`;
 
   return (
@@ -19,27 +63,46 @@ export default async function RunPage({
       <PageHeader
         actions={
           <div className="flex gap-2">
-            <Button aria-label="More run actions">
+            <Button
+              aria-label="More run actions"
+              disabled
+              title="Run actions are planned for Phase 1"
+            >
               <MoreHorizontal className="size-3.5" />
             </Button>
-            <Button>
+            <Button disabled title="Run control is planned for Phase 2">
               <Pause className="size-3.5" />
               Pause
             </Button>
-            <Button variant="danger">
+            <Button
+              disabled
+              title="Run control is planned for Phase 2"
+              variant="danger"
+            >
               <Square className="size-3" />
               Stop
             </Button>
           </div>
         }
-        description="Improve p75 LCP through controlled changes to the critical rendering path."
+        description={run.description}
         eyebrow={
           <span className="flex items-center gap-2">
-            Atlas Web <span className="text-[var(--text-subtle)]">/</span> Run 7
-            <StatusBadge tone="running">running</StatusBadge>
+            {project.name} <span className="text-[var(--text-subtle)]">/</span>{" "}
+            Run {run.number}
+            <StatusBadge
+              tone={
+                run.status === "running"
+                  ? "running"
+                  : run.status === "paused"
+                    ? "warning"
+                    : "success"
+              }
+            >
+              {run.status}
+            </StatusBadge>
           </span>
         }
-        title="Rendering path optimization"
+        title={run.title}
       />
 
       <div className="mx-auto grid max-w-[1560px] xl:grid-cols-[minmax(0,1fr)_304px]">
@@ -48,35 +111,69 @@ export default async function RunPage({
             <div>
               <h2 className="text-sm font-semibold">Experiment timeline</h2>
               <p className="mt-1 text-xs text-[var(--text-muted)]">
-                4 of 12 experiments · newest first
+                {run.experiments} experiments · newest first
               </p>
             </div>
-            <button className="text-xs text-[var(--text-muted)] hover:text-[var(--text)]">
+            <button
+              className="text-xs text-[var(--text-muted)] disabled:opacity-40"
+              disabled
+              title="Timeline filters are planned for Phase 1"
+              type="button"
+            >
               Filter
             </button>
           </div>
-          <ExperimentTimeline items={experiments} runHref={runHref} />
+          {runExperiments.length > 0 ? (
+            <ExperimentTimeline items={[...runExperiments]} runHref={runHref} />
+          ) : (
+            <Panel className="flex min-h-52 items-center justify-center p-8 text-center">
+              <div className="max-w-sm">
+                <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--text-subtle)]">
+                  Historical run
+                </div>
+                <p className="mt-3 text-sm text-[var(--text)]">
+                  Experiment details are not included in this skeleton fixture.
+                </p>
+                <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+                  The route and run summary remain available to demonstrate the
+                  complete navigation model.
+                </p>
+              </div>
+            </Panel>
+          )}
         </section>
 
         <aside className="space-y-0 xl:sticky xl:top-0 xl:h-screen xl:overflow-y-auto">
           <div className="grid grid-cols-2 border-b border-[var(--border)]">
             <div className="border-r border-[var(--border)] p-4">
-              <Metric detail="p75 LCP" label="Current metric" value="1.94s" />
+              <Metric
+                detail={project.metric}
+                label="Current metric"
+                value={run.metric}
+              />
             </div>
             <div className="p-4">
               <Metric
-                detail="−24.8% overall"
+                detail={`${project.change} overall`}
                 label="Best result"
-                value="1.82s"
+                value={project.best}
               />
             </div>
           </div>
           <div className="grid grid-cols-2 border-b border-[var(--border)]">
             <div className="border-r border-[var(--border)] p-4">
-              <Metric detail="of 2h 00m" label="Elapsed time" value="38:24" />
+              <Metric
+                detail="wall-clock"
+                label="Elapsed time"
+                value={run.time}
+              />
             </div>
             <div className="p-4">
-              <Metric detail="of $12.00" label="Budget" value="$4.82" />
+              <Metric
+                detail="consumed / limit"
+                label="Budget"
+                value={run.budget}
+              />
             </div>
           </div>
 
@@ -91,8 +188,8 @@ export default async function RunPage({
               <div className="h-full w-[40%] bg-neutral-400" />
             </div>
             <div className="mt-3 flex justify-between font-mono text-[10px] text-[var(--text-subtle)]">
-              <span>4 / 12 experiments</span>
-              <span>$7.18 remaining</span>
+              <span>{run.experiments} experiments</span>
+              <span>{run.status}</span>
             </div>
           </div>
 
@@ -100,22 +197,18 @@ export default async function RunPage({
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-xs font-medium">Knowledge</h3>
               <span className="font-mono text-[10px] text-[var(--text-subtle)]">
-                3 items
+                {projectLearnings.length} items
               </span>
             </div>
             <div className="space-y-3">
-              {[
-                "Critical CSS is currently the highest-confidence optimization surface.",
-                "Analytics bootstrap delays the main thread on mid-tier mobile devices.",
-                "Reducing image quality alone produces no meaningful LCP change.",
-              ].map((knowledge, index) => (
-                <div className="flex gap-2.5" key={knowledge}>
+              {projectLearnings.map((learning) => (
+                <div className="flex gap-2.5" key={learning.title}>
                   <span className="mt-1.5 size-1 shrink-0 rounded-full bg-neutral-500" />
                   <p className="text-[11px] leading-[17px] text-[var(--text-muted)]">
-                    {knowledge}
+                    {learning.summary}
                   </p>
                   <span className="ml-auto font-mono text-[9px] text-[var(--text-subtle)]">
-                    0.{9 - index}
+                    {learning.confidence === "High" ? "0.9" : "0.7"}
                   </span>
                 </div>
               ))}

@@ -514,6 +514,20 @@ complexity into the skeleton.
 Phase 0 uses typed, realistic fixtures through a repository-shaped interface.
 It does not introduce fake persistence or nonfunctional control endpoints.
 
+### ADR-007: Routes resolve resources through one read boundary
+
+Even fixture-backed pages resolve projects, runs, and experiments through typed
+selectors instead of embedding resource data in route components. Dynamic
+routes return `notFound()` for unknown identifiers. This keeps route behavior
+compatible with a future API-backed repository and prevents misleading screens
+that render valid-looking data for invalid URLs.
+
+### ADR-008: Product states are part of the skeleton
+
+Loading, not-found, and unexpected-error surfaces are first-class product
+states. They share the design system and must not expose raw framework errors.
+Route metadata is derived from the same resolved resource used by the page.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
