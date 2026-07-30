@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import { cn } from "@socrates/design-system";
 
@@ -49,7 +49,9 @@ function Navigation() {
 
       <div className="border-b border-[var(--border)] p-2">
         <button
-          className="flex h-8 w-full items-center gap-2 rounded-[4px] px-2 text-xs text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]"
+          className="flex h-8 w-full items-center gap-2 rounded-[4px] px-2 text-xs text-[var(--text-muted)] disabled:cursor-not-allowed disabled:opacity-40"
+          disabled
+          title="Global search is planned for Phase 1"
           type="button"
         >
           <Search className="size-3.5" />
@@ -102,7 +104,9 @@ function Navigation() {
           Settings
         </Link>
         <button
-          className="mt-1 flex h-10 w-full items-center gap-2 rounded-[4px] px-2 text-left hover:bg-[var(--surface-hover)]"
+          className="mt-1 flex h-10 w-full items-center gap-2 rounded-[4px] px-2 text-left disabled:cursor-not-allowed disabled:opacity-60"
+          disabled
+          title="Workspace switching is planned for Phase 1"
           type="button"
         >
           <span className="flex size-6 items-center justify-center rounded-[3px] bg-neutral-800 text-[10px] font-medium">
@@ -127,6 +131,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   const open = useUiStore((state) => state.mobileNavigationOpen);
   const setOpen = useUiStore((state) => state.setMobileNavigationOpen);
 
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
   return (
     <div className="min-h-screen bg-[var(--canvas)] text-[var(--text)]">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[232px] flex-col border-r border-[var(--border)] bg-[var(--sidebar)] lg:flex">
@@ -141,7 +158,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             onClick={() => setOpen(false)}
             type="button"
           />
-          <aside className="relative flex h-full w-[264px] flex-col border-r border-[var(--border)] bg-[var(--sidebar)]">
+          <aside
+            aria-label="Mobile navigation"
+            className="relative flex h-full w-[264px] flex-col border-r border-[var(--border)] bg-[var(--sidebar)]"
+          >
             <Navigation />
           </aside>
         </div>

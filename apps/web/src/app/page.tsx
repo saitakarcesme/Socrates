@@ -61,9 +61,12 @@ export default function DashboardPage() {
                 Optimization targets in this workspace
               </p>
             </div>
-            <button className="text-xs text-[var(--text-muted)] hover:text-[var(--text)]">
+            <Link
+              className="text-xs text-[var(--text-muted)] hover:text-[var(--text)]"
+              href="/projects"
+            >
               View all
-            </button>
+            </Link>
           </div>
 
           <Panel className="overflow-hidden">

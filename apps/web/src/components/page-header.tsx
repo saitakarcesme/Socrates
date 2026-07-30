@@ -12,8 +12,8 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className="flex min-h-28 items-start justify-between gap-8 border-b border-[var(--border)] px-6 py-6 sm:px-8">
-      <div className="min-w-0">
+    <header className="flex min-h-28 flex-col gap-5 border-b border-[var(--border)] px-6 py-6 sm:flex-row sm:items-start sm:justify-between sm:gap-8 sm:px-8">
+      <div className="min-w-0 flex-1">
         {eyebrow ? (
           <div className="mb-2 text-xs text-[var(--text-muted)]">{eyebrow}</div>
         ) : null}
@@ -26,7 +26,9 @@ export function PageHeader({
           </p>
         ) : null}
       </div>
-      {actions ? <div className="shrink-0">{actions}</div> : null}
+      {actions ? (
+        <div className="shrink-0 self-stretch sm:self-auto">{actions}</div>
+      ) : null}
     </header>
   );
 }

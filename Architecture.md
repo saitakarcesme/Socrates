@@ -536,6 +536,15 @@ lockfile without mutation, has read-only repository permissions, and must pass
 format, typecheck, lint, unit tests, and the production build before changes are
 considered mergeable.
 
+### ADR-010: Responsive hierarchy and honest affordances
+
+Product headers stack title content before actions below the small-screen
+breakpoint so controls never compress the primary reading measure. Mobile
+navigation behaves as a modal drawer and locks background scrolling while open.
+Phase 0 renders future commands as explicitly disabled controls with a concise
+availability hint; controls that appear enabled must navigate or perform a real
+local interaction.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

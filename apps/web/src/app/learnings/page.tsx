@@ -25,8 +25,10 @@ export default function LearningsPage() {
             <Search className="size-3.5 text-[var(--text-subtle)]" />
             <input
               aria-label="Search learnings"
-              className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-[var(--text-subtle)]"
+              className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-[var(--text-subtle)] disabled:cursor-not-allowed"
+              disabled
               placeholder="Search accumulated knowledge"
+              title="Learning search is planned for Phase 1"
             />
           </label>
           <Button disabled title="Learning filters are planned for Phase 1">

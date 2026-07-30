@@ -49,15 +49,21 @@ export default function SettingsPage() {
               title="Workspace name"
             >
               <input
-                className="h-8 w-full rounded-[4px] border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3 text-xs outline-none focus:border-neutral-500"
+                className="h-8 w-full rounded-[4px] border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3 text-xs outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 defaultValue="Personal workspace"
+                disabled
+                title="Settings persistence is planned for Phase 1"
               />
             </SettingRow>
             <SettingRow
               description="Used for timestamps in the product and exported reports."
               title="Timezone"
             >
-              <select className="h-8 w-full rounded-[4px] border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3 text-xs outline-none">
+              <select
+                className="h-8 w-full rounded-[4px] border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3 text-xs outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                disabled
+                title="Settings persistence is planned for Phase 1"
+              >
                 <option>Europe/Warsaw (UTC+02:00)</option>
                 <option>UTC</option>
               </select>
@@ -77,8 +83,10 @@ export default function SettingsPage() {
                   USD
                 </span>
                 <input
-                  className="h-8 min-w-0 flex-1 rounded-r-[4px] border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3 font-mono text-xs outline-none"
+                  className="h-8 min-w-0 flex-1 rounded-r-[4px] border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3 font-mono text-xs outline-none disabled:cursor-not-allowed disabled:opacity-60"
                   defaultValue="30.00"
+                  disabled
+                  title="Settings persistence is planned for Phase 1"
                 />
               </div>
             </SettingRow>
@@ -87,8 +95,10 @@ export default function SettingsPage() {
               title="Experiments per run"
             >
               <input
-                className="h-8 w-full rounded-[4px] border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3 font-mono text-xs outline-none"
+                className="h-8 w-full rounded-[4px] border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3 font-mono text-xs outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 defaultValue="12"
+                disabled
+                title="Settings persistence is planned for Phase 1"
               />
             </SettingRow>
           </Panel>
@@ -110,7 +120,12 @@ export default function SettingsPage() {
                   local · darwin-arm64 · v0.1 protocol
                 </p>
               </div>
-              <Button className="ml-auto" size="sm">
+              <Button
+                className="ml-auto"
+                disabled
+                size="sm"
+                title="Runner configuration is planned for Phase 2"
+              >
                 Configure
               </Button>
             </div>
@@ -118,7 +133,13 @@ export default function SettingsPage() {
         </section>
 
         <div className="flex justify-end">
-          <Button variant="primary">Save changes</Button>
+          <Button
+            disabled
+            title="Settings persistence is planned for Phase 1"
+            variant="primary"
+          >
+            Save changes
+          </Button>
         </div>
       </div>
     </>
