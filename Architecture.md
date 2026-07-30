@@ -575,6 +575,22 @@ exports the public surface. Contracts define transport validation but do not
 import domain implementations. Database, Hono, and React adapters may depend on
 these packages; the reverse dependency is forbidden.
 
+### ADR-014: Normalized PostgreSQL facts with generated migrations
+
+Phase 1 persists normalized aggregate state separately from immutable evidence.
+Observations, decisions, learnings, and run events are append-only through
+repository APIs; mutable project, run, and experiment rows carry optimistic
+concurrency versions. Metric decimals remain canonical strings with database
+checks instead of being coerced through JavaScript floating point. Durations
+and minor-unit costs use PostgreSQL `bigint` while application contracts keep
+them inside JavaScript's safe-integer range.
+
+The Drizzle TypeScript schema is the code-first source of truth. Reviewed SQL,
+snapshots, and the migration journal are committed together. Schema modules are
+grouped by domain, re-exported from one migration entry point, and validated
+with `drizzle-kit check`. Application code may apply committed migrations but
+must never use `drizzle-kit push` against shared environments.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
