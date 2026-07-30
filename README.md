@@ -21,6 +21,8 @@ services/runner-local Future local execution adapter
 ```
 
 Read [Architecture.md](./Architecture.md) before making structural changes.
+The next implementation milestone is specified in the
+[Phase 1 measured experiments plan](./docs/plans/phase-1-measured-experiments.md).
 
 ## Development
 

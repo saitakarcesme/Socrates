@@ -454,11 +454,16 @@ The web/API process must never execute arbitrary experiment commands.
 
 ### Phase 1 — measured manual experiments
 
+- implementation plan:
+  [`docs/plans/phase-1-measured-experiments.md`](docs/plans/phase-1-measured-experiments.md)
 - PostgreSQL and migrations
 - project/run creation
 - versioned metrics and baselines
 - manually recorded experiments and decisions
 - durable event timeline
+
+Phase 1 remains manual by design. Its acceptance gate explicitly forbids runner,
+shell executor, and model-provider dependencies.
 
 ### Phase 2 — local runner
 
@@ -544,6 +549,14 @@ navigation behaves as a modal drawer and locks background scrolling while open.
 Phase 0 renders future commands as explicitly disabled controls with a concise
 availability hint; controls that appear enabled must navigate or perform a real
 local interaction.
+
+### ADR-011: Manual ledger before autonomous execution
+
+Phase 1 implements durable measurement, deterministic decisions, idempotent
+commands, and resumable event delivery without an agent or runner. The accepted
+implementation sequence and exit criteria live in
+[`docs/plans/phase-1-measured-experiments.md`](docs/plans/phase-1-measured-experiments.md).
+Autonomous execution cannot begin until that plan's acceptance matrix passes.
 
 ## 19. Explicit non-goals for the first commit
 
