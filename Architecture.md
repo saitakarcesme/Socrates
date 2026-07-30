@@ -558,6 +558,23 @@ implementation sequence and exit criteria live in
 [`docs/plans/phase-1-measured-experiments.md`](docs/plans/phase-1-measured-experiments.md).
 Autonomous execution cannot begin until that plan's acceptance matrix passes.
 
+### ADR-012: Exact decimal metrics in the domain
+
+Metric values and thresholds cross contracts as canonical decimal strings.
+Domain arithmetic parses them into a signed `bigint` coefficient and decimal
+scale, aligns scales explicitly, and never compares persisted measurements with
+JavaScript floating-point arithmetic. Units are part of every metric value and
+must match the protocol before comparison. This implementation remains inside
+`packages/domain`; database and transport layers persist or transmit strings.
+
+### ADR-013: Domain modules before application adapters
+
+Run lifecycle, experiment lifecycle, metric comparison, decision policy, and
+budget policy live in separate framework-free domain modules. `index.ts` only
+exports the public surface. Contracts define transport validation but do not
+import domain implementations. Database, Hono, and React adapters may depend on
+these packages; the reverse dependency is forbidden.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

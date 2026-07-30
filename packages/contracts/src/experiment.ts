@@ -1,0 +1,110 @@
+import { z } from "zod";
+
+import {
+  budgetLimitSchema,
+  canonicalDecimalSchema,
+  entityIdSchema,
+  expectedVersionSchema,
+  metricDirectionSchema,
+  metricValueSchema,
+  nonNegativeSafeIntegerSchema,
+  positiveSafeIntegerSchema,
+} from "./common";
+
+export const experimentStatusSchema = z.enum([
+  "proposed",
+  "queued",
+  "executing",
+  "measuring",
+  "evaluating",
+  "failed",
+  "kept",
+  "discarded",
+  "inconclusive",
+]);
+export type ExperimentStatusContract = z.infer<typeof experimentStatusSchema>;
+
+export const experimentDecisionSchema = z.enum([
+  "kept",
+  "discarded",
+  "inconclusive",
+]);
+export type ExperimentDecision = z.infer<typeof experimentDecisionSchema>;
+
+export const proposeExperimentCommandSchema = z
+  .object({
+    expectedRunVersion: expectedVersionSchema,
+    parentExperimentId: entityIdSchema.optional(),
+    hypothesis: z.string().trim().min(1).max(4_000),
+    action: z.string().trim().min(1).max(8_000),
+    estimatedDurationMs: positiveSafeIntegerSchema,
+    estimatedCostMinor: nonNegativeSafeIntegerSchema,
+  })
+  .strict();
+export type ProposeExperimentCommand = z.infer<
+  typeof proposeExperimentCommandSchema
+>;
+
+export const experimentLifecycleCommandSchema = z
+  .object({
+    expectedVersion: expectedVersionSchema,
+    reason: z.string().trim().min(1).max(1_000).optional(),
+  })
+  .strict();
+export type ExperimentLifecycleCommand = z.infer<
+  typeof experimentLifecycleCommandSchema
+>;
+
+export const recordObservationCommandSchema = z
+  .object({
+    expectedVersion: expectedVersionSchema,
+    kind: z.enum(["before", "after", "guardrail"]),
+    metricDefinitionId: entityIdSchema,
+    value: metricValueSchema,
+    sampleCount: positiveSafeIntegerSchema,
+    notes: z.string().trim().max(4_000).optional(),
+  })
+  .strict();
+export type RecordObservationCommand = z.infer<
+  typeof recordObservationCommandSchema
+>;
+
+export const decideExperimentCommandSchema = z
+  .object({
+    expectedVersion: expectedVersionSchema,
+    override: z
+      .object({
+        decision: experimentDecisionSchema,
+        reason: z.string().trim().min(1).max(2_000),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+export type DecideExperimentCommand = z.infer<
+  typeof decideExperimentCommandSchema
+>;
+
+export const experimentTaskV1Schema = z
+  .object({
+    version: z.literal("1"),
+    runId: entityIdSchema,
+    experimentId: entityIdSchema,
+    hypothesis: z.string().min(1),
+    actionPlan: z
+      .object({
+        summary: z.string().min(1),
+        capabilities: z.array(z.string()).default([]),
+      })
+      .strict(),
+    metric: z
+      .object({
+        definitionId: entityIdSchema,
+        direction: metricDirectionSchema,
+        minimumImprovement: canonicalDecimalSchema,
+      })
+      .strict(),
+    budget: budgetLimitSchema,
+  })
+  .strict();
+export type ExperimentTaskV1 = z.infer<typeof experimentTaskV1Schema>;

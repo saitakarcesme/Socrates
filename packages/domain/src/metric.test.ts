@@ -1,0 +1,117 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  decideExperiment,
+  MetricProtocolError,
+  type DecisionInput,
+} from "./metric";
+
+function input(overrides: Partial<DecisionInput> = {}): DecisionInput {
+  return {
+    protocol: {
+      direction: "minimize",
+      unit: "s",
+      minimumImprovement: "0.05",
+      noiseTolerance: "0.01",
+    },
+    before: { amount: "2.42", unit: "s" },
+    after: { amount: "2.31", unit: "s" },
+    guardrailsPassed: true,
+    measurementValid: true,
+    ...overrides,
+  };
+}
+
+describe("decideExperiment", () => {
+  it("keeps a minimizing result that clears threshold and noise", () => {
+    expect(decideExperiment(input())).toEqual({
+      decision: "kept",
+      improvement: "0.11",
+      reason: "improved",
+    });
+  });
+
+  it("calculates maximizing improvement exactly", () => {
+    expect(
+      decideExperiment(
+        input({
+          protocol: {
+            direction: "maximize",
+            unit: "%",
+            minimumImprovement: "2",
+            noiseTolerance: "0.1",
+          },
+          before: { amount: "55.3", unit: "%" },
+          after: { amount: "63.4", unit: "%" },
+        }),
+      ),
+    ).toMatchObject({ decision: "kept", improvement: "8.1" });
+  });
+
+  it("marks changes inside noise tolerance inconclusive", () => {
+    expect(
+      decideExperiment(
+        input({
+          before: { amount: "1", unit: "s" },
+          after: { amount: "0.995", unit: "s" },
+        }),
+      ),
+    ).toMatchObject({
+      decision: "inconclusive",
+      improvement: "0.005",
+      reason: "within_noise",
+    });
+  });
+
+  it("discards valid improvement below the acceptance threshold", () => {
+    expect(
+      decideExperiment(
+        input({
+          before: { amount: "1", unit: "s" },
+          after: { amount: "0.97", unit: "s" },
+        }),
+      ),
+    ).toMatchObject({
+      decision: "discarded",
+      improvement: "0.03",
+      reason: "below_threshold",
+    });
+  });
+
+  it("prioritizes measurement and guardrail validity", () => {
+    expect(decideExperiment(input({ measurementValid: false }))).toMatchObject({
+      decision: "inconclusive",
+      reason: "invalid_measurement",
+    });
+    expect(decideExperiment(input({ guardrailsPassed: false }))).toMatchObject({
+      decision: "discarded",
+      reason: "guardrail_failed",
+    });
+  });
+
+  it("rejects units that do not match the protocol", () => {
+    expect(() =>
+      decideExperiment(input({ after: { amount: "2.31", unit: "ms" } })),
+    ).toThrowError(MetricProtocolError);
+  });
+
+  it.each([
+    ["minimumImprovement", "-0.1", "negative_minimum_improvement"],
+    ["noiseTolerance", "-0.1", "negative_noise_tolerance"],
+  ] as const)("rejects negative %s", (field, value, expectedCode) => {
+    try {
+      decideExperiment(
+        input({
+          protocol: {
+            ...input().protocol,
+            [field]: value,
+          },
+        }),
+      );
+      throw new Error("Expected decision policy to reject the protocol.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(MetricProtocolError);
+      expect((error as MetricProtocolError).code).toBe(expectedCode);
+    }
+  });
+});
