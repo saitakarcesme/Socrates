@@ -2,7 +2,7 @@
   "name": "socrates",
   "version": "0.0.0",
   "private": true,
-  "packageManager": "pnpm@10.15.1",
+  "packageManager": "pnpm@11.9.0",
   "engines": {
     "node": ">=22"
   },

@@ -528,6 +528,14 @@ Loading, not-found, and unexpected-error surfaces are first-class product
 states. They share the design system and must not expose raw framework errors.
 Route metadata is derived from the same resolved resource used by the page.
 
+### ADR-009: One reproducible quality gate
+
+Local development and continuous integration run the same root scripts with the
+package manager version pinned in `package.json`. CI installs from the committed
+lockfile without mutation, has read-only repository permissions, and must pass
+format, typecheck, lint, unit tests, and the production build before changes are
+considered mergeable.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
