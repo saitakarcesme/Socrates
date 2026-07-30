@@ -5,6 +5,7 @@ import postgres from "postgres";
 import { PostgresCommandRepository } from "./command-repository";
 import type { DatabaseTransaction } from "./database-types";
 import { PostgresReadRepository } from "./read-repository";
+import { PostgresSchedulerRepository } from "./scheduler-repository";
 import type {
   AppendRunEventInput,
   IdempotencyClaim,
@@ -151,6 +152,7 @@ function createRepositories(
     commands: new PostgresCommandRepository(transaction),
     idempotency: new PostgresIdempotencyRepository(transaction),
     runEvents: new PostgresRunEventRepository(transaction),
+    scheduler: new PostgresSchedulerRepository(transaction),
   };
 }
 

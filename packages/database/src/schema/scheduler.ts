@@ -1,0 +1,241 @@
+import { sql } from "drizzle-orm";
+import {
+  boolean,
+  check,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
+
+import {
+  runnerAttemptStatus,
+  runnerKind,
+  runnerRegistrationStatus,
+  runnerTaskStatus,
+} from "./enums";
+import { nonNegativeCheck, positiveCheck } from "./helpers";
+import { projects, workspaces } from "./projects";
+import { experiments, runs } from "./runs";
+
+export const runnerRegistrations = pgTable(
+  "runner_registrations",
+  {
+    id: uuid("id").primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    kind: runnerKind("kind").notNull(),
+    status: runnerRegistrationStatus("status").default("active").notNull(),
+    softwareVersion: text("software_version").notNull(),
+    taskProtocolVersions: text("task_protocol_versions").array().notNull(),
+    eventProtocolVersions: text("event_protocol_versions").array().notNull(),
+    sandboxBackend: text("sandbox_backend").notNull(),
+    capabilities: jsonb("capabilities").notNull(),
+    maximumConcurrentTasks: integer("maximum_concurrent_tasks").notNull(),
+    lastHeartbeatAt: timestamp("last_heartbeat_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("runner_registrations_workspace_status_heartbeat_idx").on(
+      table.workspaceId,
+      table.status,
+      table.lastHeartbeatAt,
+    ),
+    positiveCheck(
+      "runner_registrations_capacity_positive",
+      table.maximumConcurrentTasks,
+    ),
+    check(
+      "runner_registrations_task_protocol_v2",
+      sql`'2' = ANY(${table.taskProtocolVersions})`,
+    ),
+    check(
+      "runner_registrations_event_protocol_v2",
+      sql`'2' = ANY(${table.eventProtocolVersions})`,
+    ),
+    check(
+      "runner_registrations_oci_backend",
+      sql`${table.sandboxBackend} = 'oci'`,
+    ),
+  ],
+);
+
+export const runnerTasks = pgTable(
+  "runner_tasks",
+  {
+    id: uuid("id").primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => runs.id),
+    experimentId: uuid("experiment_id")
+      .notNull()
+      .references(() => experiments.id),
+    protocolVersion: text("protocol_version").notNull(),
+    payload: jsonb("payload").notNull(),
+    requiredCapabilities: jsonb("required_capabilities").notNull(),
+    status: runnerTaskStatus("status").default("queued").notNull(),
+    retrySafe: boolean("retry_safe").notNull(),
+    currentFence: integer("current_fence").default(0).notNull(),
+    cancellationRequestedAt: timestamp("cancellation_requested_at", {
+      withTimezone: true,
+    }),
+    terminalAt: timestamp("terminal_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("runner_tasks_experiment_unique").on(table.experimentId),
+    index("runner_tasks_workspace_queue_created_id_idx").on(
+      table.workspaceId,
+      table.status,
+      table.createdAt,
+      table.id,
+    ),
+    index("runner_tasks_run_created_id_idx").on(
+      table.runId,
+      table.createdAt,
+      table.id,
+    ),
+    foreignKey({
+      name: "runner_tasks_project_same_workspace_fk",
+      columns: [table.workspaceId, table.projectId],
+      foreignColumns: [projects.workspaceId, projects.id],
+    }),
+    foreignKey({
+      name: "runner_tasks_run_same_project_fk",
+      columns: [table.projectId, table.runId],
+      foreignColumns: [runs.projectId, runs.id],
+    }),
+    foreignKey({
+      name: "runner_tasks_experiment_same_run_fk",
+      columns: [table.runId, table.experimentId],
+      foreignColumns: [experiments.runId, experiments.id],
+    }),
+    nonNegativeCheck(
+      "runner_tasks_current_fence_non_negative",
+      table.currentFence,
+    ),
+    check("runner_tasks_protocol_v2", sql`${table.protocolVersion} = '2'`),
+    check(
+      "runner_tasks_terminal_state",
+      sql`(${table.status} IN ('succeeded', 'failed', 'cancelled')) = (${table.terminalAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const runnerTaskAttempts = pgTable(
+  "runner_task_attempts",
+  {
+    id: uuid("id").primaryKey(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => runnerTasks.id),
+    runnerId: uuid("runner_id")
+      .notNull()
+      .references(() => runnerRegistrations.id),
+    fence: integer("fence").notNull(),
+    status: runnerAttemptStatus("status").default("claimed").notNull(),
+    leaseExpiresAt: timestamp("lease_expires_at", {
+      withTimezone: true,
+    }).notNull(),
+    lastHeartbeatAt: timestamp("last_heartbeat_at", {
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
+    lastEventSequence: integer("last_event_sequence").default(0).notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    failureClassification: text("failure_classification"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("runner_task_attempts_task_fence_unique").on(
+      table.taskId,
+      table.fence,
+    ),
+    uniqueIndex("runner_task_attempts_one_active_per_task")
+      .on(table.taskId)
+      .where(
+        sql`${table.status} IN ('claimed', 'preparing', 'executing', 'measuring')`,
+      ),
+    index("runner_task_attempts_runner_status_lease_idx").on(
+      table.runnerId,
+      table.status,
+      table.leaseExpiresAt,
+    ),
+    index("runner_task_attempts_task_created_idx").on(
+      table.taskId,
+      table.createdAt,
+    ),
+    positiveCheck("runner_task_attempts_fence_positive", table.fence),
+    nonNegativeCheck(
+      "runner_task_attempts_sequence_non_negative",
+      table.lastEventSequence,
+    ),
+    check(
+      "runner_task_attempts_terminal_state",
+      sql`(${table.status} IN ('succeeded', 'failed', 'cancelled', 'expired')) = (${table.completedAt} IS NOT NULL)`,
+    ),
+    check(
+      "runner_task_attempts_failure_classification",
+      sql`(${table.status} = 'failed') = (${table.failureClassification} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const outboxMessages = pgTable(
+  "outbox_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => runnerTasks.id),
+    topic: text("topic").notNull(),
+    payload: jsonb("payload").notNull(),
+    availableAt: timestamp("available_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    deliveryAttempts: integer("delivery_attempts").default(0).notNull(),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("outbox_messages_unpublished_available_idx")
+      .on(table.availableAt, table.createdAt, table.id)
+      .where(sql`${table.publishedAt} IS NULL`),
+    nonNegativeCheck(
+      "outbox_messages_delivery_attempts_non_negative",
+      table.deliveryAttempts,
+    ),
+    check("outbox_messages_topic_non_empty", sql`length(${table.topic}) > 0`),
+  ],
+);

@@ -12,10 +12,14 @@ import {
   learnings,
   metricDefinitions,
   observations,
+  outboxMessages,
   projects,
   runBudgets,
   runEvents,
   runs,
+  runnerRegistrations,
+  runnerTaskAttempts,
+  runnerTasks,
   schemaMetadata,
   workspaces,
 } from "./schema/index";
@@ -113,5 +117,49 @@ describe("Phase 1 migration", () => {
     }
     expect(cleanup).toContain(`DROP INDEX "observations_experiment_idx"`);
     expect(cleanup).toContain(`DROP INDEX "decisions_experiment_created_idx"`);
+  });
+});
+
+describe("Phase 2 scheduler migration", () => {
+  it("exports the durable scheduler tables", () => {
+    expect(
+      [
+        runnerRegistrations,
+        runnerTasks,
+        runnerTaskAttempts,
+        outboxMessages,
+      ].map((table) => getTableConfig(table).name),
+    ).toEqual([
+      "runner_registrations",
+      "runner_tasks",
+      "runner_task_attempts",
+      "outbox_messages",
+    ]);
+  });
+
+  it("pins tenant relationships, fencing, outbox order, and schema version", async () => {
+    const migration = await readFile(
+      new URL(
+        "../drizzle/0005_runner_scheduler_foundations.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    for (const evidence of [
+      `CONSTRAINT "runner_tasks_project_same_workspace_fk"`,
+      `CONSTRAINT "runner_tasks_run_same_project_fk"`,
+      `CONSTRAINT "runner_tasks_experiment_same_run_fk"`,
+      `CREATE UNIQUE INDEX "runner_task_attempts_task_fence_unique"`,
+      `CREATE UNIQUE INDEX "runner_task_attempts_one_active_per_task"`,
+      `CREATE INDEX "outbox_messages_unpublished_available_idx"`,
+      `CREATE INDEX "runner_tasks_workspace_queue_created_id_idx"`,
+      `UPDATE "socrates_schema_metadata" SET "version" = 2`,
+    ]) {
+      expect(migration).toContain(evidence);
+    }
+    expect(migration.indexOf(`"projects_workspace_id_unique"`)).toBeLessThan(
+      migration.indexOf(`"runner_tasks_project_same_workspace_fk"`),
+    );
   });
 });

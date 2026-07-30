@@ -984,6 +984,35 @@ filesystem implementation behind the artifact-store port; contracts must not
 expose filesystem paths. The control plane accepts metadata only after digest
 and size verification.
 
+### ADR-035: Scheduler truth is transactional and database-clocked
+
+Runner registrations are workspace-scoped control-plane records. A registration
+must be active, advertise task/event protocol V2, and satisfy the task's closed
+capability requirements before it can claim work. A caller-provided runner ID
+is never sufficient authorization; deployment authentication remains a
+separate adapter behind the registration boundary.
+
+`runner_tasks` stores the immutable validated V2 task payload beside a small
+relational scheduling projection: status, retry safety, current fence, and
+timestamps. Each experiment owns at most one task; retries create immutable
+`runner_task_attempts`, not replacement tasks. Claiming locks the registration
+and task, increments the task fence, creates one attempt with that fence, and
+changes the task to `leased` in one transaction. A unique `(task_id, fence)`
+constraint and fenced compare-and-set writes prevent two active identities from
+controlling the same task.
+
+Lease issue, renewal, expiry, and cancellation timestamps use PostgreSQL's
+clock. Runner clocks are provenance only and never decide lease validity.
+Heartbeats update an attempt only when runner, task, attempt, fence, active
+status, and unexpired lease all match. A failed predicate returns a typed stale
+result without mutating evidence.
+
+Task creation appends an `outbox_messages` row in the same transaction. The
+outbox payload identifies the task; the immutable task body remains in
+`runner_tasks`. A future dispatcher may claim unpublished outbox rows with
+`FOR UPDATE SKIP LOCKED`, but the Phase 2.1 persistence slice does not introduce
+a broker, background loop, or executor.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

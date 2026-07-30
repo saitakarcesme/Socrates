@@ -52,10 +52,86 @@ export interface RunEventRepository {
   append(input: AppendRunEventInput): Promise<RunEventRecord>;
 }
 
+export type RunnerRegistrationWrite = {
+  id: string;
+  workspaceId: string;
+  kind: "local" | "cloud" | "distributed";
+  softwareVersion: string;
+  taskProtocolVersions: readonly string[];
+  eventProtocolVersions: readonly string[];
+  sandboxBackend: "oci";
+  capabilities: JsonValue;
+  maximumConcurrentTasks: number;
+};
+
+export type RunnerTaskWrite = {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  runId: string;
+  experimentId: string;
+  expectedExperimentVersion: number;
+  protocolVersion: "2";
+  payload: JsonValue;
+};
+
+export type CreateRunnerTaskResult =
+  { state: "created" } | { state: "experiment_unavailable" };
+
+export type ClaimRunnerTaskInput = {
+  runnerId: string;
+  taskId: string;
+  attemptId: string;
+  leaseDurationMs: number;
+};
+
+export type ClaimedRunnerTask = {
+  runnerId: string;
+  taskId: string;
+  attemptId: string;
+  fence: number;
+  leaseExpiresAt: Date;
+  payload: JsonValue;
+};
+
+export type ClaimRunnerTaskResult =
+  | { state: "claimed"; claim: ClaimedRunnerTask }
+  | {
+      state:
+        | "runner_not_found"
+        | "runner_unavailable"
+        | "runner_at_capacity"
+        | "attempt_conflict"
+        | "task_not_found"
+        | "task_unavailable"
+        | "capability_mismatch";
+    };
+
+export type HeartbeatRunnerTaskInput = {
+  runnerId: string;
+  taskId: string;
+  attemptId: string;
+  fence: number;
+  leaseDurationMs: number;
+};
+
+export type HeartbeatRunnerTaskResult =
+  { state: "renewed"; leaseExpiresAt: Date } | { state: "stale" };
+
+export interface SchedulerRepository {
+  registerRunner(input: RunnerRegistrationWrite): Promise<void>;
+  createTask(input: RunnerTaskWrite): Promise<CreateRunnerTaskResult>;
+  claimTask(input: ClaimRunnerTaskInput): Promise<ClaimRunnerTaskResult>;
+  heartbeat(
+    input: HeartbeatRunnerTaskInput,
+  ): Promise<HeartbeatRunnerTaskResult>;
+}
+
 export type TransactionRepositories = {
   commands: CommandRepository;
   idempotency: IdempotencyRepository;
   runEvents: RunEventRepository;
+  scheduler: SchedulerRepository;
 };
 
 export interface Persistence {

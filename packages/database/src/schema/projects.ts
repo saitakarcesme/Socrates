@@ -59,6 +59,7 @@ export const projects = pgTable(
       .notNull(),
   },
   (table) => [
+    unique("projects_workspace_id_unique").on(table.workspaceId, table.id),
     uniqueIndex("projects_workspace_slug_unique").on(
       table.workspaceId,
       table.slug,

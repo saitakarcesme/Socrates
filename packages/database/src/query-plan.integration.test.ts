@@ -75,6 +75,20 @@ integration("PostgreSQL read query plans", () => {
        ORDER BY created_at DESC, id DESC`,
       "decisions_experiment_created_id_idx",
     ],
+    [
+      "workspace runner queue",
+      `SELECT id, created_at FROM runner_tasks
+       WHERE workspace_id = '${scopeId}' AND status = 'queued'
+       ORDER BY created_at, id LIMIT 101`,
+      "runner_tasks_workspace_queue_created_id_idx",
+    ],
+    [
+      "unpublished outbox",
+      `SELECT id, available_at, created_at FROM outbox_messages
+       WHERE published_at IS NULL AND available_at <= CURRENT_TIMESTAMP
+       ORDER BY available_at, created_at, id LIMIT 101`,
+      "outbox_messages_unpublished_available_idx",
+    ],
   ])("supports ordered %s reads with %s", async (_, query, indexName) => {
     await client.begin(async (transaction) => {
       await transaction`SET LOCAL enable_seqscan = off`;
@@ -100,7 +114,7 @@ integration("PostgreSQL read query plans", () => {
          LIMIT 101`,
       );
 
-      expect(plan).toContain("projects_workspace_created_id_idx");
+      expect(plan).toMatch(/projects_workspace_(?:created_id_idx|id_unique)/);
       expect(plan).toMatch(/learnings_(?:created_id|project_created_id)_idx/);
     });
   });

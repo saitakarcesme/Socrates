@@ -126,6 +126,9 @@ importers:
 
   packages/database:
     dependencies:
+      "@socrates/contracts":
+        specifier: workspace:*
+        version: link:../contracts
       "@socrates/domain":
         specifier: workspace:*
         version: link:../domain

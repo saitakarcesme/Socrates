@@ -241,6 +241,29 @@ Implementation status: Complete on 2026-07-31.
 Exit: concurrent PostgreSQL tests prove one active fence, stale-writer
 rejection, idempotent claims, and crash recovery.
 
+Implementation status: In progress.
+
+Completed:
+
+- workspace-scoped registration, task, attempt, and outbox schema
+- composite tenant-chain foreign keys from task to experiment
+- immutable task payload plus indexed scheduling projection
+- experiment transition, task, and outbox atomic creation with rollback proof
+- exact default-deny capability matching
+- database-clocked atomic claim, capacity check, fence increment, and attempt
+  creation
+- fenced, unexpired heartbeat renewal
+- real PostgreSQL concurrency proof that two claims yield one attempt
+- idempotent replay of an unexpired acknowledged claim
+
+Remaining:
+
+- durable cancellation request and terminal compare-and-set
+- expired-attempt reconciliation and retry eligibility
+- acknowledged runner event persistence
+- conflicting attempt-ID handling at the API error boundary
+- task lifecycle projection into the run timeline
+
 ### Slice 2.2 — fake runner vertical slice
 
 - register a deterministic in-process test adapter through the runner port

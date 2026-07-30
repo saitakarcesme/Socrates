@@ -83,3 +83,36 @@ export const evidenceRole = pgEnum("evidence_role", [
   "supports",
   "contradicts",
 ]);
+
+export const runnerKind = pgEnum("runner_kind", [
+  "local",
+  "cloud",
+  "distributed",
+]);
+
+export const runnerRegistrationStatus = pgEnum("runner_registration_status", [
+  "active",
+  "draining",
+  "offline",
+]);
+
+export const runnerTaskStatus = pgEnum("runner_task_status", [
+  "queued",
+  "leased",
+  "running",
+  "cancellation_requested",
+  "succeeded",
+  "failed",
+  "cancelled",
+]);
+
+export const runnerAttemptStatus = pgEnum("runner_attempt_status", [
+  "claimed",
+  "preparing",
+  "executing",
+  "measuring",
+  "succeeded",
+  "failed",
+  "cancelled",
+  "expired",
+]);
