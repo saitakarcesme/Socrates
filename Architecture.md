@@ -717,6 +717,23 @@ appends cannot reorder or duplicate timeline pages. API contracts expose plain
 resources; Drizzle records and query-specific shapes remain inside the
 database package.
 
+### ADR-022: The web validates one control-plane contract at runtime
+
+Server Components call the Hono control plane through the server-only
+`SOCRATES_API_URL`. Browser commands and EventSource connections use the
+same-origin `/control-plane/*` transport, which Next.js rewrites to that
+service. The rewrite is network plumbing only; Next.js does not implement
+business endpoints or import database code.
+
+One web client owns URL construction, request defaults, error-envelope parsing,
+and response validation with schemas from `@socrates/contracts`. Mutable
+research reads use `no-store` until an explicit cache invalidation protocol
+exists. A non-success response becomes a typed recoverable API error; a
+successful response that violates its schema becomes a distinct contract
+violation and is never rendered as trusted data. The development default is
+`http://127.0.0.1:3001`; deployed environments must set the internal API URL
+to their control-plane service.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

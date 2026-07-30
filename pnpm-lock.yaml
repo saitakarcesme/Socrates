@@ -68,6 +68,9 @@ importers:
 
   apps/web:
     dependencies:
+      "@socrates/contracts":
+        specifier: workspace:*
+        version: link:../../packages/contracts
       "@socrates/design-system":
         specifier: workspace:*
         version: link:../../packages/design-system
