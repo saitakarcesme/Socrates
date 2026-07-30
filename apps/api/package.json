@@ -1,0 +1,22 @@
+{
+  "name": "@socrates/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/server.ts",
+    "lint": "eslint src",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.18.0",
+    "@socrates/contracts": "workspace:*",
+    "@socrates/domain": "workspace:*",
+    "hono": "^4.12.32"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.3"
+  }
+}
