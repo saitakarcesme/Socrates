@@ -661,6 +661,21 @@ constraints are compared with exact decimal arithmetic and explicit units;
 failed hard constraints discard the experiment. Soft constraints remain
 recorded evidence but do not change the Phase 1 keep/discard result.
 
+### ADR-019: Command modules follow aggregate ownership
+
+Command code is partitioned by the aggregate whose version and invariants the
+use case owns: project, run, or experiment. HTTP route modules follow the same
+boundary and only validate transport input before calling an application use
+case. Shared idempotency execution, error mapping, event append helpers, and
+response transport remain small infrastructure modules rather than a fourth
+business module.
+
+Creating a child belongs to the parent command module when the parent is the
+versioned transaction target. Creating a run is therefore a project command,
+while proposing an experiment is a run command. This keeps lock ownership and
+optimistic concurrency visible at the module boundary and prevents a single
+control-plane service or route registry from accumulating every lifecycle.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

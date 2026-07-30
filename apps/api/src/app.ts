@@ -9,7 +9,9 @@ import { requestId } from "hono/request-id";
 
 import { InvalidCursorError } from "./http/cursor";
 import { apiError } from "./http/errors";
-import { CommandService } from "./application/command-service";
+import { ExperimentCommandService } from "./application/commands/experiment-command-service";
+import { ProjectCommandService } from "./application/commands/project-command-service";
+import { RunCommandService } from "./application/commands/run-command-service";
 import { CommandError } from "./application/errors";
 import { IdempotentCommandExecutor } from "./application/idempotency";
 import { createCommandRoutes } from "./modules/commands/routes";
@@ -26,8 +28,17 @@ export type AppOptions = {
 export function createApp(options: AppOptions = {}) {
   const app = new Hono();
   const reads = options.persistence?.reads ?? options.reads ?? null;
-  const commands = options.persistence
-    ? new CommandService(new IdempotentCommandExecutor(options.persistence))
+  const commandExecutor = options.persistence
+    ? new IdempotentCommandExecutor(options.persistence)
+    : null;
+  const projectCommands = commandExecutor
+    ? new ProjectCommandService(commandExecutor)
+    : null;
+  const runCommands = commandExecutor
+    ? new RunCommandService(commandExecutor)
+    : null;
+  const experimentCommands = commandExecutor
+    ? new ExperimentCommandService(commandExecutor)
     : null;
 
   app.use("*", requestId());
@@ -63,7 +74,9 @@ export function createApp(options: AppOptions = {}) {
   app.route(
     "/v1",
     createCommandRoutes({
-      commands,
+      projectCommands,
+      runCommands,
+      experimentCommands,
       workspaceId: options.workspaceId ?? developmentWorkspaceId,
     }),
   );
