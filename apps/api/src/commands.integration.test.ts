@@ -24,6 +24,7 @@ const integration = describe.skipIf(!connectionString);
 integration("command API with PostgreSQL", () => {
   let persistence: Persistence;
   let app: ReturnType<typeof createApp>;
+  let disabledApp: ReturnType<typeof createApp>;
   const suffix = crypto.randomUUID().slice(0, 12);
   const workspaceId = crypto.randomUUID();
 
@@ -47,7 +48,9 @@ integration("command API with PostgreSQL", () => {
       name: `Command Integration ${suffix}`,
     });
     persistence = createPersistence({ connectionString });
+    disabledApp = createApp({ persistence, workspaceId });
     app = createApp({
+      manualResearchEnabled: true,
       persistence,
       workspaceId,
     });
@@ -55,6 +58,23 @@ integration("command API with PostgreSQL", () => {
 
   afterAll(async () => {
     await persistence?.close();
+  });
+
+  it("keeps command routes behind the manual research flag", async () => {
+    const response = await disabledApp.request("/v1/projects", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": `${suffix}:disabled-command`,
+      },
+      body: JSON.stringify({}),
+    });
+
+    expect(response.status).toBe(503);
+    expect(apiErrorSchema.parse(await response.json()).error).toMatchObject({
+      code: "service_unavailable",
+      message: "Manual research commands are disabled.",
+    });
   });
 
   it("executes a measured experiment with replay, rollback, and conflicts", async () => {

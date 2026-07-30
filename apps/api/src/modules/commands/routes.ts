@@ -11,6 +11,7 @@ export type CommandRoutesOptions = {
   projectCommands: ProjectCommandService | null;
   runCommands: RunCommandService | null;
   experimentCommands: ExperimentCommandService | null;
+  unavailableMessage: string;
   workspaceId: string;
 };
 
@@ -21,6 +22,7 @@ export function createCommandRoutes(options: CommandRoutesOptions) {
     "/",
     createProjectCommandRoutes({
       commands: options.projectCommands,
+      unavailableMessage: options.unavailableMessage,
       workspaceId: options.workspaceId,
     }),
   );
@@ -28,6 +30,7 @@ export function createCommandRoutes(options: CommandRoutesOptions) {
     "/",
     createRunCommandRoutes({
       commands: options.runCommands,
+      unavailableMessage: options.unavailableMessage,
       workspaceId: options.workspaceId,
     }),
   );
@@ -35,6 +38,7 @@ export function createCommandRoutes(options: CommandRoutesOptions) {
     "/",
     createExperimentCommandRoutes({
       commands: options.experimentCommands,
+      unavailableMessage: options.unavailableMessage,
       workspaceId: options.workspaceId,
     }),
   );

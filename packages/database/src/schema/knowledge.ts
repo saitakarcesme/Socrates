@@ -37,6 +37,12 @@ export const learnings = pgTable(
   },
   (table) => [
     index("learnings_project_status_idx").on(table.projectId, table.status),
+    index("learnings_project_created_id_idx").on(
+      table.projectId,
+      table.createdAt,
+      table.id,
+    ),
+    index("learnings_created_id_idx").on(table.createdAt, table.id),
     unique("learnings_project_id_unique").on(table.projectId, table.id),
     uniqueIndex("learnings_single_successor").on(table.supersededLearningId),
     foreignKey({

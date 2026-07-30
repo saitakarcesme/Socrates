@@ -40,9 +40,11 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/socrates \
   pnpm --filter @socrates/database db:seed-development
 ```
 
-Expose the same `DATABASE_URL` to the process, then start both applications:
+Expose the same `DATABASE_URL` and explicitly enable the manual research
+commands, then start both applications:
 
 ```bash
+export MANUAL_RESEARCH_ENABLED=true
 pnpm dev
 ```
 
@@ -63,7 +65,9 @@ DATABASE_URL=postgresql://... pnpm --filter @socrates/database db:seed-developme
 
 `db:push` is deliberately not exposed. With a migrated disposable database,
 setting `DATABASE_URL` also enables the persistence integration tests during
-`pnpm --filter @socrates/database test`.
+`pnpm --filter @socrates/database test`. The API checks the
+`socrates_schema_metadata` compatibility marker before opening its listener and
+does not apply migrations automatically.
 
 ## Verification
 
@@ -74,6 +78,7 @@ tests, and production builds:
 pnpm format:check
 pnpm typecheck
 pnpm lint
+pnpm audit:phase-1
 DATABASE_URL=postgresql://... pnpm test
 pnpm build
 ```

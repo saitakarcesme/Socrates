@@ -13,7 +13,7 @@ import { validationHook } from "../../http/errors";
 import {
   commandContext,
   type CommandRouteOptions,
-  persistenceUnavailable,
+  commandUnavailable,
   sendCommandResult,
 } from "./shared";
 
@@ -29,9 +29,10 @@ export function createProjectCommandRoutes(
   const commands = options.commands;
 
   if (!commands) {
-    app.post("/projects", persistenceUnavailable);
-    app.post("/projects/:projectId/metric-definitions", persistenceUnavailable);
-    app.post("/projects/:projectId/runs", persistenceUnavailable);
+    const unavailable = commandUnavailable(options.unavailableMessage);
+    app.post("/projects", unavailable);
+    app.post("/projects/:projectId/metric-definitions", unavailable);
+    app.post("/projects/:projectId/runs", unavailable);
     return app;
   }
 

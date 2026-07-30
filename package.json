@@ -7,6 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "audit:phase-1": "node scripts/audit-phase-1-boundaries.mjs",
     "build": "turbo build",
     "dev": "turbo dev",
     "lint": "turbo lint",

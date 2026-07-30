@@ -3,7 +3,12 @@ import { once } from "node:events";
 
 const child = spawn(process.execPath, ["dist/server.js"], {
   cwd: import.meta.dirname,
-  env: { ...process.env, PORT: "0" },
+  env: {
+    ...process.env,
+    DATABASE_URL: "",
+    MANUAL_RESEARCH_ENABLED: "false",
+    PORT: "0",
+  },
   stdio: ["ignore", "pipe", "inherit"],
 });
 

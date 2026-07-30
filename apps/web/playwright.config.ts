@@ -23,6 +23,10 @@ export default defineConfig({
     {
       command: "pnpm --filter @socrates/api dev",
       cwd: "../..",
+      env: {
+        DATABASE_URL: process.env["DATABASE_URL"] ?? "",
+        MANUAL_RESEARCH_ENABLED: "true",
+      },
       url: "http://127.0.0.1:3001/v1/health",
       reuseExistingServer: !process.env["CI"],
       timeout: 120_000,

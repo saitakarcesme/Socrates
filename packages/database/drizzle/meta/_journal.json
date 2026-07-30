@@ -22,6 +22,20 @@
       "when": 1785442413897,
       "tag": "0002_explicit_observation_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785450884300,
+      "tag": "0003_phase_1_acceptance_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785451373392,
+      "tag": "0004_remove_redundant_evidence_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -25,6 +25,7 @@ import { RunEventNotifier } from "./realtime/run-event-notifier";
 export const developmentWorkspaceId = "019c1170-8b7a-7a60-b7f8-f35c85d75000";
 
 export type AppOptions = {
+  manualResearchEnabled?: boolean;
   persistence?: Persistence;
   reads?: ReadRepository;
   workspaceId?: string;
@@ -40,16 +41,17 @@ export function createApp(options: AppOptions = {}) {
   const app = new Hono();
   const reads = options.persistence?.reads ?? options.reads ?? null;
   const runEventNotifier = options.persistence ? new RunEventNotifier() : null;
-  const commandExecutor = options.persistence
-    ? new IdempotentCommandExecutor(options.persistence, ({ response }) => {
-        const body = response.body;
-        if (!isJsonObject(body)) return;
-        const data = body["data"];
-        if (!data || !isJsonObject(data)) return;
-        const runId = data["runId"];
-        if (typeof runId === "string") runEventNotifier?.publish(runId);
-      })
-    : null;
+  const commandExecutor =
+    options.persistence && options.manualResearchEnabled
+      ? new IdempotentCommandExecutor(options.persistence, ({ response }) => {
+          const body = response.body;
+          if (!isJsonObject(body)) return;
+          const data = body["data"];
+          if (!data || !isJsonObject(data)) return;
+          const runId = data["runId"];
+          if (typeof runId === "string") runEventNotifier?.publish(runId);
+        })
+      : null;
   const projectCommands = commandExecutor
     ? new ProjectCommandService(commandExecutor)
     : null;
@@ -76,6 +78,7 @@ export function createApp(options: AppOptions = {}) {
       checks: {
         api: "ok",
         database: reads ? "ok" : "not_configured",
+        manualResearch: options.manualResearchEnabled ? "enabled" : "disabled",
         runnerGateway: "not_configured",
       },
     };
@@ -97,6 +100,9 @@ export function createApp(options: AppOptions = {}) {
       projectCommands,
       runCommands,
       experimentCommands,
+      unavailableMessage: !options.persistence
+        ? "The persistence dependency is not configured."
+        : "Manual research commands are disabled.",
       workspaceId: options.workspaceId ?? developmentWorkspaceId,
     }),
   );

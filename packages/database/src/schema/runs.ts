@@ -46,6 +46,11 @@ export const runs = pgTable(
     ),
     uniqueIndex("runs_project_id_unique").on(table.projectId, table.id),
     index("runs_project_status_idx").on(table.projectId, table.status),
+    index("runs_project_created_id_idx").on(
+      table.projectId,
+      table.createdAt,
+      table.id,
+    ),
     foreignKey({
       name: "runs_metric_definition_project_fk",
       columns: [table.projectId, table.metricDefinitionId],
@@ -125,6 +130,11 @@ export const experiments = pgTable(
     ),
     unique("experiments_run_id_unique").on(table.runId, table.id),
     index("experiments_run_status_idx").on(table.runId, table.status),
+    index("experiments_run_created_id_idx").on(
+      table.runId,
+      table.createdAt,
+      table.id,
+    ),
     foreignKey({
       name: "experiments_parent_same_run_fk",
       columns: [table.runId, table.parentExperimentId],

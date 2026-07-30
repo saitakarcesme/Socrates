@@ -13,7 +13,7 @@ import { validationHook } from "../../http/errors";
 import {
   commandContext,
   type CommandRouteOptions,
-  persistenceUnavailable,
+  commandUnavailable,
   sendCommandResult,
 } from "./shared";
 
@@ -33,11 +33,12 @@ export function createRunCommandRoutes(
   const commands = options.commands;
 
   if (!commands) {
-    app.post("/runs/:runId/baseline", persistenceUnavailable);
-    app.post("/runs/:runId/start", persistenceUnavailable);
-    app.post("/runs/:runId/experiments", persistenceUnavailable);
-    app.post("/runs/:runId/complete", persistenceUnavailable);
-    app.post("/runs/:runId/cancel", persistenceUnavailable);
+    const unavailable = commandUnavailable(options.unavailableMessage);
+    app.post("/runs/:runId/baseline", unavailable);
+    app.post("/runs/:runId/start", unavailable);
+    app.post("/runs/:runId/experiments", unavailable);
+    app.post("/runs/:runId/complete", unavailable);
+    app.post("/runs/:runId/cancel", unavailable);
     return app;
   }
 

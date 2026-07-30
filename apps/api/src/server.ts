@@ -1,14 +1,22 @@
 import { serve } from "@hono/node-server";
-import { createPersistence } from "@socrates/database";
+import {
+  assertDatabaseCompatibility,
+  createPersistence,
+} from "@socrates/database";
 
 import { createApp, developmentWorkspaceId } from "./app";
 
 const port = Number(process.env.PORT ?? 3001);
 const connectionString = process.env.DATABASE_URL;
+if (connectionString) {
+  await assertDatabaseCompatibility(connectionString);
+}
 const persistence = connectionString
   ? createPersistence({ connectionString })
   : null;
 const app = createApp({
+  manualResearchEnabled:
+    process.env.MANUAL_RESEARCH_ENABLED?.trim().toLowerCase() === "true",
   ...(persistence ? { persistence } : {}),
   workspaceId: process.env.WORKSPACE_ID ?? developmentWorkspaceId,
 });

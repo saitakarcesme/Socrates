@@ -5,6 +5,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 export type CommandRouteOptions<T> = {
   commands: T | null;
+  unavailableMessage: string;
   workspaceId: string;
 };
 
@@ -12,13 +13,9 @@ export function commandContext(workspaceId: string, idempotencyKey: string) {
   return { workspaceId, idempotencyKey };
 }
 
-export function persistenceUnavailable(context: Context) {
-  return apiError(
-    context,
-    503,
-    "service_unavailable",
-    "The persistence dependency is not configured.",
-  );
+export function commandUnavailable(message: string) {
+  return (context: Context) =>
+    apiError(context, 503, "service_unavailable", message);
 }
 
 export function sendCommandResult(context: Context, result: ExecutedCommand) {

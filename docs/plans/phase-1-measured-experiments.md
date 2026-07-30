@@ -1,6 +1,6 @@
 # Phase 1 Plan: Measured Manual Experiments
 
-Status: In progress
+Status: Completed
 Owner: Socrates core
 Prerequisite: Phase 0 product skeleton
 Architecture baseline: [Architecture.md](../../Architecture.md)

@@ -837,6 +837,38 @@ evaluation still runs, and requires both a final decision and reason together.
 After commitment, the evidence panel renders automated and final decisions
 separately whenever they differ.
 
+### ADR-028: Read indexes follow cursor scope and ordering
+
+Every cursor-paginated read orders by `(created_at DESC, id DESC)` inside its
+aggregate scope. PostgreSQL B-tree indexes therefore begin with the equality
+scope and continue with `(created_at, id)`: workspace for projects, project for
+runs and project learnings, and run for experiments. Hydration reads similarly
+index experiment observations and decisions by their foreign key followed by
+their evidence ordering columns. The global workspace learning projection also
+has a `(created_at, id)` index; Phase 1 is single-workspace, so denormalizing a
+workspace ID into immutable knowledge rows is deferred until multi-tenancy.
+
+Index migrations are forward-only and reviewed alongside `EXPLAIN` evidence.
+Tests assert the required index definitions by name so a later schema refactor
+cannot silently remove the pagination contract.
+
+### ADR-029: Manual research and schema compatibility are startup gates
+
+The deployed API exposes manual research commands only when
+`MANUAL_RESEARCH_ENABLED=true`. Reads and health remain available while the
+feature is disabled; command routes return the standard service-unavailable
+envelope. The server treats absent, malformed, and false values as disabled.
+Tests and local development opt in explicitly.
+
+The database owns a singleton `socrates_schema_metadata` row with an integer
+compatibility version. Every schema-breaking release advances the supported
+version and updates the row in a committed migration. When `DATABASE_URL` is
+configured, the API verifies that exact version before opening the listener. A
+missing table, missing row, or different version fails startup rather than
+serving against an unknown schema. This compatibility marker complements
+Drizzle's migration history: migration hashes track application, while the
+marker is the runtime contract.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

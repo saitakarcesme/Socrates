@@ -64,6 +64,11 @@ export const projects = pgTable(
       table.slug,
     ),
     index("projects_workspace_status_idx").on(table.workspaceId, table.status),
+    index("projects_workspace_created_id_idx").on(
+      table.workspaceId,
+      table.createdAt,
+      table.id,
+    ),
     nonNegativeCheck("projects_version_non_negative", table.version),
     check(
       "projects_source_complete",

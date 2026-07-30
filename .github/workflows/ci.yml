@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 15
     env:
       DATABASE_URL: postgresql://socrates:socrates@localhost:5432/socrates_ci
+      MANUAL_RESEARCH_ENABLED: "true"
 
     services:
       postgres:
@@ -65,6 +66,9 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      - name: Audit Phase 1 boundaries
+        run: pnpm audit:phase-1
 
       - name: Apply database migrations
         run: pnpm --filter @socrates/database db:migrate

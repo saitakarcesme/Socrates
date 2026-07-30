@@ -40,6 +40,7 @@ describe("control-plane API", () => {
       checks: {
         api: "ok",
         database: "not_configured",
+        manualResearch: "disabled",
         runnerGateway: "not_configured",
       },
     });
@@ -55,6 +56,7 @@ describe("control-plane API", () => {
       status: "ready",
       checks: {
         database: "ok",
+        manualResearch: "disabled",
       },
     });
   });

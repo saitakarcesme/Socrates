@@ -14,7 +14,7 @@ import { validationHook } from "../../http/errors";
 import {
   commandContext,
   type CommandRouteOptions,
-  persistenceUnavailable,
+  commandUnavailable,
   sendCommandResult,
 } from "./shared";
 
@@ -33,10 +33,11 @@ export function createExperimentCommandRoutes(
   const commands = options.commands;
 
   if (!commands) {
-    app.post("/experiments/:experimentId/start", persistenceUnavailable);
-    app.post("/experiments/:experimentId/observations", persistenceUnavailable);
-    app.post("/experiments/:experimentId/decision", persistenceUnavailable);
-    app.post("/experiments/:experimentId/learnings", persistenceUnavailable);
+    const unavailable = commandUnavailable(options.unavailableMessage);
+    app.post("/experiments/:experimentId/start", unavailable);
+    app.post("/experiments/:experimentId/observations", unavailable);
+    app.post("/experiments/:experimentId/decision", unavailable);
+    app.post("/experiments/:experimentId/learnings", unavailable);
     return app;
   }
 

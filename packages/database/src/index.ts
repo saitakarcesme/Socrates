@@ -1,4 +1,5 @@
 export * from "./command-model";
+export * from "./compatibility";
 export * from "./development-seed";
 export * from "./json";
 export * from "./persistence";
