@@ -23,6 +23,16 @@ const experimentTransitions: Readonly<
   inconclusive: [],
 };
 
+export class ExperimentTransitionError extends Error {
+  constructor(
+    readonly from: ExperimentStatus,
+    readonly to: ExperimentStatus,
+  ) {
+    super(`Experiment cannot transition from ${from} to ${to}.`);
+    this.name = "ExperimentTransitionError";
+  }
+}
+
 export function canTransitionExperiment(
   from: ExperimentStatus,
   to: ExperimentStatus,
@@ -35,6 +45,6 @@ export function assertExperimentTransition(
   to: ExperimentStatus,
 ): void {
   if (!canTransitionExperiment(from, to)) {
-    throw new Error(`Experiment cannot transition from ${from} to ${to}.`);
+    throw new ExperimentTransitionError(from, to);
   }
 }

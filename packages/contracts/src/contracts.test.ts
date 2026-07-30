@@ -4,6 +4,7 @@ import {
   canonicalDecimalSchema,
   createProjectCommandSchema,
   experimentTaskV1Schema,
+  recordObservationCommandSchema,
 } from "./index";
 
 describe("canonical decimal contract", () => {
@@ -45,6 +46,61 @@ describe("project command contract", () => {
       createProjectCommandSchema.safeParse({
         ...validCommand,
         unexpected: true,
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each(["minimumImprovement", "noiseTolerance"] as const)(
+    "rejects a negative %s",
+    (field) => {
+      expect(
+        createProjectCommandSchema.safeParse({
+          ...validCommand,
+          metric: { ...validCommand.metric, [field]: "-0.01" },
+        }).success,
+      ).toBe(false);
+    },
+  );
+});
+
+describe("observation command identity", () => {
+  const base = {
+    expectedVersion: 1,
+    value: { amount: "2.1", unit: "s" },
+    sampleCount: 3,
+  };
+  const id = "019c1170-8b7a-7a60-b7f8-f35c85d73744";
+
+  it("requires a metric definition for primary observations", () => {
+    expect(
+      recordObservationCommandSchema.safeParse({
+        ...base,
+        kind: "before",
+        metricDefinitionId: id,
+      }).success,
+    ).toBe(true);
+    expect(
+      recordObservationCommandSchema.safeParse({
+        ...base,
+        kind: "before",
+        constraintDefinitionId: id,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires a constraint definition for guardrail observations", () => {
+    expect(
+      recordObservationCommandSchema.safeParse({
+        ...base,
+        kind: "guardrail",
+        constraintDefinitionId: id,
+      }).success,
+    ).toBe(true);
+    expect(
+      recordObservationCommandSchema.safeParse({
+        ...base,
+        kind: "guardrail",
+        metricDefinitionId: id,
       }).success,
     ).toBe(false);
   });

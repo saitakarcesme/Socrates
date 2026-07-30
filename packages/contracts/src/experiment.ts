@@ -56,16 +56,27 @@ export type ExperimentLifecycleCommand = z.infer<
   typeof experimentLifecycleCommandSchema
 >;
 
-export const recordObservationCommandSchema = z
-  .object({
-    expectedVersion: expectedVersionSchema,
-    kind: z.enum(["before", "after", "guardrail"]),
-    metricDefinitionId: entityIdSchema,
-    value: metricValueSchema,
-    sampleCount: positiveSafeIntegerSchema,
-    notes: z.string().trim().max(4_000).optional(),
-  })
-  .strict();
+const observationCommandBase = z.object({
+  expectedVersion: expectedVersionSchema,
+  value: metricValueSchema,
+  sampleCount: positiveSafeIntegerSchema,
+  notes: z.string().trim().max(4_000).optional(),
+});
+
+export const recordObservationCommandSchema = z.discriminatedUnion("kind", [
+  observationCommandBase
+    .extend({
+      kind: z.enum(["before", "after"]),
+      metricDefinitionId: entityIdSchema,
+    })
+    .strict(),
+  observationCommandBase
+    .extend({
+      kind: z.literal("guardrail"),
+      constraintDefinitionId: entityIdSchema,
+    })
+    .strict(),
+]);
 export type RecordObservationCommand = z.infer<
   typeof recordObservationCommandSchema
 >;
@@ -85,6 +96,16 @@ export const decideExperimentCommandSchema = z
 export type DecideExperimentCommand = z.infer<
   typeof decideExperimentCommandSchema
 >;
+
+export const createLearningCommandSchema = z
+  .object({
+    expectedVersion: expectedVersionSchema,
+    statement: z.string().trim().min(1).max(4_000),
+    confidence: z.number().min(0).max(1),
+    evidenceRole: z.enum(["supports", "contradicts"]).default("supports"),
+  })
+  .strict();
+export type CreateLearningCommand = z.infer<typeof createLearningCommandSchema>;
 
 export const experimentResourceSchema = z
   .object({

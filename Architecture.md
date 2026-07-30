@@ -616,6 +616,51 @@ does not replace it. The build script may clean only `apps/api/dist`, emits a
 source map, and the production `start` command runs the generated JavaScript
 with plain Node.
 
+### ADR-017: Command transactions own one aggregate version
+
+Every command is an application use case, never a generic row update. The
+application claims the idempotency key, locks records in the stable
+`workspace -> project -> run -> experiment` order, verifies the supplied
+aggregate version, applies domain policy, persists facts, and stores the exact
+successful HTTP response in one PostgreSQL transaction. Policy-rejected
+commands roll back both the claim and any attempted writes. A successful
+command increments its target aggregate version exactly once even when a
+manual lifecycle command traverses internal states such as
+`draft -> queued -> preparing -> running`.
+
+Run-scoped commands append at least one durable `run_events` row in the same
+transaction. Workspace/project commands occur before a run exists, so their
+atomic audit boundary is the idempotency record until a broader control-plane
+event log is introduced. Child creation locks and versions its parent:
+creating a run versions the project; proposing an experiment versions the run.
+Evidence rows remain immutable. Observation and learning commands version the
+experiment that owns the new evidence.
+
+Project and metric-definition mutations return the generated constraint IDs
+alongside the current metric ID. Clients therefore never infer persistence
+identifiers and can address guardrail observations explicitly.
+
+Application errors are typed and mapped centrally. Missing workspace-scoped
+resources return `404`, stale versions return `409 version_conflict`, reused
+idempotency keys return `409 idempotency_conflict`, invalid lifecycle commands
+return `409 invalid_transition`, exhausted budgets return `409
+budget_exhausted`, and metric mismatches return `422 protocol_mismatch`.
+
+### ADR-018: Observation identity is explicit
+
+Baseline, before, and after observations identify the immutable primary metric
+definition. Guardrail observations instead identify one immutable constraint
+definition; they do not overload the primary metric ID. PostgreSQL enforces the
+exclusive identity shape and permits only one before value, one after value,
+and one value per guardrail constraint for an experiment in Phase 1.
+
+Decision evaluation loads the run's frozen metric definition, both primary
+observations, every hard constraint, and its matching observation. Missing
+required evidence makes the automated decision inconclusive. Present
+constraints are compared with exact decimal arithmetic and explicit units;
+failed hard constraints discard the experiment. Soft constraints remain
+recorded evidence but do not change the Phase 1 keep/discard result.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

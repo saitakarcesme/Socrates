@@ -5,6 +5,7 @@ import {
   entityIdSchema,
   expectedVersionSchema,
   metricDirectionSchema,
+  nonNegativeCanonicalDecimalSchema,
 } from "./common";
 import { pageInfoSchema } from "./pagination";
 
@@ -36,8 +37,8 @@ export const metricDefinitionInputSchema = z
     name: z.string().trim().min(1).max(120),
     unit: z.string().trim().min(1).max(32),
     direction: metricDirectionSchema,
-    minimumImprovement: canonicalDecimalSchema,
-    noiseTolerance: canonicalDecimalSchema,
+    minimumImprovement: nonNegativeCanonicalDecimalSchema,
+    noiseTolerance: nonNegativeCanonicalDecimalSchema,
     guardrails: z.array(guardrailDefinitionSchema).max(20).default([]),
   })
   .strict();

@@ -1,4 +1,4 @@
-import type { JsonValue } from "./ports";
+import type { JsonValue } from "./json";
 
 export type CreatedCursor = {
   createdAt: Date;

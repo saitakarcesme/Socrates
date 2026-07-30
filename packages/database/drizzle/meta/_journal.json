@@ -15,6 +15,13 @@
       "when": 1785440853912,
       "tag": "0001_unique_run_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785442413897,
+      "tag": "0002_explicit_observation_identity",
+      "breakpoints": true
     }
   ]
 }

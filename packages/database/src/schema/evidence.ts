@@ -15,7 +15,7 @@ import {
 
 import { decisionReason, experimentDecision, observationKind } from "./enums";
 import { canonicalDecimalCheck, positiveCheck } from "./helpers";
-import { metricDefinitions } from "./projects";
+import { constraintDefinitions, metricDefinitions } from "./projects";
 import { experiments, runs } from "./runs";
 
 export const observations = pgTable(
@@ -27,9 +27,10 @@ export const observations = pgTable(
       .references(() => runs.id),
     experimentId: uuid("experiment_id"),
     kind: observationKind("kind").notNull(),
-    metricDefinitionId: uuid("metric_definition_id")
-      .notNull()
-      .references(() => metricDefinitions.id),
+    metricDefinitionId: uuid("metric_definition_id").references(
+      () => metricDefinitions.id,
+    ),
+    constraintDefinitionId: uuid("constraint_definition_id"),
     amount: text("amount").notNull(),
     unit: text("unit").notNull(),
     sampleCount: integer("sample_count").notNull(),
@@ -45,16 +46,31 @@ export const observations = pgTable(
     uniqueIndex("observations_run_baseline_unique")
       .on(table.runId)
       .where(sql`${table.kind} = 'baseline'`),
+    uniqueIndex("observations_experiment_primary_kind_unique")
+      .on(table.experimentId, table.kind)
+      .where(sql`${table.kind} IN ('before', 'after')`),
+    uniqueIndex("observations_experiment_constraint_unique")
+      .on(table.experimentId, table.constraintDefinitionId)
+      .where(sql`${table.kind} = 'guardrail'`),
     foreignKey({
       name: "observations_experiment_same_run_fk",
       columns: [table.runId, table.experimentId],
       foreignColumns: [experiments.runId, experiments.id],
+    }),
+    foreignKey({
+      name: "observations_constraint_definition_fk",
+      columns: [table.constraintDefinitionId],
+      foreignColumns: [constraintDefinitions.id],
     }),
     canonicalDecimalCheck("observations_amount_canonical", table.amount),
     positiveCheck("observations_sample_count_positive", table.sampleCount),
     check(
       "observations_baseline_scope",
       sql`(${table.kind} = 'baseline' AND ${table.experimentId} IS NULL) OR (${table.kind} <> 'baseline' AND ${table.experimentId} IS NOT NULL)`,
+    ),
+    check(
+      "observations_measurement_identity",
+      sql`(${table.kind} <> 'guardrail' AND ${table.metricDefinitionId} IS NOT NULL AND ${table.constraintDefinitionId} IS NULL) OR (${table.kind} = 'guardrail' AND ${table.metricDefinitionId} IS NULL AND ${table.constraintDefinitionId} IS NOT NULL)`,
     ),
   ],
 );

@@ -1,0 +1,6 @@
+ALTER TABLE "observations" ALTER COLUMN "metric_definition_id" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "observations" ADD COLUMN "constraint_definition_id" uuid;--> statement-breakpoint
+ALTER TABLE "observations" ADD CONSTRAINT "observations_constraint_definition_fk" FOREIGN KEY ("constraint_definition_id") REFERENCES "public"."constraint_definitions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "observations_experiment_primary_kind_unique" ON "observations" USING btree ("experiment_id","kind") WHERE "observations"."kind" IN ('before', 'after');--> statement-breakpoint
+CREATE UNIQUE INDEX "observations_experiment_constraint_unique" ON "observations" USING btree ("experiment_id","constraint_definition_id") WHERE "observations"."kind" = 'guardrail';--> statement-breakpoint
+ALTER TABLE "observations" ADD CONSTRAINT "observations_measurement_identity" CHECK (("observations"."kind" <> 'guardrail' AND "observations"."metric_definition_id" IS NOT NULL AND "observations"."constraint_definition_id" IS NULL) OR ("observations"."kind" = 'guardrail' AND "observations"."metric_definition_id" IS NULL AND "observations"."constraint_definition_id" IS NOT NULL));

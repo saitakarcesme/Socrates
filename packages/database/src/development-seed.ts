@@ -19,6 +19,23 @@ export const developmentSeedIds = {
   evalMetric: "019c1170-8b7a-7a60-b7f8-f35c85d75012",
 } as const;
 
+export async function seedEmptyDevelopmentWorkspace(
+  connectionString: string,
+  input: { id: string; name: string },
+) {
+  const client = postgres(connectionString, { max: 1 });
+  const database = drizzle(client, { schema });
+
+  try {
+    await database
+      .insert(schema.workspaces)
+      .values(input)
+      .onConflictDoNothing();
+  } finally {
+    await client.end();
+  }
+}
+
 export async function seedDevelopmentData(connectionString: string) {
   const client = postgres(connectionString, { max: 1 });
   const database = drizzle(client, { schema });

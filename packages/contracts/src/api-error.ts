@@ -6,6 +6,7 @@ export const apiErrorCodeSchema = z.enum([
   "invalid_transition",
   "version_conflict",
   "idempotency_conflict",
+  "resource_conflict",
   "budget_exhausted",
   "protocol_mismatch",
   "service_unavailable",

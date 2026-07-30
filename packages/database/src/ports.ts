@@ -1,6 +1,8 @@
-export type JsonPrimitive = boolean | number | string | null;
-export type JsonValue =
-  JsonPrimitive | readonly JsonValue[] | { readonly [key: string]: JsonValue };
+import type { CommandRepository } from "./command-model";
+import type { JsonValue } from "./json";
+import type { ReadRepository } from "./read-model";
+
+export type { JsonPrimitive, JsonValue } from "./json";
 
 export type IdempotencyClaimInput = {
   workspaceId: string;
@@ -51,6 +53,7 @@ export interface RunEventRepository {
 }
 
 export type TransactionRepositories = {
+  commands: CommandRepository;
   idempotency: IdempotencyRepository;
   runEvents: RunEventRepository;
 };
@@ -62,4 +65,3 @@ export interface Persistence {
   ): Promise<T>;
   close(): Promise<void>;
 }
-import type { ReadRepository } from "./read-model";

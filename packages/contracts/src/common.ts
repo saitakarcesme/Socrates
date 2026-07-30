@@ -9,6 +9,11 @@ export const canonicalDecimalSchema = z
   .regex(canonicalDecimalPattern, "Expected a canonical decimal string.")
   .refine((value) => value !== "-0", "Negative zero is not canonical.");
 
+export const nonNegativeCanonicalDecimalSchema = canonicalDecimalSchema.refine(
+  (value) => !value.startsWith("-"),
+  "Expected a non-negative canonical decimal string.",
+);
+
 export const metricDirectionSchema = z.enum(["maximize", "minimize"]);
 export type MetricDirection = z.infer<typeof metricDirectionSchema>;
 

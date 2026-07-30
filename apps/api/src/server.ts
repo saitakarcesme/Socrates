@@ -9,7 +9,7 @@ const persistence = connectionString
   ? createPersistence({ connectionString })
   : null;
 const app = createApp({
-  reads: persistence?.reads,
+  ...(persistence ? { persistence } : {}),
   workspaceId: process.env.WORKSPACE_ID ?? developmentWorkspaceId,
 });
 

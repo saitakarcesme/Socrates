@@ -69,6 +69,22 @@ describe("control-plane API", () => {
     });
   });
 
+  it("returns service unavailable for commands without persistence", async () => {
+    const response = await createApp().request("/v1/projects", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "project-create-test",
+      },
+      body: JSON.stringify({}),
+    });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "service_unavailable" },
+    });
+  });
+
   it("validates resource identifiers before querying", async () => {
     const response = await createApp({ reads: unreachableReads }).request(
       "/v1/projects/not-a-uuid",

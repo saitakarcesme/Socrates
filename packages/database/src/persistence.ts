@@ -1,7 +1,9 @@
 import { and, eq, isNull, max } from "drizzle-orm";
-import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
+import { PostgresCommandRepository } from "./command-repository";
+import type { DatabaseTransaction } from "./database-types";
 import { PostgresReadRepository } from "./read-repository";
 import type {
   AppendRunEventInput,
@@ -17,11 +19,8 @@ import type {
 } from "./ports";
 import * as schema from "./schema/index";
 
-type Database = PostgresJsDatabase<typeof schema>;
-type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
-
 class PostgresIdempotencyRepository implements IdempotencyRepository {
-  constructor(private readonly transaction: Transaction) {}
+  constructor(private readonly transaction: DatabaseTransaction) {}
 
   async claim(input: IdempotencyClaimInput): Promise<IdempotencyClaim> {
     const inserted = await this.transaction
@@ -103,7 +102,7 @@ class PostgresIdempotencyRepository implements IdempotencyRepository {
 }
 
 class PostgresRunEventRepository implements RunEventRepository {
-  constructor(private readonly transaction: Transaction) {}
+  constructor(private readonly transaction: DatabaseTransaction) {}
 
   async append(input: AppendRunEventInput): Promise<RunEventRecord> {
     const [run] = await this.transaction
@@ -145,8 +144,11 @@ class PostgresRunEventRepository implements RunEventRepository {
   }
 }
 
-function createRepositories(transaction: Transaction): TransactionRepositories {
+function createRepositories(
+  transaction: DatabaseTransaction,
+): TransactionRepositories {
   return {
+    commands: new PostgresCommandRepository(transaction),
     idempotency: new PostgresIdempotencyRepository(transaction),
     runEvents: new PostgresRunEventRepository(transaction),
   };

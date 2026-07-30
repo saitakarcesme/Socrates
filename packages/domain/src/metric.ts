@@ -14,10 +14,13 @@ export type MetricProtocol = {
   noiseTolerance: string;
 };
 
+export type ConstraintOperator =
+  "less_than" | "less_than_or_equal" | "greater_than" | "greater_than_or_equal";
+
 export type DecisionInput = {
   protocol: MetricProtocol;
-  before: MetricValue;
-  after: MetricValue;
+  before: MetricValue | null;
+  after: MetricValue | null;
   guardrailsPassed: boolean;
   measurementValid: boolean;
 };
@@ -58,18 +61,54 @@ function assertProtocolValue(
   }
 }
 
+export function assertMetricUnit(
+  expectedUnit: string,
+  value: MetricValue,
+): void {
+  if (value.unit !== expectedUnit) {
+    throw new MetricProtocolError(
+      "unit_mismatch",
+      `Expected ${expectedUnit} for every metric value.`,
+    );
+  }
+}
+
+export function evaluateConstraint(input: {
+  operator: ConstraintOperator;
+  threshold: MetricValue;
+  observed: MetricValue;
+}): boolean {
+  assertMetricUnit(input.threshold.unit, input.observed);
+
+  const observed = DecimalAmount.parse(input.observed.amount);
+  const threshold = DecimalAmount.parse(input.threshold.amount);
+  const comparison = observed.compare(threshold);
+
+  switch (input.operator) {
+    case "less_than":
+      return comparison < 0;
+    case "less_than_or_equal":
+      return comparison <= 0;
+    case "greater_than":
+      return comparison > 0;
+    case "greater_than_or_equal":
+      return comparison >= 0;
+  }
+}
+
 export function decideExperiment(input: DecisionInput): DecisionResult {
   const { protocol } = input;
 
-  if (
-    input.before.unit !== protocol.unit ||
-    input.after.unit !== protocol.unit
-  ) {
-    throw new MetricProtocolError(
-      "unit_mismatch",
-      `Expected ${protocol.unit} for every metric value.`,
-    );
+  if (!input.before || !input.after) {
+    return {
+      decision: "inconclusive",
+      improvement: "0",
+      reason: "invalid_measurement",
+    };
   }
+
+  assertMetricUnit(protocol.unit, input.before);
+  assertMetricUnit(protocol.unit, input.after);
 
   const before = DecimalAmount.parse(input.before.amount);
   const after = DecimalAmount.parse(input.after.amount);

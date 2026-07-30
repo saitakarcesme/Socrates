@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   decideExperiment,
+  evaluateConstraint,
   MetricProtocolError,
   type DecisionInput,
 } from "./metric";
@@ -89,6 +90,14 @@ describe("decideExperiment", () => {
     });
   });
 
+  it("marks missing primary evidence inconclusive", () => {
+    expect(decideExperiment(input({ before: null }))).toEqual({
+      decision: "inconclusive",
+      improvement: "0",
+      reason: "invalid_measurement",
+    });
+  });
+
   it("rejects units that do not match the protocol", () => {
     expect(() =>
       decideExperiment(input({ after: { amount: "2.31", unit: "ms" } })),
@@ -113,5 +122,37 @@ describe("decideExperiment", () => {
       expect(error).toBeInstanceOf(MetricProtocolError);
       expect((error as MetricProtocolError).code).toBe(expectedCode);
     }
+  });
+});
+
+describe("evaluateConstraint", () => {
+  it.each([
+    ["less_than", "1.9", "2", true],
+    ["less_than", "2", "2", false],
+    ["less_than_or_equal", "2", "2", true],
+    ["greater_than", "2.1", "2", true],
+    ["greater_than", "2", "2", false],
+    ["greater_than_or_equal", "2", "2", true],
+  ] as const)(
+    "evaluates %s exactly for %s against %s",
+    (operator, observed, threshold, expected) => {
+      expect(
+        evaluateConstraint({
+          operator,
+          observed: { amount: observed, unit: "s" },
+          threshold: { amount: threshold, unit: "s" },
+        }),
+      ).toBe(expected);
+    },
+  );
+
+  it("rejects unit mismatches", () => {
+    expect(() =>
+      evaluateConstraint({
+        operator: "less_than",
+        observed: { amount: "2", unit: "ms" },
+        threshold: { amount: "2", unit: "s" },
+      }),
+    ).toThrow(MetricProtocolError);
   });
 });
