@@ -11,6 +11,30 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   size?: "sm" | "md";
 };
 
+export function buttonClassName({
+  className,
+  variant = "secondary",
+  size = "md",
+}: {
+  className?: string;
+  variant?: ButtonProps["variant"];
+  size?: ButtonProps["size"];
+} = {}) {
+  return cn(
+    "inline-flex items-center justify-center gap-2 rounded-[4px] border font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-40",
+    size === "sm" ? "h-7 px-2.5 text-xs" : "h-8 px-3 text-[13px]",
+    variant === "primary" &&
+      "border-white bg-white text-black hover:bg-neutral-200",
+    variant === "secondary" &&
+      "border-[var(--border-strong)] bg-[var(--surface-raised)] text-[var(--text)] hover:bg-[var(--surface-hover)]",
+    variant === "ghost" &&
+      "border-transparent bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]",
+    variant === "danger" &&
+      "border-red-950 bg-red-950/30 text-red-400 hover:bg-red-950/60",
+    className,
+  );
+}
+
 export function Button({
   className,
   variant = "secondary",
@@ -19,19 +43,7 @@ export function Button({
 }: ButtonProps) {
   return (
     <button
-      className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-[4px] border font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-40",
-        size === "sm" ? "h-7 px-2.5 text-xs" : "h-8 px-3 text-[13px]",
-        variant === "primary" &&
-          "border-white bg-white text-black hover:bg-neutral-200",
-        variant === "secondary" &&
-          "border-[var(--border-strong)] bg-[var(--surface-raised)] text-[var(--text)] hover:bg-[var(--surface-hover)]",
-        variant === "ghost" &&
-          "border-transparent bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--text)]",
-        variant === "danger" &&
-          "border-red-950 bg-red-950/30 text-red-400 hover:bg-red-950/60",
-        className,
-      )}
+      className={buttonClassName({ className, variant, size })}
       {...props}
     />
   );

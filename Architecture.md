@@ -749,6 +749,35 @@ projects to enforce workspace isolation before pagination. Project names are
 resolved from the already required project summary projection in the web
 surface; the learning record remains normalized and carries only `projectId`.
 
+### ADR-024: Manual commands are progressive, refresh-reconciled workflows
+
+Phase 1 command UI follows the aggregate lifecycle instead of presenting one
+large research wizard. Project creation has a dedicated route. Run creation,
+baseline entry, run start, experiment proposal, observation entry, decision,
+and learning entry are exposed only when the current resource state permits
+the corresponding command. Disabled controls explain which prerequisite is
+missing.
+
+Client Components own transient form state and call the same-origin typed
+control-plane client. Server Components remain the snapshot authority. After a
+successful command the client navigates to a newly created resource or calls
+`router.refresh()` for an existing route. No optimistic domain facts are
+invented locally.
+
+Each semantic submission owns a cryptographically random idempotency key that
+is retained while the same payload is retried after an ambiguous transport
+failure. Editing the payload allocates a new key. Validation and domain errors
+preserve input. A `version_conflict` preserves input, identifies the stale
+snapshot, and refreshes server data before another submission.
+
+The run timeline enhances its server snapshot with the durable SSE feed. The
+client stores only the highest contiguous event sequence and connection state;
+event payloads are invalidation signals, not a second experiment projection.
+Receiving a new durable event schedules one coalesced `router.refresh()`.
+EventSource reconnect supplies the last sequence through the query cursor, and
+the server remains responsible for replay. Zustand is not used for durable
+research facts.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

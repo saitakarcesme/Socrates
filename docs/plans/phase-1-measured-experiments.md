@@ -1,8 +1,8 @@
 # Phase 1 Plan: Measured Manual Experiments
 
-Status: Proposed  
-Owner: Socrates core  
-Prerequisite: Phase 0 product skeleton  
+Status: In progress
+Owner: Socrates core
+Prerequisite: Phase 0 product skeleton
 Architecture baseline: [Architecture.md](../../Architecture.md)
 
 ## 1. Outcome
@@ -310,6 +310,7 @@ Prefix: `/v1`.
 - `GET /runs/:runId/experiments`
 - `GET /experiments/:experimentId`
 - `GET /projects/:projectId/learnings`
+- `GET /learnings`
 - `GET /runs/:runId/events?after=<cursor>`
 
 List endpoints use cursor pagination with stable `(created_at, id)` ordering.
@@ -410,12 +411,9 @@ invalid field, and expose pending state without decorative animation.
 
 ### Fixture removal
 
-Fixture selectors stay until each consuming route has an API-backed equivalent.
-Removal occurs in one final Phase 1 commit after:
-
-- every fixture route has an integration test
-- empty, loading, error, and populated states exist
-- current screenshots can be reproduced from deterministic database seed data
+Completed. All product routes use validated control-plane projections. The
+global learning surface uses a workspace projection rather than a
+project-by-project request fan-out.
 
 ## 10. Delivery sequence
 
@@ -468,17 +466,26 @@ payloads fail.
 Exit gate: disconnect/reconnect test receives every event exactly once at the
 client projection.
 
-### Commit 6 — web migration
+### Commit 6 — web read migration
 
-- typed API client
+- typed API client and runtime validation
+- Server Component snapshots
+- evidence-enriched timeline projection
+- workspace learning projection
+- fixture removal
+
+Exit gate: all product screens render committed control-plane facts and a
+production build does not require a live API.
+
+### Commit 7 — manual workflow
+
 - creation and manual experiment forms
 - SSE timeline reconciliation
-- fixture removal
 
 Exit gate: all product screens operate against PostgreSQL with no fake enabled
 controls.
 
-### Commit 7 — hardening
+### Commit 8 — hardening
 
 - end-to-end journey tests
 - accessibility and responsive browser verification
@@ -560,22 +567,22 @@ Phase 1 is complete only when all are true:
 - Phase 1 deploys behind `MANUAL_RESEARCH_ENABLED`.
 - Database migration runs as a separate release step before application rollout.
 - API starts only when schema version is compatible.
-- fixture UI remains the fallback until API read parity is proven.
+- control-plane error boundaries remain the fallback when the API is unavailable
 - a failed command is safe to retry with the same idempotency key
 - SSE clients always recover from the durable cursor
 - rollback never attempts down migrations automatically
 
 ## 14. Risks
 
-| Risk                                      | Mitigation                                                   |
-| ----------------------------------------- | ------------------------------------------------------------ |
-| Metric decimals lose precision            | Canonical decimal strings and explicit decimal arithmetic    |
-| Two tabs race lifecycle commands          | Aggregate versions plus row locks                            |
-| SSE misses an in-memory notification      | Durable replay plus periodic reconciliation                  |
-| Fixtures and API diverge during migration | Route-by-route parity tests and final atomic fixture removal |
-| Manual entry creates incomparable results | Immutable metric protocol version and unit validation        |
-| Generic API handlers absorb domain rules  | Use-case tests and dependency-boundary linting               |
-| Phase 1 drifts into autonomy              | Dependency audit forbids runner and provider packages        |
+| Risk                                      | Mitigation                                                |
+| ----------------------------------------- | --------------------------------------------------------- |
+| Metric decimals lose precision            | Canonical decimal strings and explicit decimal arithmetic |
+| Two tabs race lifecycle commands          | Aggregate versions plus row locks                         |
+| SSE misses an in-memory notification      | Durable replay plus periodic reconciliation               |
+| Web snapshots become stale after commands | Durable SSE invalidation plus explicit route refresh      |
+| Manual entry creates incomparable results | Immutable metric protocol version and unit validation     |
+| Generic API handlers absorb domain rules  | Use-case tests and dependency-boundary linting            |
+| Phase 1 drifts into autonomy              | Dependency audit forbids runner and provider packages     |
 
 ## 15. Default decisions requiring no user block
 

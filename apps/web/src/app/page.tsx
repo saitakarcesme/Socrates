@@ -2,7 +2,12 @@ import { ArrowRight, Plus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { Button, Metric, Panel, StatusBadge } from "@socrates/design-system";
+import {
+  Metric,
+  Panel,
+  StatusBadge,
+  buttonClassName,
+} from "@socrates/design-system";
 
 import { PageHeader } from "@/components/page-header";
 import { getProjects } from "@/lib/api/queries";
@@ -35,14 +40,13 @@ export default async function DashboardPage() {
     <>
       <PageHeader
         actions={
-          <Button
-            disabled
-            title="Project creation form is being connected"
-            variant="primary"
+          <Link
+            className={buttonClassName({ variant: "primary" })}
+            href="/projects/new"
           >
             <Plus className="size-3.5" />
             New project
-          </Button>
+          </Link>
         }
         description="Monitor active optimization work and the knowledge it produces."
         title="Dashboard"
