@@ -1013,6 +1013,38 @@ outbox payload identifies the task; the immutable task body remains in
 `FOR UPDATE SKIP LOCKED`, but the Phase 2.1 persistence slice does not introduce
 a broker, background loop, or executor.
 
+### ADR-036: Cancellation and lease reconciliation are serialized task commands
+
+Each cancellation command carries a caller-generated request ID and workspace
+scope. The request is inserted into an append-only
+`runner_task_cancellations` record with one accepted request per task. In the
+same transaction, a transaction-scoped advisory lock serializes the request ID
+before the scheduler locks the task. Hash collisions can only add
+serialization; they cannot merge records because the UUID remains the primary
+key. The scheduler then either changes a queued task
+directly to `cancelled` or changes a leased/running task to
+`cancellation_requested`. Replaying the same request ID returns the committed
+result; a different request after acceptance does not create a second record.
+The task timestamp is a query projection, not the audit source. Every accepted
+transition also appends an outbox message.
+
+Runner terminal writes lock the task and attempt together and accept only the
+current runner, attempt, fence, active attempt state, and unexpired database
+lease. The task state must permit the requested terminal result. Both records
+then become terminal in one transaction; a typed stale or invalid-transition
+result performs no write. Failure classification is required only for failed
+attempts. Terminal task and attempt rows are never rewritten.
+
+Lease reconciliation selects expired active attempts with
+`FOR UPDATE SKIP LOCKED` in bounded batches. It marks each selected attempt
+`expired` before changing the task projection. A cancellation-requested task
+becomes `cancelled`; otherwise an explicitly retry-safe task returns to
+`queued`, while a non-retry-safe task becomes `failed`. Requeue preserves the
+current fence, so the next claim advances it and stale writers remain fenced
+out. Each outcome is recorded in the transactional outbox. The reconciler is a
+callable persistence command in this slice; no timer, worker, or executor is
+introduced.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

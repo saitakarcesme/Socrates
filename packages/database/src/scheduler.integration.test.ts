@@ -19,6 +19,7 @@ import {
   outboxMessages,
   projects,
   runnerTaskAttempts,
+  runnerTaskCancellations,
   runnerTasks,
   runs,
   workspaces,
@@ -43,7 +44,7 @@ integration("PostgreSQL scheduler persistence", () => {
   const projectId = randomUUID();
   const metricDefinitionId = randomUUID();
   const runId = randomUUID();
-  const experimentIds = Array.from({ length: 8 }, () => randomUUID());
+  const experimentIds = Array.from({ length: 16 }, () => randomUUID());
   const runnerId = randomUUID();
   const secondRunnerId = randomUUID();
   const foreignRunnerId = randomUUID();
@@ -68,7 +69,11 @@ integration("PostgreSQL scheduler persistence", () => {
     maximumConcurrentTasks,
   });
 
-  const task = (id: string, experimentId: string): RunnerTaskWrite => ({
+  const task = (
+    id: string,
+    experimentId: string,
+    retrySafe = true,
+  ): RunnerTaskWrite => ({
     id,
     workspaceId,
     projectId,
@@ -99,7 +104,7 @@ integration("PostgreSQL scheduler persistence", () => {
             timeoutMs: 30_000,
           },
         ],
-        retrySafe: true,
+        retrySafe,
       },
       measurement: {
         metricDefinitionId,
@@ -394,6 +399,9 @@ integration("PostgreSQL scheduler persistence", () => {
         }),
       ),
     ).resolves.toEqual({ state: "stale" });
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.reconcileExpiredTasks({ limit: 100 }),
+    );
 
     await database
       .update(runnerTaskAttempts)
@@ -512,5 +520,330 @@ integration("PostgreSQL scheduler persistence", () => {
         }),
       ),
     ).resolves.toEqual({ state: "runner_at_capacity" });
+  });
+
+  it("persists a queued cancellation once and replays its acceptance", async () => {
+    const taskId = randomUUID();
+    const requestId = randomUUID();
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.createTask(task(taskId, experimentIds[8]!)),
+    );
+
+    const accepted = await persistence.transaction(({ scheduler }) =>
+      scheduler.requestCancellation({ requestId, workspaceId, taskId }),
+    );
+    expect(accepted).toMatchObject({
+      state: "accepted",
+      cancellation: { requestId, taskId, taskStatus: "cancelled" },
+    });
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.requestCancellation({
+          requestId: randomUUID(),
+          workspaceId,
+          taskId,
+        }),
+      ),
+    ).resolves.toEqual(accepted);
+
+    const [storedTask] = await database
+      .select({
+        status: runnerTasks.status,
+        cancellationRequestedAt: runnerTasks.cancellationRequestedAt,
+        terminalAt: runnerTasks.terminalAt,
+      })
+      .from(runnerTasks)
+      .where(eq(runnerTasks.id, taskId));
+    const cancellations = await database
+      .select()
+      .from(runnerTaskCancellations)
+      .where(eq(runnerTaskCancellations.taskId, taskId));
+    const messages = await database
+      .select({ topic: outboxMessages.topic })
+      .from(outboxMessages)
+      .where(eq(outboxMessages.taskId, taskId));
+
+    expect(storedTask).toMatchObject({ status: "cancelled" });
+    expect(storedTask?.cancellationRequestedAt).toBeInstanceOf(Date);
+    expect(storedTask?.terminalAt).toBeInstanceOf(Date);
+    expect(cancellations).toHaveLength(1);
+    expect(messages.map(({ topic }) => topic)).toEqual([
+      "runner.task.queued",
+      "runner.task.cancelled",
+    ]);
+  });
+
+  it("allows only one fenced terminal result after cancellation", async () => {
+    const taskId = randomUUID();
+    const attemptId = randomUUID();
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.createTask(task(taskId, experimentIds[9]!)),
+    );
+    const claim = await persistence.transaction(({ scheduler }) =>
+      scheduler.claimTask({
+        runnerId,
+        taskId,
+        attemptId,
+        leaseDurationMs: 30_000,
+      }),
+    );
+    expect(claim.state).toBe("claimed");
+    const fence = (
+      claim as Extract<ClaimRunnerTaskResult, { state: "claimed" }>
+    ).claim.fence;
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.requestCancellation({
+        requestId: randomUUID(),
+        workspaceId,
+        taskId,
+      }),
+    );
+
+    const completions = await Promise.all([
+      persistence.transaction(({ scheduler }) =>
+        scheduler.completeTask({
+          runnerId,
+          taskId,
+          attemptId,
+          fence,
+          outcome: { status: "cancelled" },
+        }),
+      ),
+      persistence.transaction(({ scheduler }) =>
+        scheduler.completeTask({
+          runnerId,
+          taskId,
+          attemptId,
+          fence,
+          outcome: { status: "failed", failureClassification: "runner_error" },
+        }),
+      ),
+    ]);
+
+    expect(
+      completions.filter((completion) => completion.state === "completed"),
+    ).toHaveLength(1);
+    expect(
+      completions.filter((completion) => completion.state === "stale"),
+    ).toHaveLength(1);
+
+    const [storedTask] = await database
+      .select({ status: runnerTasks.status })
+      .from(runnerTasks)
+      .where(eq(runnerTasks.id, taskId));
+    const [storedAttempt] = await database
+      .select({
+        status: runnerTaskAttempts.status,
+        completedAt: runnerTaskAttempts.completedAt,
+      })
+      .from(runnerTaskAttempts)
+      .where(eq(runnerTaskAttempts.id, attemptId));
+    expect(["cancelled", "failed"]).toContain(storedTask?.status);
+    expect(storedAttempt?.status).toBe(storedTask?.status);
+    expect(storedAttempt?.completedAt).toBeInstanceOf(Date);
+    const messages = await database
+      .select({ topic: outboxMessages.topic })
+      .from(outboxMessages)
+      .where(eq(outboxMessages.taskId, taskId));
+    expect(messages.map(({ topic }) => topic)).toContain(
+      `runner.task.${storedTask?.status}`,
+    );
+  });
+
+  it("rejects terminal writes after the database lease expires", async () => {
+    const taskId = randomUUID();
+    const attemptId = randomUUID();
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.createTask(task(taskId, experimentIds[10]!)),
+    );
+    const claim = await persistence.transaction(({ scheduler }) =>
+      scheduler.claimTask({
+        runnerId,
+        taskId,
+        attemptId,
+        leaseDurationMs: 30_000,
+      }),
+    );
+    const fence = (
+      claim as Extract<ClaimRunnerTaskResult, { state: "claimed" }>
+    ).claim.fence;
+    await database
+      .update(runnerTaskAttempts)
+      .set({ leaseExpiresAt: new Date(0) })
+      .where(eq(runnerTaskAttempts.id, attemptId));
+
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.completeTask({
+          runnerId,
+          taskId,
+          attemptId,
+          fence,
+          outcome: { status: "failed", failureClassification: "timeout" },
+        }),
+      ),
+    ).resolves.toEqual({ state: "stale" });
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.reconcileExpiredTasks({ limit: 100 }),
+    );
+  });
+
+  it("expires and requeues only retry-safe tasks with a new claim fence", async () => {
+    const taskId = randomUUID();
+    const attemptId = randomUUID();
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.createTask(task(taskId, experimentIds[11]!)),
+    );
+    const firstClaim = await persistence.transaction(({ scheduler }) =>
+      scheduler.claimTask({
+        runnerId,
+        taskId,
+        attemptId,
+        leaseDurationMs: 30_000,
+      }),
+    );
+    const firstFence = (
+      firstClaim as Extract<ClaimRunnerTaskResult, { state: "claimed" }>
+    ).claim.fence;
+    await database
+      .update(runnerTaskAttempts)
+      .set({ leaseExpiresAt: new Date(0) })
+      .where(eq(runnerTaskAttempts.id, attemptId));
+
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.reconcileExpiredTasks({ limit: 10 }),
+      ),
+    ).resolves.toEqual({
+      reconciled: [{ taskId, attemptId, outcome: "requeued" }],
+    });
+    const secondClaim = await persistence.transaction(({ scheduler }) =>
+      scheduler.claimTask({
+        runnerId,
+        taskId,
+        attemptId: randomUUID(),
+        leaseDurationMs: 30_000,
+      }),
+    );
+
+    expect(secondClaim).toMatchObject({
+      state: "claimed",
+      claim: { fence: firstFence + 1 },
+    });
+    const [expiredAttempt] = await database
+      .select({
+        status: runnerTaskAttempts.status,
+        completedAt: runnerTaskAttempts.completedAt,
+      })
+      .from(runnerTaskAttempts)
+      .where(eq(runnerTaskAttempts.id, attemptId));
+    expect(expiredAttempt?.status).toBe("expired");
+    expect(expiredAttempt?.completedAt).toBeInstanceOf(Date);
+    const messages = await database
+      .select({ topic: outboxMessages.topic })
+      .from(outboxMessages)
+      .where(eq(outboxMessages.taskId, taskId));
+    expect(messages.map(({ topic }) => topic)).toContain(
+      "runner.task.requeued",
+    );
+  });
+
+  it("fails an expired task that is not retry-safe", async () => {
+    const taskId = randomUUID();
+    const attemptId = randomUUID();
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.createTask(task(taskId, experimentIds[12]!, false)),
+    );
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.claimTask({
+        runnerId,
+        taskId,
+        attemptId,
+        leaseDurationMs: 30_000,
+      }),
+    );
+    await database
+      .update(runnerTaskAttempts)
+      .set({ leaseExpiresAt: new Date(0) })
+      .where(eq(runnerTaskAttempts.id, attemptId));
+
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.reconcileExpiredTasks({ limit: 1 }),
+      ),
+    ).resolves.toEqual({
+      reconciled: [{ taskId, attemptId, outcome: "failed" }],
+    });
+    const [storedTask] = await database
+      .select({
+        status: runnerTasks.status,
+        terminalAt: runnerTasks.terminalAt,
+      })
+      .from(runnerTasks)
+      .where(eq(runnerTasks.id, taskId));
+    expect(storedTask?.status).toBe("failed");
+    expect(storedTask?.terminalAt).toBeInstanceOf(Date);
+  });
+
+  it("turns an expired cancellation request into a final cancellation", async () => {
+    const taskId = randomUUID();
+    const attemptId = randomUUID();
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.createTask(task(taskId, experimentIds[13]!)),
+    );
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.claimTask({
+        runnerId,
+        taskId,
+        attemptId,
+        leaseDurationMs: 30_000,
+      }),
+    );
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.requestCancellation({
+        requestId: randomUUID(),
+        workspaceId,
+        taskId,
+      }),
+    );
+    await database
+      .update(runnerTaskAttempts)
+      .set({ leaseExpiresAt: new Date(0) })
+      .where(eq(runnerTaskAttempts.id, attemptId));
+
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.reconcileExpiredTasks({ limit: 10 }),
+      ),
+    ).resolves.toEqual({
+      reconciled: [{ taskId, attemptId, outcome: "cancelled" }],
+    });
+  });
+
+  it("rejects reuse of a cancellation request ID for another task", async () => {
+    const requestId = randomUUID();
+    const firstTaskId = randomUUID();
+    const secondTaskId = randomUUID();
+    await persistence.transaction(async ({ scheduler }) => {
+      await scheduler.createTask(task(firstTaskId, experimentIds[14]!));
+      await scheduler.createTask(task(secondTaskId, experimentIds[15]!));
+    });
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.requestCancellation({
+        requestId,
+        workspaceId,
+        taskId: firstTaskId,
+      }),
+    );
+
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.requestCancellation({
+          requestId,
+          workspaceId,
+          taskId: secondTaskId,
+        }),
+      ),
+    ).resolves.toEqual({ state: "request_conflict" });
   });
 });

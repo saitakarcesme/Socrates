@@ -58,7 +58,8 @@ multi-tenancy.
 - At Phase 1 closure, a disposable PostgreSQL 17 database migrated from zero
   and contained schema compatibility version `1` plus all seven required
   indexes. Phase 2's additive scheduler migration advances the current runtime
-  compatibility marker to `2`.
+  compatibility marker to `2`; the append-only scheduler cancellation migration
+  advances the current marker to `3`.
 - At Phase 1 closure, the built API was started against a disposable database
   whose marker was deliberately changed to version `2`; it exited before
   listening with an expected-version-1 compatibility error. The same exact

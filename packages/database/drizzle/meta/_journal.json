@@ -43,6 +43,13 @@
       "when": 1785453757438,
       "tag": "0005_runner_scheduler_foundations",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785455264064,
+      "tag": "0006_runner_task_cancellation",
+      "breakpoints": true
     }
   ]
 }

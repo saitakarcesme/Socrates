@@ -89,6 +89,14 @@ integration("PostgreSQL read query plans", () => {
        ORDER BY available_at, created_at, id LIMIT 101`,
       "outbox_messages_unpublished_available_idx",
     ],
+    [
+      "expired active attempts",
+      `SELECT id, lease_expires_at FROM runner_task_attempts
+       WHERE status IN ('claimed', 'preparing', 'executing', 'measuring')
+         AND lease_expires_at <= CURRENT_TIMESTAMP
+       ORDER BY lease_expires_at, id LIMIT 100`,
+      "runner_task_attempts_active_lease_id_idx",
+    ],
   ])("supports ordered %s reads with %s", async (_, query, indexName) => {
     await client.begin(async (transaction) => {
       await transaction`SET LOCAL enable_seqscan = off`;

@@ -255,11 +255,17 @@ Completed:
 - fenced, unexpired heartbeat renewal
 - real PostgreSQL concurrency proof that two claims yield one attempt
 - idempotent replay of an unexpired acknowledged claim
+- append-only cancellation identity with workspace-scoped, idempotent requests
+- queued cancellation and leased/running cancellation-request projection
+- fenced, lease-valid terminal compare-and-set with immutable terminal rows
+- bounded `SKIP LOCKED` expired-attempt reconciliation
+- retry-safe requeue with monotonically advancing subsequent claim fences
+- non-retry-safe failure and cancellation-on-expiry classification
+- transactional lifecycle outbox messages for accepted scheduler transitions
+- real PostgreSQL cancellation-race, stale-writer, and expiry recovery proofs
 
 Remaining:
 
-- durable cancellation request and terminal compare-and-set
-- expired-attempt reconciliation and retry eligibility
 - acknowledged runner event persistence
 - conflicting attempt-ID handling at the API error boundary
 - task lifecycle projection into the run timeline

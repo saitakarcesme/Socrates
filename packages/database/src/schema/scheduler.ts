@@ -189,6 +189,11 @@ export const runnerTaskAttempts = pgTable(
       table.status,
       table.leaseExpiresAt,
     ),
+    index("runner_task_attempts_active_lease_id_idx")
+      .on(table.leaseExpiresAt, table.id)
+      .where(
+        sql`${table.status} IN ('claimed', 'preparing', 'executing', 'measuring')`,
+      ),
     index("runner_task_attempts_task_created_idx").on(
       table.taskId,
       table.createdAt,
@@ -205,6 +210,27 @@ export const runnerTaskAttempts = pgTable(
     check(
       "runner_task_attempts_failure_classification",
       sql`(${table.status} = 'failed') = (${table.failureClassification} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const runnerTaskCancellations = pgTable(
+  "runner_task_cancellations",
+  {
+    id: uuid("id").primaryKey(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => runnerTasks.id),
+    resultingTaskStatus: runnerTaskStatus("resulting_task_status").notNull(),
+    requestedAt: timestamp("requested_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("runner_task_cancellations_task_unique").on(table.taskId),
+    check(
+      "runner_task_cancellations_resulting_status",
+      sql`${table.resultingTaskStatus} IN ('cancellation_requested', 'cancelled')`,
     ),
   ],
 );

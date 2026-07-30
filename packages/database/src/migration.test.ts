@@ -19,6 +19,7 @@ import {
   runs,
   runnerRegistrations,
   runnerTaskAttempts,
+  runnerTaskCancellations,
   runnerTasks,
   schemaMetadata,
   workspaces,
@@ -127,12 +128,14 @@ describe("Phase 2 scheduler migration", () => {
         runnerRegistrations,
         runnerTasks,
         runnerTaskAttempts,
+        runnerTaskCancellations,
         outboxMessages,
       ].map((table) => getTableConfig(table).name),
     ).toEqual([
       "runner_registrations",
       "runner_tasks",
       "runner_task_attempts",
+      "runner_task_cancellations",
       "outbox_messages",
     ]);
   });
@@ -161,5 +164,22 @@ describe("Phase 2 scheduler migration", () => {
     expect(migration.indexOf(`"projects_workspace_id_unique"`)).toBeLessThan(
       migration.indexOf(`"runner_tasks_project_same_workspace_fk"`),
     );
+  });
+
+  it("adds append-only cancellation identity and advances compatibility", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0006_runner_task_cancellation.sql", import.meta.url),
+      "utf8",
+    );
+
+    expect(migration).toContain(`CREATE TABLE "runner_task_cancellations"`);
+    expect(migration).toContain(
+      `CREATE UNIQUE INDEX "runner_task_cancellations_task_unique"`,
+    );
+    expect(migration).toContain(
+      `CREATE INDEX "runner_task_attempts_active_lease_id_idx"`,
+    );
+    expect(migration).toContain(`"runner_task_cancellations_resulting_status"`);
+    expect(migration).toContain(`SET "version" = 3`);
   });
 });

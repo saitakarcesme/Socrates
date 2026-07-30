@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import {
   experimentTaskV2Schema,
   runnerRegistrationV1Schema,
@@ -10,10 +10,17 @@ import type { JsonValue } from "./json";
 import type {
   ClaimRunnerTaskInput,
   ClaimRunnerTaskResult,
+  CompleteRunnerTaskInput,
+  CompleteRunnerTaskResult,
   CreateRunnerTaskResult,
   HeartbeatRunnerTaskInput,
   HeartbeatRunnerTaskResult,
+  ReconcileExpiredRunnerTasksInput,
+  ReconcileExpiredRunnerTasksResult,
+  RequestRunnerTaskCancellationInput,
+  RequestRunnerTaskCancellationResult,
   RunnerRegistrationWrite,
+  RunnerTaskTerminalStatus,
   RunnerTaskWrite,
   SchedulerRepository,
 } from "./ports";
@@ -26,6 +33,9 @@ const activeAttemptStatuses = [
   "measuring",
 ] as const;
 const maximumLeaseDurationMs = 15 * 60 * 1_000;
+const maximumReconciliationBatchSize = 100;
+const maximumFailureClassificationLength = 120;
+const terminalTaskStatuses = ["succeeded", "failed", "cancelled"] as const;
 
 function assertLeaseDuration(value: number): void {
   if (
@@ -43,8 +53,62 @@ function capabilityArray(value: unknown): readonly unknown[] | null {
   return Array.isArray(value) ? value : null;
 }
 
+function assertReconciliationLimit(value: number): void {
+  if (
+    !Number.isSafeInteger(value) ||
+    value <= 0 ||
+    value > maximumReconciliationBatchSize
+  ) {
+    throw new RangeError(
+      `Reconciliation limit must be between 1 and ${maximumReconciliationBatchSize}.`,
+    );
+  }
+}
+
+function failureClassification(input: CompleteRunnerTaskInput): string | null {
+  if (input.outcome.status !== "failed") return null;
+
+  const value = input.outcome.failureClassification.trim();
+  if (value.length === 0 || value.length > maximumFailureClassificationLength) {
+    throw new RangeError(
+      `Failure classification must be between 1 and ${maximumFailureClassificationLength} characters.`,
+    );
+  }
+  return value;
+}
+
+function canCompleteTask(
+  currentStatus: string,
+  terminalStatus: RunnerTaskTerminalStatus,
+): boolean {
+  if (currentStatus === "cancellation_requested") return true;
+  if (currentStatus === "running") {
+    return terminalStatus === "succeeded" || terminalStatus === "failed";
+  }
+  return currentStatus === "leased" && terminalStatus === "failed";
+}
+
+function cancellationStatus(
+  value: string,
+): "cancellation_requested" | "cancelled" {
+  if (value === "cancellation_requested" || value === "cancelled") return value;
+  throw new Error(`Invalid persisted cancellation status: ${value}.`);
+}
+
 export class PostgresSchedulerRepository implements SchedulerRepository {
   constructor(private readonly transaction: DatabaseTransaction) {}
+
+  private async appendTaskOutbox(
+    taskId: string,
+    topic: string,
+    payload: JsonValue,
+  ): Promise<void> {
+    await this.transaction.insert(schema.outboxMessages).values({
+      taskId,
+      topic,
+      payload,
+    });
+  }
 
   async registerRunner(input: RunnerRegistrationWrite): Promise<void> {
     const registration = runnerRegistrationV1Schema.parse({
@@ -116,14 +180,10 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
       requiredCapabilities: task.environment.requiredCapabilities,
       retrySafe: task.action.retrySafe,
     });
-    await this.transaction.insert(schema.outboxMessages).values({
+    await this.appendTaskOutbox(input.id, "runner.task.queued", {
+      version: "1",
       taskId: input.id,
-      topic: "runner.task.queued",
-      payload: {
-        version: "1",
-        taskId: input.id,
-        workspaceId: input.workspaceId,
-      },
+      workspaceId: input.workspaceId,
     });
     return { state: "created" };
   }
@@ -330,5 +390,314 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
     return renewed
       ? { state: "renewed", leaseExpiresAt: renewed.leaseExpiresAt }
       : { state: "stale" };
+  }
+
+  async requestCancellation(
+    input: RequestRunnerTaskCancellationInput,
+  ): Promise<RequestRunnerTaskCancellationResult> {
+    await this.transaction.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.requestId}, 0))`,
+    );
+
+    const [task] = await this.transaction
+      .select({
+        id: schema.runnerTasks.id,
+        workspaceId: schema.runnerTasks.workspaceId,
+        status: schema.runnerTasks.status,
+      })
+      .from(schema.runnerTasks)
+      .where(eq(schema.runnerTasks.id, input.taskId))
+      .for("update");
+
+    if (!task || task.workspaceId !== input.workspaceId) {
+      return { state: "task_not_found" };
+    }
+
+    const [existingCancellation] = await this.transaction
+      .select({
+        requestId: schema.runnerTaskCancellations.id,
+        taskId: schema.runnerTaskCancellations.taskId,
+        taskStatus: schema.runnerTaskCancellations.resultingTaskStatus,
+        requestedAt: schema.runnerTaskCancellations.requestedAt,
+      })
+      .from(schema.runnerTaskCancellations)
+      .where(eq(schema.runnerTaskCancellations.taskId, task.id))
+      .for("update");
+
+    if (existingCancellation) {
+      return {
+        state: "accepted",
+        cancellation: {
+          ...existingCancellation,
+          taskStatus: cancellationStatus(existingCancellation.taskStatus),
+        },
+      };
+    }
+    if (
+      terminalTaskStatuses.includes(task.status as RunnerTaskTerminalStatus)
+    ) {
+      return { state: "task_not_cancellable" };
+    }
+
+    const [requestCollision] = await this.transaction
+      .select({ taskId: schema.runnerTaskCancellations.taskId })
+      .from(schema.runnerTaskCancellations)
+      .where(eq(schema.runnerTaskCancellations.id, input.requestId));
+    if (requestCollision) return { state: "request_conflict" };
+
+    const taskStatus =
+      task.status === "queued" ? "cancelled" : "cancellation_requested";
+    const [updatedTask] = await this.transaction
+      .update(schema.runnerTasks)
+      .set({
+        status: taskStatus,
+        cancellationRequestedAt: sql`CURRENT_TIMESTAMP`,
+        terminalAt: taskStatus === "cancelled" ? sql`CURRENT_TIMESTAMP` : null,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(
+        and(
+          eq(schema.runnerTasks.id, task.id),
+          eq(schema.runnerTasks.status, task.status),
+        ),
+      )
+      .returning({ id: schema.runnerTasks.id });
+    if (!updatedTask) return { state: "task_not_cancellable" };
+
+    const [cancellation] = await this.transaction
+      .insert(schema.runnerTaskCancellations)
+      .values({
+        id: input.requestId,
+        taskId: task.id,
+        resultingTaskStatus: taskStatus,
+      })
+      .returning({
+        requestId: schema.runnerTaskCancellations.id,
+        taskId: schema.runnerTaskCancellations.taskId,
+        taskStatus: schema.runnerTaskCancellations.resultingTaskStatus,
+        requestedAt: schema.runnerTaskCancellations.requestedAt,
+      });
+    if (!cancellation) {
+      throw new Error("Runner task cancellation insert returned no record.");
+    }
+
+    await this.appendTaskOutbox(
+      task.id,
+      taskStatus === "cancelled"
+        ? "runner.task.cancelled"
+        : "runner.task.cancellation_requested",
+      {
+        version: "1",
+        taskId: task.id,
+        requestId: input.requestId,
+      },
+    );
+
+    return {
+      state: "accepted",
+      cancellation: {
+        ...cancellation,
+        taskStatus: cancellationStatus(cancellation.taskStatus),
+      },
+    };
+  }
+
+  async completeTask(
+    input: CompleteRunnerTaskInput,
+  ): Promise<CompleteRunnerTaskResult> {
+    const classification = failureClassification(input);
+    const [current] = await this.transaction
+      .select({
+        taskStatus: schema.runnerTasks.status,
+        currentFence: schema.runnerTasks.currentFence,
+        attemptStatus: schema.runnerTaskAttempts.status,
+        runnerId: schema.runnerTaskAttempts.runnerId,
+        fence: schema.runnerTaskAttempts.fence,
+        leaseActive: sql<boolean>`${schema.runnerTaskAttempts.leaseExpiresAt} > CURRENT_TIMESTAMP`,
+      })
+      .from(schema.runnerTasks)
+      .innerJoin(
+        schema.runnerTaskAttempts,
+        and(
+          eq(schema.runnerTaskAttempts.taskId, schema.runnerTasks.id),
+          eq(schema.runnerTaskAttempts.id, input.attemptId),
+        ),
+      )
+      .where(eq(schema.runnerTasks.id, input.taskId))
+      .for("update", {
+        of: [schema.runnerTasks, schema.runnerTaskAttempts],
+      });
+
+    if (
+      !current ||
+      current.runnerId !== input.runnerId ||
+      current.fence !== input.fence ||
+      current.currentFence !== input.fence ||
+      !current.leaseActive ||
+      !activeAttemptStatuses.includes(
+        current.attemptStatus as (typeof activeAttemptStatuses)[number],
+      )
+    ) {
+      return { state: "stale" };
+    }
+    if (!canCompleteTask(current.taskStatus, input.outcome.status)) {
+      return { state: "invalid_transition" };
+    }
+
+    const [completedTask] = await this.transaction
+      .update(schema.runnerTasks)
+      .set({
+        status: input.outcome.status,
+        terminalAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(
+        and(
+          eq(schema.runnerTasks.id, input.taskId),
+          eq(schema.runnerTasks.currentFence, input.fence),
+          eq(schema.runnerTasks.status, current.taskStatus),
+        ),
+      )
+      .returning({ terminalAt: schema.runnerTasks.terminalAt });
+    if (!completedTask?.terminalAt) return { state: "stale" };
+
+    const [completedAttempt] = await this.transaction
+      .update(schema.runnerTaskAttempts)
+      .set({
+        status: input.outcome.status,
+        completedAt: completedTask.terminalAt,
+        failureClassification: classification,
+      })
+      .where(
+        and(
+          eq(schema.runnerTaskAttempts.id, input.attemptId),
+          eq(schema.runnerTaskAttempts.taskId, input.taskId),
+          eq(schema.runnerTaskAttempts.runnerId, input.runnerId),
+          eq(schema.runnerTaskAttempts.fence, input.fence),
+          inArray(schema.runnerTaskAttempts.status, activeAttemptStatuses),
+        ),
+      )
+      .returning({ id: schema.runnerTaskAttempts.id });
+    if (!completedAttempt) {
+      throw new Error("Locked runner attempt could not be completed.");
+    }
+
+    await this.appendTaskOutbox(
+      input.taskId,
+      `runner.task.${input.outcome.status}`,
+      {
+        version: "1",
+        taskId: input.taskId,
+        attemptId: input.attemptId,
+        fence: input.fence,
+        status: input.outcome.status,
+      },
+    );
+
+    return {
+      state: "completed",
+      taskStatus: input.outcome.status,
+      completedAt: completedTask.terminalAt,
+    };
+  }
+
+  async reconcileExpiredTasks(
+    input: ReconcileExpiredRunnerTasksInput,
+  ): Promise<ReconcileExpiredRunnerTasksResult> {
+    assertReconciliationLimit(input.limit);
+
+    const expiredAttempts = await this.transaction
+      .select({
+        taskId: schema.runnerTasks.id,
+        taskStatus: schema.runnerTasks.status,
+        retrySafe: schema.runnerTasks.retrySafe,
+        currentFence: schema.runnerTasks.currentFence,
+        attemptId: schema.runnerTaskAttempts.id,
+        fence: schema.runnerTaskAttempts.fence,
+      })
+      .from(schema.runnerTaskAttempts)
+      .innerJoin(
+        schema.runnerTasks,
+        and(
+          eq(schema.runnerTasks.id, schema.runnerTaskAttempts.taskId),
+          eq(schema.runnerTasks.currentFence, schema.runnerTaskAttempts.fence),
+        ),
+      )
+      .where(
+        and(
+          inArray(schema.runnerTaskAttempts.status, activeAttemptStatuses),
+          sql`${schema.runnerTaskAttempts.leaseExpiresAt} <= CURRENT_TIMESTAMP`,
+          inArray(schema.runnerTasks.status, [
+            "leased",
+            "running",
+            "cancellation_requested",
+          ]),
+        ),
+      )
+      .orderBy(
+        asc(schema.runnerTaskAttempts.leaseExpiresAt),
+        asc(schema.runnerTaskAttempts.id),
+      )
+      .limit(input.limit)
+      .for("update", {
+        of: [schema.runnerTaskAttempts, schema.runnerTasks],
+        skipLocked: true,
+      });
+
+    const reconciled: ReconcileExpiredRunnerTasksResult["reconciled"][number][] =
+      [];
+    for (const expired of expiredAttempts) {
+      await this.transaction
+        .update(schema.runnerTaskAttempts)
+        .set({
+          status: "expired",
+          completedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(
+          and(
+            eq(schema.runnerTaskAttempts.id, expired.attemptId),
+            eq(schema.runnerTaskAttempts.taskId, expired.taskId),
+            eq(schema.runnerTaskAttempts.fence, expired.fence),
+            inArray(schema.runnerTaskAttempts.status, activeAttemptStatuses),
+          ),
+        );
+
+      const outcome =
+        expired.taskStatus === "cancellation_requested"
+          ? "cancelled"
+          : expired.retrySafe
+            ? "requeued"
+            : "failed";
+      const taskStatus = outcome === "requeued" ? "queued" : outcome;
+      await this.transaction
+        .update(schema.runnerTasks)
+        .set({
+          status: taskStatus,
+          terminalAt: outcome === "requeued" ? null : sql`CURRENT_TIMESTAMP`,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(
+          and(
+            eq(schema.runnerTasks.id, expired.taskId),
+            eq(schema.runnerTasks.currentFence, expired.currentFence),
+            eq(schema.runnerTasks.status, expired.taskStatus),
+          ),
+        );
+
+      await this.appendTaskOutbox(expired.taskId, `runner.task.${outcome}`, {
+        version: "1",
+        taskId: expired.taskId,
+        attemptId: expired.attemptId,
+        fence: expired.fence,
+        outcome,
+      });
+      reconciled.push({
+        taskId: expired.taskId,
+        attemptId: expired.attemptId,
+        outcome,
+      });
+    }
+
+    return { reconciled };
   }
 }

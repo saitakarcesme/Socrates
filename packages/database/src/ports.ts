@@ -118,6 +118,58 @@ export type HeartbeatRunnerTaskInput = {
 export type HeartbeatRunnerTaskResult =
   { state: "renewed"; leaseExpiresAt: Date } | { state: "stale" };
 
+export type RequestRunnerTaskCancellationInput = {
+  requestId: string;
+  workspaceId: string;
+  taskId: string;
+};
+
+export type RunnerTaskCancellationAcceptance = {
+  requestId: string;
+  taskId: string;
+  taskStatus: "cancellation_requested" | "cancelled";
+  requestedAt: Date;
+};
+
+export type RequestRunnerTaskCancellationResult =
+  | { state: "accepted"; cancellation: RunnerTaskCancellationAcceptance }
+  | { state: "request_conflict" | "task_not_found" | "task_not_cancellable" };
+
+export type RunnerTaskTerminalStatus = "succeeded" | "failed" | "cancelled";
+
+export type CompleteRunnerTaskInput = {
+  runnerId: string;
+  taskId: string;
+  attemptId: string;
+  fence: number;
+  outcome:
+    | { status: "succeeded" }
+    | { status: "failed"; failureClassification: string }
+    | { status: "cancelled" };
+};
+
+export type CompleteRunnerTaskResult =
+  | {
+      state: "completed";
+      taskStatus: RunnerTaskTerminalStatus;
+      completedAt: Date;
+    }
+  | { state: "invalid_transition" | "stale" };
+
+export type ReconcileExpiredRunnerTasksInput = {
+  limit: number;
+};
+
+export type ReconciledRunnerTask = {
+  taskId: string;
+  attemptId: string;
+  outcome: "requeued" | "failed" | "cancelled";
+};
+
+export type ReconcileExpiredRunnerTasksResult = {
+  reconciled: readonly ReconciledRunnerTask[];
+};
+
 export interface SchedulerRepository {
   registerRunner(input: RunnerRegistrationWrite): Promise<void>;
   createTask(input: RunnerTaskWrite): Promise<CreateRunnerTaskResult>;
@@ -125,6 +177,15 @@ export interface SchedulerRepository {
   heartbeat(
     input: HeartbeatRunnerTaskInput,
   ): Promise<HeartbeatRunnerTaskResult>;
+  requestCancellation(
+    input: RequestRunnerTaskCancellationInput,
+  ): Promise<RequestRunnerTaskCancellationResult>;
+  completeTask(
+    input: CompleteRunnerTaskInput,
+  ): Promise<CompleteRunnerTaskResult>;
+  reconcileExpiredTasks(
+    input: ReconcileExpiredRunnerTasksInput,
+  ): Promise<ReconcileExpiredRunnerTasksResult>;
 }
 
 export type TransactionRepositories = {
