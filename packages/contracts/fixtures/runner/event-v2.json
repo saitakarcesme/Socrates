@@ -1,0 +1,15 @@
+{
+  "version": "2",
+  "eventId": "019c1170-8b7a-7a60-b7f8-f35c85d73746",
+  "runnerId": "019c1170-8b7a-7a60-b7f8-f35c85d73747",
+  "taskId": "019c1170-8b7a-7a60-b7f8-f35c85d73741",
+  "attemptId": "019c1170-8b7a-7a60-b7f8-f35c85d73748",
+  "fence": 1,
+  "sequence": 1,
+  "occurredAt": "2026-07-31T00:00:00.000Z",
+  "type": "workspace.prepared",
+  "payload": {
+    "sourceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "imageDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  }
+}

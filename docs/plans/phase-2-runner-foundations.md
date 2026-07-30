@@ -1,6 +1,6 @@
 # Phase 2 — runner foundations
 
-Status: Proposed
+Status: In progress
 
 Owner: Platform
 
@@ -216,6 +216,19 @@ is never mounted read-write from the host.
 
 Exit: contracts can represent every invariant without free-form capability
 strings or filesystem paths.
+
+Implementation status: Complete on 2026-07-31.
+
+- V2 task and event schemas use closed capabilities, digest-pinned inputs,
+  normalized command paths, explicit network policy, and bounded evidence.
+- V1 task and event fixtures remain parseable but the runner port accepts V2
+  only.
+- Registration declares exact supported protocol tuples and structured
+  capacity.
+- Domain tests cover terminal immutability, cancellation races, replay, gaps,
+  and safe sequence bounds.
+- `audit:phase-2` preserves the execution-plane boundary and rejects model
+  providers.
 
 ### Slice 2.1 — durable scheduler foundation
 

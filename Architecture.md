@@ -258,30 +258,33 @@ generic database update.
 
 ## 8. Experiment protocol
 
-Every runner task receives an immutable `ExperimentTask`:
+Executable runners accept only an immutable `ExperimentTaskV2`. The original
+V1 skeleton contract remains parseable for stored compatibility fixtures but
+cannot be claimed:
 
 ```ts
-type ExperimentTaskV1 = {
-  version: "1";
+type ExperimentTaskV2 = {
+  version: "2";
+  taskId: string;
   runId: string;
   experimentId: string;
-  source: SourceSnapshot;
+  source: ContentAddressedSnapshot;
   hypothesis: string;
-  actionPlan: ActionPlan;
-  metric: MetricProtocol;
-  constraints: ConstraintProtocol[];
-  budget: ExperimentBudget;
-  environment: RunnerRequirements;
+  action: DeclaredCommandSequence;
+  measurement: FrozenMetricProtocol & { command: DeclaredCommand };
+  constraints: FrozenConstraint[];
+  environment: OciEnvironmentRequirements;
+  budget: RunnerBudget;
 };
 ```
 
 The runner emits ordered, idempotent events:
 
 ```ts
-type RunnerEventV1 =
-  | TaskAccepted
+type RunnerEventV2 =
   | WorkspacePrepared
   | ActionStarted
+  | ActionCompleted
   | LogAppended
   | ArtifactProduced
   | MeasurementRecorded
@@ -290,9 +293,10 @@ type RunnerEventV1 =
   | TaskCancelled;
 ```
 
-Each event carries `eventId`, `taskId`, monotonically increasing `sequence`,
-timestamp, schema version, and payload. The API rejects duplicate event IDs and
-buffers or rejects invalid sequence gaps.
+Each V2 event carries `eventId`, `runnerId`, `taskId`, `attemptId`, lease fence,
+monotonically increasing attempt-local `sequence`, timestamp, schema version,
+and payload. The API acknowledges duplicate event IDs idempotently, rejects a
+stale fence, and rejects sequence gaps with the expected next sequence.
 
 ## 9. Decision policy
 
@@ -813,6 +817,11 @@ overlays, and horizontal overflow at a 390-pixel viewport. Unit and API tests
 remain the primary exhaustive coverage; browser tests cover one critical
 cross-process story rather than duplicating every domain permutation.
 
+Acceptance servers use dedicated, configurable test ports and never reuse an
+existing listener. Readiness on a common development port is not proof that the
+process belongs to Socrates and could otherwise send the browser journey into
+an unrelated local application.
+
 ### ADR-026: Run detail projections carry their frozen metric protocol
 
 Creating a metric revision appends an immutable definition and advances the
@@ -867,7 +876,12 @@ workspace ID into immutable knowledge rows is deferred until multi-tenancy.
 
 Index migrations are forward-only and reviewed alongside `EXPLAIN` evidence.
 Tests assert the required index definitions by name so a later schema refactor
-cannot silently remove the pagination contract.
+cannot silently remove the pagination contract. For the workspace learning
+join, PostgreSQL may validly choose either the global order-first learning index
+or the project-scoped learning index plus a bounded sort, depending on workspace
+selectivity. Plan evidence verifies both ordering indexes independently and
+requires the workspace projection to index both join sides; it does not freeze
+one cost-based join strategy.
 
 ### ADR-029: Manual research and schema compatibility are startup gates
 

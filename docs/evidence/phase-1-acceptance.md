@@ -43,11 +43,13 @@ declared ordering contract is executable directly by its B-tree:
 - observation hydration: `observations_experiment_recorded_id_idx`
 - decision hydration: `decisions_experiment_created_id_idx`
 
-Those six scoped plans contain no `Sort` node. The workspace learning
-projection verifies `learnings_created_id_idx` and
-`projects_workspace_created_id_idx`; its cross-project merge may retain a
-bounded sort in Phase 1. ADR-028 records why workspace denormalization is
-deferred until multi-tenancy.
+Those scoped and global-ordering plans contain no `Sort` node. The workspace
+learning projection requires `projects_workspace_created_id_idx` plus either
+the global or project-scoped learning index. PostgreSQL may choose the latter
+with a bounded sort when the workspace predicate is selective. The global
+ordering query independently proves `learnings_created_id_idx` can satisfy the
+cursor order directly. ADR-028 records why workspace denormalization is deferred
+until multi-tenancy.
 
 ## Operational evidence
 

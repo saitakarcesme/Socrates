@@ -70,6 +70,9 @@ jobs:
       - name: Audit Phase 1 boundaries
         run: pnpm audit:phase-1
 
+      - name: Audit Phase 2 boundaries
+        run: pnpm audit:phase-2
+
       - name: Apply database migrations
         run: pnpm --filter @socrates/database db:migrate
 

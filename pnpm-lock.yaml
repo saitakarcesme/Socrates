@@ -164,6 +164,9 @@ importers:
       "@socrates/contracts":
         specifier: workspace:*
         version: link:../contracts
+      fast-check:
+        specifier: ^4.9.0
+        version: 4.9.0
 
   services/orchestrator:
     dependencies:

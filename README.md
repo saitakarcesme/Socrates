@@ -25,7 +25,7 @@ services/runner-local Future local execution adapter
 
 Read [Architecture.md](./Architecture.md) before making structural changes.
 The next implementation milestone is specified in the
-[Phase 1 measured experiments plan](./docs/plans/phase-1-measured-experiments.md).
+[Phase 2 runner foundations plan](./docs/plans/phase-2-runner-foundations.md).
 
 ## Development
 
@@ -79,6 +79,7 @@ pnpm format:check
 pnpm typecheck
 pnpm lint
 pnpm audit:phase-1
+pnpm audit:phase-2
 DATABASE_URL=postgresql://... pnpm test
 pnpm build
 ```
@@ -91,3 +92,7 @@ workspace, and run:
 pnpm --filter @socrates/web exec playwright install chromium
 DATABASE_URL=postgresql://... pnpm test:e2e
 ```
+
+Playwright starts Socrates on dedicated ports `3100` and `3101` and never
+reuses an existing listener. `SOCRATES_E2E_WEB_PORT` and
+`SOCRATES_E2E_API_PORT` can override those ports when necessary.

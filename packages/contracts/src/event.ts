@@ -4,9 +4,15 @@ import {
   canonicalDecimalSchema,
   entityIdSchema,
   nonNegativeSafeIntegerSchema,
+  positiveSafeIntegerSchema,
 } from "./common";
 import { eventPageInfoSchema } from "./pagination";
+import { sha256DigestSchema } from "./runner";
 
+/**
+ * Historical Phase 0 wire fixture. V1 events are parseable for compatibility
+ * but are not accepted by an executable runner claim.
+ */
 const runnerEventEnvelopeSchema = z.object({
   version: z.literal("1"),
   eventId: entityIdSchema,
@@ -60,6 +66,161 @@ export const runnerEventV1Schema = z.discriminatedUnion("type", [
   }),
 ]);
 export type RunnerEventV1 = z.infer<typeof runnerEventV1Schema>;
+
+const runnerEventV2EnvelopeSchema = z.object({
+  version: z.literal("2"),
+  eventId: entityIdSchema,
+  runnerId: entityIdSchema,
+  taskId: entityIdSchema,
+  attemptId: entityIdSchema,
+  fence: positiveSafeIntegerSchema,
+  sequence: positiveSafeIntegerSchema,
+  occurredAt: z.iso.datetime(),
+});
+
+export const runnerFailureClassificationSchema = z.enum([
+  "infrastructure",
+  "invalid_action",
+  "evaluation",
+  "budget",
+  "policy",
+]);
+
+export const runnerBudgetDimensionSchema = z.enum([
+  "wall_time",
+  "cpu_time",
+  "memory",
+  "pids",
+  "writable_bytes",
+  "log_bytes",
+  "artifact_bytes",
+  "command_count",
+  "egress_bytes",
+]);
+
+export const runnerEventV2Schema = z.discriminatedUnion("type", [
+  runnerEventV2EnvelopeSchema.extend({
+    type: z.literal("workspace.prepared"),
+    payload: z
+      .object({
+        sourceDigest: sha256DigestSchema,
+        imageDigest: sha256DigestSchema,
+      })
+      .strict(),
+  }),
+  runnerEventV2EnvelopeSchema.extend({
+    type: z.literal("action.started"),
+    payload: z
+      .object({
+        commandIndex: nonNegativeSafeIntegerSchema,
+      })
+      .strict(),
+  }),
+  runnerEventV2EnvelopeSchema.extend({
+    type: z.literal("action.completed"),
+    payload: z
+      .object({
+        commandIndex: nonNegativeSafeIntegerSchema,
+        exitCode: z.number().int(),
+        durationMs: nonNegativeSafeIntegerSchema,
+      })
+      .strict(),
+  }),
+  runnerEventV2EnvelopeSchema.extend({
+    type: z.literal("log.appended"),
+    payload: z
+      .object({
+        stream: z.enum(["stdout", "stderr", "system"]),
+        text: z.string().max(16_384),
+        utf8Bytes: nonNegativeSafeIntegerSchema.max(65_536),
+        redacted: z.boolean(),
+      })
+      .strict()
+      .superRefine((payload, context) => {
+        if (
+          new TextEncoder().encode(payload.text).byteLength !==
+          payload.utf8Bytes
+        ) {
+          context.addIssue({
+            code: "custom",
+            message: "utf8Bytes must equal the encoded log chunk size.",
+            path: ["utf8Bytes"],
+          });
+        }
+      }),
+  }),
+  runnerEventV2EnvelopeSchema.extend({
+    type: z.literal("artifact.produced"),
+    payload: z
+      .object({
+        artifactId: entityIdSchema,
+        digest: sha256DigestSchema,
+        sizeBytes: nonNegativeSafeIntegerSchema,
+        mediaType: z.string().trim().min(1).max(255),
+        role: z.enum([
+          "source_snapshot",
+          "patch",
+          "measurement",
+          "report",
+          "diagnostic",
+        ]),
+      })
+      .strict(),
+  }),
+  runnerEventV2EnvelopeSchema.extend({
+    type: z.literal("measurement.recorded"),
+    payload: z
+      .object({
+        metricDefinitionId: entityIdSchema,
+        amount: canonicalDecimalSchema,
+        unit: z.string().trim().min(1).max(32),
+        sampleCount: positiveSafeIntegerSchema,
+      })
+      .strict(),
+  }),
+  runnerEventV2EnvelopeSchema.extend({
+    type: z.literal("task.succeeded"),
+    payload: z
+      .object({
+        exitCode: z.literal(0),
+        durationMs: nonNegativeSafeIntegerSchema,
+      })
+      .strict(),
+  }),
+  runnerEventV2EnvelopeSchema.extend({
+    type: z.literal("task.failed"),
+    payload: z
+      .object({
+        classification: runnerFailureClassificationSchema,
+        budgetDimension: runnerBudgetDimensionSchema.optional(),
+        message: z.string().trim().min(1).max(4_000),
+      })
+      .strict()
+      .superRefine((payload, context) => {
+        if (
+          (payload.classification === "budget") !==
+          (payload.budgetDimension !== undefined)
+        ) {
+          context.addIssue({
+            code: "custom",
+            message:
+              "A budget failure requires exactly one exceeded budget dimension.",
+            path: ["budgetDimension"],
+          });
+        }
+      }),
+  }),
+  runnerEventV2EnvelopeSchema.extend({
+    type: z.literal("task.cancelled"),
+    payload: z
+      .object({
+        forced: z.boolean(),
+        durationMs: nonNegativeSafeIntegerSchema,
+      })
+      .strict(),
+  }),
+]);
+export type RunnerEventV2 = z.infer<typeof runnerEventV2Schema>;
 
 export const runEventResourceSchema = z
   .object({

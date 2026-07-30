@@ -56,6 +56,12 @@ integration("PostgreSQL read query plans", () => {
       "learnings_project_created_id_idx",
     ],
     [
+      "global learning ordering",
+      `SELECT id, created_at FROM learnings
+       ORDER BY created_at DESC, id DESC LIMIT 101`,
+      "learnings_created_id_idx",
+    ],
+    [
       "experiment observations",
       `SELECT id, recorded_at FROM observations
        WHERE experiment_id = '${scopeId}'
@@ -94,8 +100,8 @@ integration("PostgreSQL read query plans", () => {
          LIMIT 101`,
       );
 
-      expect(plan).toContain("learnings_created_id_idx");
       expect(plan).toContain("projects_workspace_created_id_idx");
+      expect(plan).toMatch(/learnings_(?:created_id|project_created_id)_idx/);
     });
   });
 });

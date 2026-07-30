@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "runId": "019c1170-8b7a-7a60-b7f8-f35c85d73742",
+  "experimentId": "019c1170-8b7a-7a60-b7f8-f35c85d73743",
+  "hypothesis": "Critical CSS will improve LCP.",
+  "actionPlan": {
+    "summary": "Inline critical CSS.",
+    "capabilities": []
+  },
+  "metric": {
+    "definitionId": "019c1170-8b7a-7a60-b7f8-f35c85d73744",
+    "direction": "minimize",
+    "minimumImprovement": "0.05"
+  },
+  "budget": {
+    "maximumExperiments": 1,
+    "maximumDurationMs": 300000,
+    "maximumCostMinor": 200
+  }
+}

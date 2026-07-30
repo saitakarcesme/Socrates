@@ -1,0 +1,78 @@
+{
+  "version": "2",
+  "taskId": "019c1170-8b7a-7a60-b7f8-f35c85d73741",
+  "runId": "019c1170-8b7a-7a60-b7f8-f35c85d73742",
+  "experimentId": "019c1170-8b7a-7a60-b7f8-f35c85d73743",
+  "source": {
+    "snapshotId": "019c1170-8b7a-7a60-b7f8-f35c85d73745",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "hypothesis": "Critical CSS will improve LCP.",
+  "action": {
+    "kind": "command-sequence",
+    "revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "steps": [
+      {
+        "executable": "/usr/bin/node",
+        "arguments": ["scripts/inline-critical-css.mjs"],
+        "workingDirectory": "/workspace",
+        "timeoutMs": 60000
+      }
+    ],
+    "retrySafe": true
+  },
+  "measurement": {
+    "metricDefinitionId": "019c1170-8b7a-7a60-b7f8-f35c85d73744",
+    "protocolRevision": 1,
+    "unit": "s",
+    "direction": "minimize",
+    "minimumImprovement": "0.05",
+    "noiseTolerance": "0.01",
+    "command": {
+      "executable": "/usr/bin/node",
+      "arguments": ["scripts/measure-lcp.mjs"],
+      "workingDirectory": "/workspace",
+      "timeoutMs": 60000
+    },
+    "result": {
+      "kind": "json-stdout",
+      "schema": "metric-value.v1",
+      "maximumBytes": 4096
+    }
+  },
+  "constraints": [],
+  "environment": {
+    "imageDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "platform": "linux",
+    "architecture": "amd64",
+    "network": {
+      "mode": "disabled"
+    },
+    "requiredCapabilities": [
+      {
+        "kind": "sandbox.oci",
+        "platform": "linux",
+        "architecture": "amd64"
+      },
+      {
+        "kind": "action.command",
+        "shell": false
+      },
+      {
+        "kind": "network.egress",
+        "mode": "disabled"
+      }
+    ]
+  },
+  "budget": {
+    "wallTimeMs": 300000,
+    "cpuTimeMs": 240000,
+    "memoryBytes": 1073741824,
+    "maximumPids": 128,
+    "writableBytes": 1073741824,
+    "logBytes": 1048576,
+    "artifactBytes": 104857600,
+    "commandCount": 3,
+    "egressBytes": 0
+  }
+}

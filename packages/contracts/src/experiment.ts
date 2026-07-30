@@ -188,6 +188,10 @@ export const experimentListResponseSchema = z
   })
   .strict();
 
+/**
+ * Historical Phase 0 placeholder. It remains parseable for stored fixtures,
+ * but executable runner claims accept ExperimentTaskV2 only.
+ */
 export const experimentTaskV1Schema = z
   .object({
     version: z.literal("1"),

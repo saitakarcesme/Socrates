@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "eventId": "019c1170-8b7a-7a60-b7f8-f35c85d73746",
+  "taskId": "019c1170-8b7a-7a60-b7f8-f35c85d73741",
+  "sequence": 0,
+  "occurredAt": "2026-07-31T00:00:00.000Z",
+  "type": "task.accepted",
+  "payload": {
+    "runnerId": "019c1170-8b7a-7a60-b7f8-f35c85d73747"
+  }
+}
