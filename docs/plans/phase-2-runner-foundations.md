@@ -270,6 +270,15 @@ Remaining:
 - conflicting attempt-ID handling at the API error boundary
 - task lifecycle projection into the run timeline
 
+Current sub-slice:
+
+- immutable V2 event envelopes with normalized-content conflict detection
+- exact replay acknowledgements and contiguous attempt-local cursors
+- lifecycle-driven attempt/task state transitions
+- atomic terminal event, cursor, and terminal compare-and-set
+- transactional projection into the existing run-event ledger
+- explicit rejection of log and artifact ingestion until bounded storage lands
+
 ### Slice 2.2 — fake runner vertical slice
 
 - register a deterministic in-process test adapter through the runner port

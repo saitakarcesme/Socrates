@@ -1045,6 +1045,41 @@ out. Each outcome is recorded in the transactional outbox. The reconciler is a
 callable persistence command in this slice; no timer, worker, or executor is
 introduced.
 
+### ADR-037: Runner acknowledgements commit evidence and state together
+
+`runner_task_events` stores the validated V2 envelope as immutable attempt
+evidence. Relational columns contain event, runner, task, attempt, fence,
+attempt-local sequence, type, timestamps, and a digest of the normalized
+envelope. Event ID is globally unique and `(attempt_id, sequence)` is unique.
+The attempt row remains the acknowledgement cursor; an event is acknowledged
+only after both its row and the new cursor commit.
+
+An exact event-ID replay returns the original acknowledgement even after the
+lease or task becomes terminal, which lets a restarted runner discard already
+committed spool entries. Reusing an event ID or attempt sequence for different
+normalized content is a conflict. A new event must match the current runner,
+task, attempt, and fence; the attempt must be active and its database lease
+unexpired. A sequence above the next cursor is rejected with the expected
+sequence. A stale fence or an unseen sequence behind the cursor is rejected
+without writing.
+
+Lifecycle event ingestion owns its related state transition. Workspace
+preparation advances the attempt to `preparing`; action start advances attempt
+and task to `executing`/`running`; action completion preserves execution;
+measurement advances the attempt to `measuring`; and terminal events update the
+event, cursor, attempt, and task in the same transaction. Successful completion
+requires measurement state, failure may terminate any active current attempt,
+and cancellation requires a durable cancellation request. This removes the
+crash window between acknowledging terminal evidence and committing the
+terminal compare-and-set.
+
+Every accepted non-log lifecycle event is also projected into the existing
+run-event ledger while the run row is locked, so SSE readers reconcile from one
+durable sequence. `log.appended` and `artifact.produced` remain valid protocol
+messages but ingestion returns `unsupported_event` until Slice 2.3 implements
+aggregate byte limits, redaction enforcement, digest verification, and
+retention. Parseability is not authorization to persist unbounded evidence.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
