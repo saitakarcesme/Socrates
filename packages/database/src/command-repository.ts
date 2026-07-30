@@ -313,6 +313,10 @@ export class PostgresCommandRepository implements CommandRepository {
     if (!budget || !metric) {
       throw new Error(`Run ${run.id} has an incomplete persistence record.`);
     }
+    const constraints = await loadConstraints(
+      this.transaction,
+      run.metricDefinitionId,
+    );
 
     return {
       ...run,
@@ -321,11 +325,9 @@ export class PostgresCommandRepository implements CommandRepository {
       metric: {
         ...metric,
         evaluatorConfig: metric.evaluatorConfig as JsonValue,
+        guardrails: constraints,
       },
-      constraints: await loadConstraints(
-        this.transaction,
-        run.metricDefinitionId,
-      ),
+      constraints,
     };
   }
 

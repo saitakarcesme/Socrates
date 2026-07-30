@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, sql, type SQL } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import type {
@@ -89,6 +89,7 @@ function mapProject(
     minimumImprovement: row.minimumImprovement,
     noiseTolerance: row.noiseTolerance,
     evaluatorConfig: row.evaluatorConfig as JsonValue,
+    guardrails: [],
     createdAt: row.metricCreatedAt,
   };
 
@@ -258,7 +259,32 @@ export class PostgresReadRepository implements ReadRepository {
       )
       .limit(1);
 
-    return row ? mapProject(row) : null;
+    if (!row) return null;
+
+    const project = mapProject(row);
+    const guardrails = await this.database
+      .select({
+        id: schema.constraintDefinitions.id,
+        metricDefinitionId: schema.constraintDefinitions.metricDefinitionId,
+        name: schema.constraintDefinitions.name,
+        unit: schema.constraintDefinitions.unit,
+        operator: schema.constraintDefinitions.operator,
+        threshold: schema.constraintDefinitions.threshold,
+        hard: schema.constraintDefinitions.hard,
+      })
+      .from(schema.constraintDefinitions)
+      .where(
+        eq(
+          schema.constraintDefinitions.metricDefinitionId,
+          project.currentMetric.id,
+        ),
+      )
+      .orderBy(schema.constraintDefinitions.id);
+
+    return {
+      ...project,
+      currentMetric: { ...project.currentMetric, guardrails },
+    };
   }
 
   async listRuns(input: {
@@ -348,7 +374,11 @@ export class PostgresReadRepository implements ReadRepository {
       input.limit + 1,
     );
 
-    return pageFromRows(rows, input.limit);
+    const page = pageFromRows(rows, input.limit);
+    return {
+      ...page,
+      items: await this.hydrateExperiments(page.items),
+    };
   }
 
   async getExperiment(
@@ -363,11 +393,13 @@ export class PostgresReadRepository implements ReadRepository {
       1,
     );
 
-    return row ?? null;
+    if (!row) return null;
+    const [hydrated] = await this.hydrateExperiments([row]);
+    return hydrated ?? null;
   }
 
-  private experimentQuery(where: SQL | undefined, limit: number) {
-    return this.database
+  private async experimentQuery(where: SQL | undefined, limit: number) {
+    const rows = await this.database
       .select({
         id: schema.experiments.id,
         runId: schema.experiments.runId,
@@ -390,6 +422,106 @@ export class PostgresReadRepository implements ReadRepository {
       .where(where)
       .orderBy(desc(schema.experiments.createdAt), desc(schema.experiments.id))
       .limit(limit);
+
+    return rows.map((row) => ({
+      ...row,
+      observations: [],
+      decision: null,
+      learnings: [],
+    }));
+  }
+
+  private async hydrateExperiments(
+    experiments: readonly ExperimentRead[],
+  ): Promise<ExperimentRead[]> {
+    if (experiments.length === 0) return [];
+    const experimentIds = experiments.map(({ id }) => id);
+
+    const [observations, decisions, learningRows] = await Promise.all([
+      this.database
+        .select({
+          id: schema.observations.id,
+          experimentId: schema.observations.experimentId,
+          kind: schema.observations.kind,
+          metricDefinitionId: schema.observations.metricDefinitionId,
+          constraintDefinitionId: schema.observations.constraintDefinitionId,
+          amount: schema.observations.amount,
+          unit: schema.observations.unit,
+          sampleCount: schema.observations.sampleCount,
+          notes: schema.observations.notes,
+          recordedAt: schema.observations.recordedAt,
+        })
+        .from(schema.observations)
+        .where(inArray(schema.observations.experimentId, experimentIds))
+        .orderBy(schema.observations.recordedAt, schema.observations.id),
+      this.database
+        .select({
+          id: schema.decisions.id,
+          experimentId: schema.decisions.experimentId,
+          policyVersion: schema.decisions.policyVersion,
+          automatedDecision: schema.decisions.automatedDecision,
+          reason: schema.decisions.reason,
+          finalDecision: schema.decisions.finalDecision,
+          overrideReason: schema.decisions.overrideReason,
+          calculatedImprovement: schema.decisions.calculatedImprovement,
+          createdAt: schema.decisions.createdAt,
+        })
+        .from(schema.decisions)
+        .where(inArray(schema.decisions.experimentId, experimentIds))
+        .orderBy(desc(schema.decisions.createdAt), desc(schema.decisions.id)),
+      this.database
+        .select({
+          experimentId: schema.learningEvidence.experimentId,
+          evidenceRole: schema.learningEvidence.role,
+          id: schema.learnings.id,
+          projectId: schema.learnings.projectId,
+          statement: schema.learnings.statement,
+          confidence: schema.learnings.confidence,
+          status: schema.learnings.status,
+          supersededLearningId: schema.learnings.supersededLearningId,
+          createdAt: schema.learnings.createdAt,
+          updatedAt: schema.learnings.updatedAt,
+        })
+        .from(schema.learningEvidence)
+        .innerJoin(
+          schema.learnings,
+          eq(schema.learnings.id, schema.learningEvidence.learningId),
+        )
+        .where(inArray(schema.learningEvidence.experimentId, experimentIds))
+        .orderBy(desc(schema.learnings.createdAt), desc(schema.learnings.id)),
+    ]);
+
+    return experiments.map((experiment) => {
+      const decisionRow = decisions.find(
+        ({ experimentId }) => experimentId === experiment.id,
+      );
+      const decision = decisionRow
+        ? (({ experimentId, ...value }) => {
+            void experimentId;
+            return value;
+          })(decisionRow)
+        : null;
+
+      return {
+        ...experiment,
+        observations: observations
+          .filter(({ experimentId }) => experimentId === experiment.id)
+          .map(({ experimentId, kind, ...observation }) => {
+            void experimentId;
+            return {
+              ...observation,
+              kind: kind as "before" | "after" | "guardrail",
+            };
+          }),
+        decision,
+        learnings: learningRows
+          .filter(({ experimentId }) => experimentId === experiment.id)
+          .map(({ experimentId, ...learning }) => {
+            void experimentId;
+            return learning;
+          }),
+      };
+    });
   }
 
   async listLearnings(input: {

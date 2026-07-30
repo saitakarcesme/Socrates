@@ -700,6 +700,23 @@ buffers. Process shutdown stops accepting new requests and gives active
 connections a bounded drain window before closing them, so SSE clients cannot
 block deployment indefinitely.
 
+### ADR-021: Timeline reads are evidence-enriched projections
+
+Experiment list and detail reads return the evidence needed to render the
+primary product surface: before/after and guardrail observations, the current
+decision, and linked learnings. These are read projections over immutable
+facts, not duplicated mutable columns on the experiment row. Project detail
+also exposes the generated guardrail definitions for its current metric
+protocol.
+
+The PostgreSQL adapter pages experiment rows first, then hydrates the selected
+page with bounded batch queries keyed by those experiment IDs. It must not
+issue one evidence query per experiment. List ordering and cursor derivation
+continue to depend only on the base experiment rows, so concurrent evidence
+appends cannot reorder or duplicate timeline pages. API contracts expose plain
+resources; Drizzle records and query-specific shapes remain inside the
+database package.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

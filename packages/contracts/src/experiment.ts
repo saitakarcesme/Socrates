@@ -11,6 +11,7 @@ import {
   positiveSafeIntegerSchema,
 } from "./common";
 import { pageInfoSchema } from "./pagination";
+import { learningResourceSchema } from "./learning";
 
 export const experimentStatusSchema = z.enum([
   "proposed",
@@ -127,13 +128,62 @@ export const experimentResourceSchema = z
   .strict();
 export type ExperimentResource = z.infer<typeof experimentResourceSchema>;
 
+export const experimentObservationResourceSchema = z
+  .object({
+    id: entityIdSchema,
+    kind: z.enum(["before", "after", "guardrail"]),
+    metricDefinitionId: entityIdSchema.nullable(),
+    constraintDefinitionId: entityIdSchema.nullable(),
+    value: metricValueSchema,
+    sampleCount: positiveSafeIntegerSchema,
+    notes: z.string().nullable(),
+    recordedAt: z.iso.datetime(),
+  })
+  .strict();
+
+export const experimentDecisionResourceSchema = z
+  .object({
+    id: entityIdSchema,
+    policyVersion: z.string(),
+    automatedDecision: experimentDecisionSchema,
+    reason: z.enum([
+      "improved",
+      "within_noise",
+      "below_threshold",
+      "guardrail_failed",
+      "invalid_measurement",
+    ]),
+    finalDecision: experimentDecisionSchema,
+    overrideReason: z.string().nullable(),
+    calculatedImprovement: canonicalDecimalSchema,
+    createdAt: z.iso.datetime(),
+  })
+  .strict();
+
+export const experimentLearningResourceSchema = learningResourceSchema
+  .extend({
+    evidenceRole: z.enum(["supports", "contradicts"]),
+  })
+  .strict();
+
+export const experimentDetailResourceSchema = experimentResourceSchema
+  .extend({
+    observations: z.array(experimentObservationResourceSchema),
+    decision: experimentDecisionResourceSchema.nullable(),
+    learnings: z.array(experimentLearningResourceSchema),
+  })
+  .strict();
+export type ExperimentDetailResource = z.infer<
+  typeof experimentDetailResourceSchema
+>;
+
 export const experimentResponseSchema = z
-  .object({ data: experimentResourceSchema })
+  .object({ data: experimentDetailResourceSchema })
   .strict();
 
 export const experimentListResponseSchema = z
   .object({
-    data: z.array(experimentResourceSchema),
+    data: z.array(experimentDetailResourceSchema),
     page: pageInfoSchema,
   })
   .strict();

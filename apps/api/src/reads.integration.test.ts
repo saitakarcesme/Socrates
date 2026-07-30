@@ -74,6 +74,14 @@ integration("read API with PostgreSQL", () => {
       direction: "minimize",
       minimumImprovement: "0.05",
       noiseTolerance: "0.01",
+      guardrails: [
+        {
+          id: developmentSeedIds.atlasGuardrail,
+          operator: "less_than_or_equal",
+          threshold: "3",
+          hard: true,
+        },
+      ],
     });
   });
 
@@ -113,6 +121,35 @@ integration("read API with PostgreSQL", () => {
     expect(body.data).toMatchObject({
       sequence: 1,
       status: "kept",
+      observations: [
+        {
+          kind: "before",
+          value: { amount: "2.4", unit: "s" },
+        },
+        {
+          kind: "after",
+          value: { amount: "2.2", unit: "s" },
+        },
+        {
+          kind: "guardrail",
+          constraintDefinitionId: developmentSeedIds.atlasGuardrail,
+        },
+      ],
+      decision: {
+        automatedDecision: "kept",
+        finalDecision: "kept",
+        reason: "improved",
+        calculatedImprovement: "0.2",
+      },
+    });
+    expect(body.data.learnings.map(({ id }) => id)).toEqual([
+      developmentSeedIds.atlasLearningTwo,
+      developmentSeedIds.atlasLearning,
+    ]);
+    expect(list.data.find(({ sequence }) => sequence === 1)).toMatchObject({
+      decision: { finalDecision: "kept" },
+      observations: expect.any(Array),
+      learnings: expect.any(Array),
     });
   });
 

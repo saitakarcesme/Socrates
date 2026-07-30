@@ -56,6 +56,7 @@ export function mapProjectDetail(project: ProjectRead) {
         !Array.isArray(evaluatorConfig)
           ? evaluatorConfig
           : {},
+      guardrails: project.currentMetric.guardrails,
       createdAt: iso(project.currentMetric.createdAt),
     },
   };
@@ -74,6 +75,23 @@ export function mapRun(run: RunRead) {
 export function mapExperiment(experiment: ExperimentRead) {
   return {
     ...experiment,
+    observations: experiment.observations.map((observation) => ({
+      id: observation.id,
+      kind: observation.kind,
+      metricDefinitionId: observation.metricDefinitionId,
+      constraintDefinitionId: observation.constraintDefinitionId,
+      value: { amount: observation.amount, unit: observation.unit },
+      sampleCount: observation.sampleCount,
+      notes: observation.notes,
+      recordedAt: iso(observation.recordedAt),
+    })),
+    decision: experiment.decision
+      ? {
+          ...experiment.decision,
+          createdAt: iso(experiment.decision.createdAt),
+        }
+      : null,
+    learnings: experiment.learnings.map(mapLearning),
     startedAt: nullableIso(experiment.startedAt),
     completedAt: nullableIso(experiment.completedAt),
     createdAt: iso(experiment.createdAt),

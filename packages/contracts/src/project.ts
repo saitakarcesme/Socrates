@@ -32,6 +32,13 @@ export const guardrailDefinitionSchema = z
   })
   .strict();
 
+export const guardrailDefinitionResourceSchema = guardrailDefinitionSchema
+  .extend({
+    id: entityIdSchema,
+    metricDefinitionId: entityIdSchema,
+  })
+  .strict();
+
 export const metricDefinitionInputSchema = z
   .object({
     name: z.string().trim().min(1).max(120),
@@ -45,12 +52,12 @@ export const metricDefinitionInputSchema = z
 export type MetricDefinitionInput = z.infer<typeof metricDefinitionInputSchema>;
 
 export const metricDefinitionResourceSchema = metricDefinitionInputSchema
-  .omit({ guardrails: true })
   .extend({
     id: entityIdSchema,
     projectId: entityIdSchema,
     version: z.number().int().positive(),
     evaluatorConfig: z.record(z.string(), z.unknown()),
+    guardrails: z.array(guardrailDefinitionResourceSchema),
     createdAt: z.iso.datetime(),
   })
   .strict();

@@ -25,6 +25,19 @@ export type MetricDefinitionRead = {
   minimumImprovement: string;
   noiseTolerance: string;
   evaluatorConfig: JsonValue;
+  guardrails: readonly {
+    id: string;
+    metricDefinitionId: string;
+    name: string;
+    unit: string;
+    operator:
+      | "less_than"
+      | "less_than_or_equal"
+      | "greater_than"
+      | "greater_than_or_equal";
+    threshold: string;
+    hard: boolean;
+  }[];
   createdAt: Date;
 };
 
@@ -98,6 +111,41 @@ export type ExperimentRead = {
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  observations: readonly ExperimentObservationRead[];
+  decision: ExperimentDecisionRead | null;
+  learnings: readonly ExperimentLearningRead[];
+};
+
+export type ExperimentObservationRead = {
+  id: string;
+  kind: "before" | "after" | "guardrail";
+  metricDefinitionId: string | null;
+  constraintDefinitionId: string | null;
+  amount: string;
+  unit: string;
+  sampleCount: number;
+  notes: string | null;
+  recordedAt: Date;
+};
+
+export type ExperimentDecisionRead = {
+  id: string;
+  policyVersion: string;
+  automatedDecision: "kept" | "discarded" | "inconclusive";
+  reason:
+    | "improved"
+    | "within_noise"
+    | "below_threshold"
+    | "guardrail_failed"
+    | "invalid_measurement";
+  finalDecision: "kept" | "discarded" | "inconclusive";
+  overrideReason: string | null;
+  calculatedImprovement: string;
+  createdAt: Date;
+};
+
+export type ExperimentLearningRead = LearningRead & {
+  evidenceRole: "supports" | "contradicts";
 };
 
 export type LearningRead = {

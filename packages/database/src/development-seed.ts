@@ -17,6 +17,11 @@ export const developmentSeedIds = {
   atlasEventTwo: "019c1170-8b7a-7a60-b7f8-f35c85d75010",
   evalProject: "019c1170-8b7a-7a60-b7f8-f35c85d75011",
   evalMetric: "019c1170-8b7a-7a60-b7f8-f35c85d75012",
+  atlasBefore: "019c1170-8b7a-7a60-b7f8-f35c85d75013",
+  atlasAfter: "019c1170-8b7a-7a60-b7f8-f35c85d75014",
+  atlasDecision: "019c1170-8b7a-7a60-b7f8-f35c85d75015",
+  atlasGuardrail: "019c1170-8b7a-7a60-b7f8-f35c85d75016",
+  atlasGuardrailObservation: "019c1170-8b7a-7a60-b7f8-f35c85d75017",
 } as const;
 
 export async function seedEmptyDevelopmentWorkspace(
@@ -110,6 +115,18 @@ export async function seedDevelopmentData(connectionString: string) {
           },
         ])
         .onConflictDoNothing();
+      await transaction
+        .insert(schema.constraintDefinitions)
+        .values({
+          id: ids.atlasGuardrail,
+          metricDefinitionId: ids.atlasMetric,
+          name: "LCP ceiling",
+          unit: "s",
+          operator: "less_than_or_equal",
+          threshold: "3",
+          hard: true,
+        })
+        .onConflictDoNothing();
 
       await transaction
         .insert(schema.runs)
@@ -184,6 +201,57 @@ export async function seedDevelopmentData(connectionString: string) {
           },
         ])
         .onConflictDoNothing();
+      await transaction
+        .insert(schema.observations)
+        .values([
+          {
+            id: ids.atlasBefore,
+            runId: ids.atlasRun,
+            experimentId: ids.atlasExperiment,
+            kind: "before",
+            metricDefinitionId: ids.atlasMetric,
+            amount: "2.4",
+            unit: "s",
+            sampleCount: 5,
+            recordedAt: new Date("2026-01-04T08:11:00.000Z"),
+          },
+          {
+            id: ids.atlasAfter,
+            runId: ids.atlasRun,
+            experimentId: ids.atlasExperiment,
+            kind: "after",
+            metricDefinitionId: ids.atlasMetric,
+            amount: "2.2",
+            unit: "s",
+            sampleCount: 5,
+            recordedAt: new Date("2026-01-04T08:14:00.000Z"),
+          },
+          {
+            id: ids.atlasGuardrailObservation,
+            runId: ids.atlasRun,
+            experimentId: ids.atlasExperiment,
+            kind: "guardrail",
+            constraintDefinitionId: ids.atlasGuardrail,
+            amount: "2.2",
+            unit: "s",
+            sampleCount: 5,
+            recordedAt: new Date("2026-01-04T08:14:30.000Z"),
+          },
+        ])
+        .onConflictDoNothing();
+      await transaction
+        .insert(schema.decisions)
+        .values({
+          id: ids.atlasDecision,
+          experimentId: ids.atlasExperiment,
+          policyVersion: "manual-experiment-v1",
+          automatedDecision: "kept",
+          reason: "improved",
+          finalDecision: "kept",
+          calculatedImprovement: "0.2",
+          createdAt: new Date("2026-01-04T08:15:00.000Z"),
+        })
+        .onConflictDoNothing();
 
       await transaction
         .insert(schema.learnings)
@@ -204,6 +272,21 @@ export async function seedDevelopmentData(connectionString: string) {
             confidence: 0.62,
             createdAt: new Date("2026-01-04T08:17:00.000Z"),
             updatedAt: new Date("2026-01-04T08:17:00.000Z"),
+          },
+        ])
+        .onConflictDoNothing();
+      await transaction
+        .insert(schema.learningEvidence)
+        .values([
+          {
+            learningId: ids.atlasLearning,
+            experimentId: ids.atlasExperiment,
+            role: "supports",
+          },
+          {
+            learningId: ids.atlasLearningTwo,
+            experimentId: ids.atlasExperiment,
+            role: "supports",
           },
         ])
         .onConflictDoNothing();
