@@ -54,6 +54,15 @@ The initial architecture is informed by these systems:
   between datasets, evaluation logic, model/system execution, and result
   records. Socrates treats a metric definition as versioned configuration, not
   display metadata.
+- [SWE-ReX](https://github.com/SWE-agent/swe-rex) exposes one runtime interface
+  across local containers and remote execution backends. Its separation of
+  agent logic from runtime infrastructure supports Socrates' provider-neutral
+  runner boundary.
+- [OpenHands Runtime](https://docs.openhands.dev/openhands/usage/architecture/runtime)
+  uses a client-server boundary around disposable Docker environments and
+  content-derived runtime images. Its documented warnings around network
+  access, credentials, and host mounts reinforce that a container alone is not
+  a complete security policy.
 
 The product implication is that the experiment ledger, measurement contract,
 budget enforcement, and runner isolation are foundational. Agent prompts and
@@ -442,7 +451,7 @@ The web/API process must never execute arbitrary experiment commands.
 
 ## 17. Delivery phases
 
-### Phase 0 — product skeleton (current)
+### Phase 0 — product skeleton (complete)
 
 - monorepo and shared tooling
 - design tokens and UI primitives
@@ -452,7 +461,7 @@ The web/API process must never execute arbitrary experiment commands.
 - realistic read-only fixture data
 - no autonomous execution
 
-### Phase 1 — measured manual experiments
+### Phase 1 — measured manual experiments (complete)
 
 - implementation plan:
   [`docs/plans/phase-1-measured-experiments.md`](docs/plans/phase-1-measured-experiments.md)
@@ -465,12 +474,20 @@ The web/API process must never execute arbitrary experiment commands.
 Phase 1 remains manual by design. Its acceptance gate explicitly forbids runner,
 shell executor, and model-provider dependencies.
 
-### Phase 2 — local runner
+### Phase 2 — local runner (planned)
 
+- implementation plan:
+  [`docs/plans/phase-2-runner-foundations.md`](docs/plans/phase-2-runner-foundations.md)
+- research record:
+  [`docs/research/execution-platforms.md`](docs/research/execution-platforms.md)
 - task protocol and runner registration
 - sandboxed local execution
 - logs, artifacts, cancellation, and budgets
 - deterministic decision policy
+
+Phase 2 is split into a control-plane foundation and an explicitly enabled
+sandbox adapter. It does not introduce an LLM provider, hypothesis generator,
+or autonomous research loop. Host-process shell execution is prohibited.
 
 ### Phase 3 — research loop
 
@@ -868,6 +885,90 @@ missing table, missing row, or different version fails startup rather than
 serving against an unknown schema. This compatibility marker complements
 Drizzle's migration history: migration hashes track application, while the
 marker is the runtime contract.
+
+### ADR-030: Phase 2 builds execution infrastructure, not autonomy
+
+The first runner phase accepts only an immutable, operator-authored experiment
+task. It may prepare a source snapshot, execute its declared action and
+measurement steps, and return evidence. It cannot propose a hypothesis, mutate
+the metric protocol, create the next experiment, or decide whether to continue
+a run.
+
+The control-plane foundation ships before the executable adapter. Runner tables,
+task contracts, leases, event ingestion, cancellation state, and artifact
+metadata can be exercised with a deterministic fake adapter. Enabling the OCI
+sandbox requires a separate feature flag and the acceptance evidence in the
+Phase 2 plan. This preserves the boundary between measured execution and the
+Phase 3 research loop.
+
+### ADR-031: Runners pull fenced leases from the control plane
+
+A runner registers its kind, protocol versions, sandbox backend, and bounded
+capabilities. Registration does not make the runner eligible for every task;
+the scheduler matches an exact capability set and compatible protocol version.
+Runners establish outbound authenticated connections and pull work. The control
+plane never needs an inbound connection to a developer machine.
+
+Claiming a queued task atomically creates an attempt with a monotonically
+increasing fencing token and a short lease. Heartbeats renew only the current
+fence. Every event, completion, and artifact commit carries the task ID,
+attempt ID, and fence. The API rejects stale-fence writes, duplicate event IDs,
+and non-contiguous sequences. An expired attempt remains immutable evidence;
+retry creates a new attempt and is permitted only for a task whose action
+contract is explicitly retry-safe.
+
+Task dispatch uses a transactional outbox. The experiment transition and queued
+task become durable in one database transaction; a dispatcher publishes only
+committed outbox records. Delivery is at least once, while fenced claims and
+idempotent ingestion make effects exactly-once from the domain's perspective.
+
+### ADR-032: The first local runner is an OCI sandbox, never a host shell
+
+Phase 2 supports a Linux OCI-compatible sandbox backend. Windows and macOS
+development may reach it through Docker Desktop or an equivalent Linux VM, but
+Socrates does not execute experiment commands directly through Node
+`child_process` on the host.
+
+Each attempt receives a fresh container, a read-only root filesystem, a
+disposable copy-on-write workspace, a non-root user, dropped Linux
+capabilities, `no-new-privileges`, a seccomp profile, bounded PIDs, CPU, memory,
+disk, and wall time, and no host Docker socket. Network is disabled by default.
+Any allowlisted egress is a task capability enforced outside the container and
+recorded in provenance. Host bind mounts, privileged mode, host namespaces, and
+unscoped environment inheritance are forbidden.
+
+Source and runtime images are addressed by immutable digests. Cleanup is
+idempotent and runs after success, failure, cancellation, runner restart, and
+lease expiry. Sandbox escape resistance must be tested adversarially, but the
+architecture does not claim that containerization alone is a security boundary.
+
+### ADR-033: Cancellation and budgets are externally enforced facts
+
+Cancellation is a durable control-plane request, not merely a signal sent to a
+process. A runner that observes it first requests graceful termination, then
+hard-stops the sandbox after a bounded grace period. Whichever terminal result
+wins the fenced compare-and-set is final; later events are rejected. A task
+never transitions from one terminal state to another.
+
+Wall time, CPU, memory, PIDs, writable bytes, log bytes, artifact bytes, command
+count, and permitted egress are explicit task limits. The runner and sandbox
+backend enforce them independently of the action being executed. Crossing a
+hard limit produces a typed budget or policy failure and cleanup. Partial logs
+and artifacts remain attributable to the failed attempt.
+
+### ADR-034: Logs and artifacts are bounded evidence, not trusted output
+
+Runner output is untrusted. Logs are emitted as ordered, size-bounded chunks,
+redacted before persistence, escaped on render, and never interpreted as
+control messages. Redaction is defense in depth; task credentials remain
+short-lived, capability-scoped, and absent unless required.
+
+Binary outputs do not enter PostgreSQL. The runner uploads to a content-addressed
+artifact store and then commits metadata containing digest, size, media type,
+logical role, task attempt, and retention class. Phase 2 may use a local
+filesystem implementation behind the artifact-store port; contracts must not
+expose filesystem paths. The control plane accepts metadata only after digest
+and size verification.
 
 ## 19. Explicit non-goals for the first commit
 
