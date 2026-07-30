@@ -17,6 +17,11 @@ export type ExecutedCommand = CommandResponse & {
   replayed: boolean;
 };
 
+export type CommittedCommand = {
+  commandName: string;
+  response: CommandResponse;
+};
+
 function canonicalize(value: unknown): string {
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
@@ -38,9 +43,14 @@ function requestHash(body: unknown): string {
 }
 
 export class IdempotentCommandExecutor {
-  constructor(private readonly persistence: Persistence) {}
+  constructor(
+    private readonly persistence: Persistence,
+    private readonly onCommitted?: (
+      command: CommittedCommand,
+    ) => void | Promise<void>,
+  ) {}
 
-  execute(
+  async execute(
     input: {
       workspaceId: string;
       key: string;
@@ -49,7 +59,7 @@ export class IdempotentCommandExecutor {
     },
     work: (repositories: TransactionRepositories) => Promise<CommandResponse>,
   ): Promise<ExecutedCommand> {
-    return this.persistence.transaction(async (repositories) => {
+    const result = await this.persistence.transaction(async (repositories) => {
       const claimInput = {
         workspaceId: input.workspaceId,
         key: input.key,
@@ -83,5 +93,18 @@ export class IdempotentCommandExecutor {
 
       return { ...response, replayed: false };
     });
+
+    if (!result.replayed && this.onCommitted) {
+      try {
+        await this.onCommitted({
+          commandName: input.commandName,
+          response: { status: result.status, body: result.body },
+        });
+      } catch (error) {
+        console.error("Post-commit notification failed.", error);
+      }
+    }
+
+    return result;
   }
 }

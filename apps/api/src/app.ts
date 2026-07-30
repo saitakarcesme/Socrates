@@ -1,4 +1,8 @@
-import type { Persistence, ReadRepository } from "@socrates/database";
+import type {
+  JsonValue,
+  Persistence,
+  ReadRepository,
+} from "@socrates/database";
 import {
   ExperimentTransitionError,
   MetricProtocolError,
@@ -16,6 +20,7 @@ import { CommandError } from "./application/errors";
 import { IdempotentCommandExecutor } from "./application/idempotency";
 import { createCommandRoutes } from "./modules/commands/routes";
 import { createReadRoutes } from "./modules/reads/routes";
+import { RunEventNotifier } from "./realtime/run-event-notifier";
 
 export const developmentWorkspaceId = "019c1170-8b7a-7a60-b7f8-f35c85d75000";
 
@@ -25,11 +30,25 @@ export type AppOptions = {
   workspaceId?: string;
 };
 
+function isJsonObject(
+  value: JsonValue,
+): value is { readonly [key: string]: JsonValue } {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 export function createApp(options: AppOptions = {}) {
   const app = new Hono();
   const reads = options.persistence?.reads ?? options.reads ?? null;
+  const runEventNotifier = options.persistence ? new RunEventNotifier() : null;
   const commandExecutor = options.persistence
-    ? new IdempotentCommandExecutor(options.persistence)
+    ? new IdempotentCommandExecutor(options.persistence, ({ response }) => {
+        const body = response.body;
+        if (!isJsonObject(body)) return;
+        const data = body["data"];
+        if (!data || !isJsonObject(data)) return;
+        const runId = data["runId"];
+        if (typeof runId === "string") runEventNotifier?.publish(runId);
+      })
     : null;
   const projectCommands = commandExecutor
     ? new ProjectCommandService(commandExecutor)
@@ -68,6 +87,7 @@ export function createApp(options: AppOptions = {}) {
     "/v1",
     createReadRoutes({
       reads,
+      runEventNotifier,
       workspaceId: options.workspaceId ?? developmentWorkspaceId,
     }),
   );

@@ -18,7 +18,18 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
 });
 
 async function shutdown() {
+  const forcedShutdown = setTimeout(() => {
+    if (
+      "closeAllConnections" in server &&
+      typeof server.closeAllConnections === "function"
+    ) {
+      server.closeAllConnections();
+    }
+  }, 5_000);
+  forcedShutdown.unref();
+
   server.close(async () => {
+    clearTimeout(forcedShutdown);
     await persistence?.close();
     process.exit(0);
   });

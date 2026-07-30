@@ -11,6 +11,7 @@ import { Hono } from "hono";
 
 import { decodeCursor, encodeCursor } from "../../http/cursor";
 import { apiError, validationHook } from "../../http/errors";
+import type { RunEventNotifier } from "../../realtime/run-event-notifier";
 import {
   mapExperiment,
   mapLearning,
@@ -19,9 +20,16 @@ import {
   mapRun,
   mapRunEvent,
 } from "./mappers";
+import {
+  acceptsEventStream,
+  InvalidEventCursorError,
+  resolveEventCursor,
+  streamRunEvents,
+} from "./run-event-stream";
 
 export type ReadRoutesOptions = {
   reads: ReadRepository | null;
+  runEventNotifier?: RunEventNotifier | null;
   workspaceId: string;
 };
 
@@ -208,6 +216,50 @@ export function createReadRoutes(options: ReadRoutesOptions) {
     sValidator("query", eventCursorQuerySchema, validationHook),
     async (context) => {
       const query = context.req.valid("query");
+      if (acceptsEventStream(context.req.header("accept"))) {
+        if (!options.runEventNotifier) {
+          return apiError(
+            context,
+            503,
+            "service_unavailable",
+            "The realtime dependency is not configured.",
+          );
+        }
+
+        const runId = context.req.valid("param").runId;
+        const run = await reads.getRun(options.workspaceId, runId);
+        if (!run) {
+          return apiError(
+            context,
+            404,
+            "not_found",
+            "The requested run does not exist.",
+          );
+        }
+
+        let after: number;
+        try {
+          after = resolveEventCursor(
+            query.after,
+            context.req.header("last-event-id"),
+          );
+        } catch (error) {
+          if (error instanceof InvalidEventCursorError) {
+            return apiError(context, 400, "validation_failed", error.message);
+          }
+          throw error;
+        }
+
+        return streamRunEvents({
+          context,
+          reads,
+          notifier: options.runEventNotifier,
+          workspaceId: options.workspaceId,
+          runId,
+          after,
+        });
+      }
+
       const page = await reads.listRunEvents({
         workspaceId: options.workspaceId,
         runId: context.req.valid("param").runId,

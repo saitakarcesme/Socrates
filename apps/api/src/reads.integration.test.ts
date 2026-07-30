@@ -1,4 +1,5 @@
 import {
+  apiErrorSchema,
   experimentListResponseSchema,
   experimentResponseSchema,
   learningListResponseSchema,
@@ -33,7 +34,7 @@ integration("read API with PostgreSQL", () => {
     await seedDevelopmentData(connectionString);
     persistence = createPersistence({ connectionString });
     app = createApp({
-      reads: persistence.reads,
+      persistence,
       workspaceId: developmentSeedIds.workspace,
     });
   });
@@ -133,6 +134,61 @@ integration("read API with PostgreSQL", () => {
     expect(learningPage.page.nextCursor).toEqual(expect.any(String));
     expect(eventPage.data.map((event) => event.sequence)).toEqual([2]);
     expect(eventPage.page.nextCursor).toBeNull();
+  });
+
+  it("replays SSE from Last-Event-ID using durable event sequences", async () => {
+    const controller = new AbortController();
+    const response = await app.request(
+      `/v1/runs/${developmentSeedIds.atlasRun}/events?after=2`,
+      {
+        headers: {
+          accept: "text/event-stream",
+          "last-event-id": "1",
+        },
+        signal: controller.signal,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+
+    const reader = response.body?.getReader();
+    expect(reader).toBeDefined();
+    const decoder = new TextDecoder();
+    let received = "";
+
+    for (
+      let attempt = 0;
+      attempt < 5 && !received.includes("\n\n");
+      attempt++
+    ) {
+      const chunk = await reader?.read();
+      if (chunk?.value) received += decoder.decode(chunk.value);
+    }
+
+    expect(received).toContain("event: run-event");
+    expect(received).toContain("id: 2");
+    expect(received).not.toContain("id: 1");
+
+    controller.abort();
+    await reader?.cancel();
+  });
+
+  it("rejects an invalid SSE reconnect cursor before streaming", async () => {
+    const response = await app.request(
+      `/v1/runs/${developmentSeedIds.atlasRun}/events`,
+      {
+        headers: {
+          accept: "text/event-stream",
+          "last-event-id": "-1",
+        },
+      },
+    );
+
+    expect(response.status).toBe(400);
+    expect(apiErrorSchema.parse(await response.json()).error.code).toBe(
+      "validation_failed",
+    );
   });
 
   it("keeps every read inside the configured workspace boundary", async () => {

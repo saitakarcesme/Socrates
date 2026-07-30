@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { entityIdSchema, positiveSafeIntegerSchema } from "./common";
+import {
+  entityIdSchema,
+  nonNegativeSafeIntegerSchema,
+  positiveSafeIntegerSchema,
+} from "./common";
 
 export const cursorQuerySchema = z
   .object({
@@ -12,7 +16,7 @@ export type CursorQuery = z.infer<typeof cursorQuerySchema>;
 
 export const eventCursorQuerySchema = z
   .object({
-    after: z.coerce.number().int().min(0).default(0),
+    after: z.coerce.number().pipe(nonNegativeSafeIntegerSchema).default(0),
     limit: z.coerce.number().int().min(1).max(500).default(100),
   })
   .strict();

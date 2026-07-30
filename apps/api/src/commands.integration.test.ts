@@ -191,6 +191,19 @@ integration("command API with PostgreSQL", () => {
       status: "draft",
     });
 
+    const streamController = new AbortController();
+    const streamResponse = await app.request(
+      `/v1/runs/${createdRun.data.runId}/events`,
+      {
+        headers: {
+          accept: "text/event-stream",
+          "last-event-id": "1",
+        },
+        signal: streamController.signal,
+      },
+    );
+    const streamReader = streamResponse.body?.getReader();
+
     const baselineResponse = await command(
       `/runs/${createdRun.data.runId}/baseline`,
       "baseline",
@@ -203,6 +216,14 @@ integration("command API with PostgreSQL", () => {
     expect(
       runMutationResponseSchema.parse(await baselineResponse.json()).data,
     ).toMatchObject({ version: 1, status: "draft" });
+
+    const liveChunk = await streamReader?.read();
+    const liveEvent = new TextDecoder().decode(liveChunk?.value);
+    expect(liveEvent).toContain("event: run-event");
+    expect(liveEvent).toContain("id: 2");
+    expect(liveEvent).toContain("run.baseline_recorded");
+    streamController.abort();
+    await streamReader?.cancel();
 
     const startRunResponse = await command(
       `/runs/${createdRun.data.runId}/start`,

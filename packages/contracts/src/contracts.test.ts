@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalDecimalSchema,
   createProjectCommandSchema,
+  eventCursorQuerySchema,
   experimentTaskV1Schema,
   recordObservationCommandSchema,
 } from "./index";
@@ -130,5 +131,15 @@ describe("runner task contract", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+});
+
+describe("event cursor contract", () => {
+  it("rejects integers outside the JavaScript safe range", () => {
+    expect(
+      eventCursorQuerySchema.safeParse({
+        after: "9007199254740992",
+      }).success,
+    ).toBe(false);
   });
 });

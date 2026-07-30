@@ -676,6 +676,30 @@ while proposing an experiment is a run command. This keeps lock ownership and
 optimistic concurrency visible at the module boundary and prevents a single
 control-plane service or route registry from accumulating every lifecycle.
 
+### ADR-020: One durable run-event feed, two representations
+
+`GET /v1/runs/:runId/events` remains the canonical run-event resource. Normal
+HTTP requests receive the existing paginated JSON representation. Requests
+whose `Accept` header includes `text/event-stream` receive an SSE feed, avoiding
+a second URL with different cursor semantics.
+
+Each SSE message uses the durable run-local sequence as `id`, `run-event` as
+the event name, and the public run-event resource JSON as data. On reconnect,
+a valid `Last-Event-ID` takes precedence over the `after` query parameter.
+Invalid, negative, or unsafe cursor values fail before streaming with the
+normal validation error envelope. The server first drains every committed
+event after the cursor, then waits on a process-local notifier with periodic
+database reconciliation. Notifications only occur after the idempotent command
+transaction commits and are latency hints, never event payloads or truth.
+
+Heartbeat comments are emitted on idle connections without advancing the
+cursor. Writes respect stream backpressure. Aborted clients release notifier
+subscriptions and timers. A slow or disconnected client can always reconnect
+from its last durable event ID; the server does not maintain per-client event
+buffers. Process shutdown stops accepting new requests and gives active
+connections a bounded drain window before closing them, so SSE clients cannot
+block deployment indefinitely.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
