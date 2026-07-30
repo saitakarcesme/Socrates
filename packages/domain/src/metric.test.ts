@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyDecisionOverride,
   decideExperiment,
+  DecisionOverrideError,
   evaluateConstraint,
   MetricProtocolError,
   type DecisionInput,
@@ -122,6 +124,44 @@ describe("decideExperiment", () => {
       expect(error).toBeInstanceOf(MetricProtocolError);
       expect((error as MetricProtocolError).code).toBe(expectedCode);
     }
+  });
+});
+
+describe("applyDecisionOverride", () => {
+  it("preserves a distinct final decision and its reason", () => {
+    expect(
+      applyDecisionOverride(
+        { decision: "kept", improvement: "0.2", reason: "improved" },
+        {
+          decision: "discarded",
+          reason: "The improvement does not justify the operational cost.",
+        },
+      ),
+    ).toEqual({
+      finalDecision: "discarded",
+      overrideReason: "The improvement does not justify the operational cost.",
+    });
+  });
+
+  it.each(["guardrail_failed", "invalid_measurement"] as const)(
+    "rejects a kept result when evidence is %s",
+    (reason) => {
+      expect(() =>
+        applyDecisionOverride(
+          { decision: "discarded", improvement: "0.2", reason },
+          { decision: "kept", reason: "Accept anyway." },
+        ),
+      ).toThrow(DecisionOverrideError);
+    },
+  );
+
+  it("does not record a reason when the final decision is unchanged", () => {
+    expect(
+      applyDecisionOverride(
+        { decision: "inconclusive", improvement: "0", reason: "within_noise" },
+        { decision: "inconclusive", reason: "Operator agrees." },
+      ),
+    ).toEqual({ finalDecision: "inconclusive", overrideReason: null });
   });
 });
 

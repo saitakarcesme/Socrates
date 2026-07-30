@@ -72,7 +72,9 @@ describe("DecimalAmount properties", () => {
           canonicalDecimal(rightParts.coefficient, rightParts.scale),
         );
 
-        expect(left.compare(right)).toBe(-right.compare(left));
+        const comparison = left.compare(right);
+        const reverse = right.compare(left);
+        expect(comparison).toBe(reverse === 0 ? 0 : -reverse);
       }),
       { numRuns: 500 },
     );

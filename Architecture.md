@@ -818,6 +818,25 @@ version, and treats guardrails as a full replacement for the new version.
 Revision is explicit and confirmed because it changes the protocol used by all
 subsequently created runs.
 
+### ADR-027: Human decision overrides cannot bypass evidence validity
+
+The decision command always evaluates the deterministic policy first and stores
+its decision, reason, and calculated improvement. An operator may supply a
+different final decision only with a non-empty reason; the automated result
+remains immutable evidence beside the final result.
+
+Overrides express accountable judgment about valid evidence, not permission to
+erase safety constraints. A final `kept` decision is rejected when the
+automated reason is `guardrail_failed` or `invalid_measurement`. Operators may
+still choose `discarded` or `inconclusive`, and may override threshold- or
+noise-based results in either direction with a reason. The API owns this
+invariant so every client and future runner receives the same protection.
+
+The experiment UI labels override controls as optional, explains that policy
+evaluation still runs, and requires both a final decision and reason together.
+After commitment, the evidence panel renders automated and final decisions
+separately whenever they differ.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

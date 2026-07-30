@@ -8,8 +8,10 @@ import type {
 } from "@socrates/contracts";
 import type { TransactionRepositories } from "@socrates/database";
 import {
+  applyDecisionOverride,
   assertExperimentTransition,
   assertMetricUnit,
+  DecisionOverrideError,
   decideExperiment,
   evaluateConstraint,
 } from "@socrates/domain";
@@ -266,11 +268,16 @@ export class ExperimentCommandService {
           guardrailsPassed,
           measurementValid,
         });
-        const finalDecision = command.override?.decision ?? automated.decision;
-        const overrideReason =
-          finalDecision === automated.decision
-            ? null
-            : (command.override?.reason ?? null);
+        let appliedDecision;
+        try {
+          appliedDecision = applyDecisionOverride(automated, command.override);
+        } catch (error) {
+          if (error instanceof DecisionOverrideError) {
+            invalidTransition(error.message);
+          }
+          throw error;
+        }
+        const { finalDecision, overrideReason } = appliedDecision;
         assertExperimentTransition("evaluating", finalDecision);
 
         await repositories.commands.recordDecision({

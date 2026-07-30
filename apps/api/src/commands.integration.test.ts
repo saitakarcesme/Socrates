@@ -1,6 +1,7 @@
 import {
   apiErrorSchema,
   experimentMutationResponseSchema,
+  experimentResponseSchema,
   learningMutationResponseSchema,
   observationMutationResponseSchema,
   projectMutationResponseSchema,
@@ -344,7 +345,7 @@ integration("command API with PostgreSQL", () => {
         kind: "guardrail",
         constraintDefinitionId:
           activeMetric.data.guardrails[0]?.constraintDefinitionId,
-        value: { amount: "2.2", unit: "s" },
+        value: { amount: "3.2", unit: "s" },
         sampleCount: 3,
       },
     );
@@ -368,15 +369,49 @@ integration("command API with PostgreSQL", () => {
       observationMutationResponseSchema.parse(await afterResponse.json()).data,
     ).toMatchObject({ version: 4, status: "measuring" });
 
+    const forbiddenOverrideResponse = await command(
+      `/experiments/${experiment.data.experimentId}/decision`,
+      "unsafe-override",
+      {
+        expectedVersion: 4,
+        override: {
+          decision: "kept",
+          reason: "Ignore the failed hard guardrail.",
+        },
+      },
+    );
+    expect(forbiddenOverrideResponse.status).toBe(409);
+    expect(
+      apiErrorSchema.parse(await forbiddenOverrideResponse.json()).error.code,
+    ).toBe("invalid_transition");
+
     const decisionResponse = await command(
       `/experiments/${experiment.data.experimentId}/decision`,
       "decision",
-      { expectedVersion: 4 },
+      {
+        expectedVersion: 4,
+        override: {
+          decision: "inconclusive",
+          reason: "The guardrail regression needs a controlled follow-up.",
+        },
+      },
     );
     expect(
       experimentMutationResponseSchema.parse(await decisionResponse.json())
         .data,
-    ).toMatchObject({ version: 5, status: "kept" });
+    ).toMatchObject({ version: 5, status: "inconclusive" });
+
+    const decidedExperiment = experimentResponseSchema.parse(
+      await (
+        await app.request(`/v1/experiments/${experiment.data.experimentId}`)
+      ).json(),
+    );
+    expect(decidedExperiment.data.decision).toMatchObject({
+      automatedDecision: "discarded",
+      reason: "guardrail_failed",
+      finalDecision: "inconclusive",
+      overrideReason: "The guardrail regression needs a controlled follow-up.",
+    });
 
     const learningResponse = await command(
       `/experiments/${experiment.data.experimentId}/learnings`,

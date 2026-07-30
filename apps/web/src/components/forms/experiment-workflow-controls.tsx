@@ -10,6 +10,7 @@ import {
   experimentLifecycleCommandSchema,
   recordObservationCommandSchema,
   type CreateLearningCommand,
+  type DecideExperimentCommand,
   type ExperimentDetailResource,
   type ExperimentLifecycleCommand,
   type ExperimentMutationResponse,
@@ -229,44 +230,125 @@ function DecideExperiment({
   ready: boolean;
 }) {
   const router = useRouter();
+  const [overrideEnabled, setOverrideEnabled] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const command = useCommandSubmission<
-    { expectedVersion: number },
+    DecideExperimentCommand,
     ExperimentMutationResponse
   >({
     onSuccess: () => router.refresh(),
     onVersionConflict: () => router.refresh(),
   });
 
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFieldErrors({});
+    command.clearError();
+    const form = new FormData(event.currentTarget);
+    const parsed = decideExperimentCommandSchema.safeParse({
+      expectedVersion: experiment.version,
+      ...(overrideEnabled
+        ? {
+            override: {
+              decision: String(form.get("override.decision") ?? ""),
+              reason: String(form.get("override.reason") ?? ""),
+            },
+          }
+        : {}),
+    });
+
+    if (!parsed.success) {
+      setFieldErrors(
+        parsed.error.issues.reduce<Record<string, string>>((result, issue) => {
+          const field = issue.path.join(".");
+          if (field && !result[field]) result[field] = issue.message;
+          return result;
+        }, {}),
+      );
+      return;
+    }
+
+    command.submit(parsed.data, (idempotencyKey) =>
+      createBrowserControlPlaneClient().decideExperiment(
+        experiment.id,
+        parsed.data,
+        idempotencyKey,
+      ),
+    );
+  }
+
   return (
-    <Panel className="flex flex-col justify-between gap-4 p-4 sm:flex-row sm:items-center">
-      <div>
-        <h2 className="text-sm font-semibold">Apply decision policy</h2>
-        <p className="mt-1 text-xs text-[var(--text-muted)]">
-          {ready
-            ? "Compare exact measurements, threshold, noise, and hard guardrails."
-            : "Before, after, and every hard guardrail measurement are required."}
-        </p>
+    <Panel className="p-4">
+      <form className="grid gap-4" noValidate onSubmit={submit}>
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+          <div>
+            <h2 className="text-sm font-semibold">Apply decision policy</h2>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              {ready
+                ? "Compare exact measurements, threshold, noise, and hard guardrails."
+                : "Before, after, and every hard guardrail measurement are required."}
+            </p>
+          </div>
+          <Button
+            disabled={!ready || command.pending}
+            type="submit"
+            variant="primary"
+          >
+            {command.pending ? "Evaluating…" : "Decide experiment"}
+          </Button>
+        </div>
+        <label className="flex items-start gap-2 border-t border-[var(--border)] pt-4 text-xs text-[var(--text-muted)]">
+          <input
+            checked={overrideEnabled}
+            className="mt-0.5 size-3.5 accent-white"
+            onChange={(event) => {
+              setOverrideEnabled(event.target.checked);
+              setFieldErrors({});
+              command.clearError();
+            }}
+            type="checkbox"
+          />
+          <span>
+            Set a manual final decision
+            <span className="mt-1 block text-[var(--text-subtle)]">
+              The deterministic result is still evaluated and preserved.
+            </span>
+          </span>
+        </label>
+        {overrideEnabled ? (
+          <div className="grid gap-4 border-l border-[var(--border-strong)] pl-4 sm:grid-cols-2">
+            <FormField
+              error={fieldErrors["override.decision"]}
+              htmlFor="override.decision"
+              label="Final decision"
+            >
+              <FormSelect
+                defaultValue="discarded"
+                id="override.decision"
+                name="override.decision"
+              >
+                <option value="kept">Kept</option>
+                <option value="discarded">Discarded</option>
+                <option value="inconclusive">Inconclusive</option>
+              </FormSelect>
+            </FormField>
+            <FormField
+              error={fieldErrors["override.reason"]}
+              htmlFor="override.reason"
+              label="Override reason"
+            >
+              <FormTextarea
+                id="override.reason"
+                maxLength={2_000}
+                name="override.reason"
+                placeholder="Explain why accountable judgment differs from policy."
+                required
+              />
+            </FormField>
+          </div>
+        ) : null}
         <Feedback error={command.error} />
-      </div>
-      <Button
-        disabled={!ready || command.pending}
-        onClick={() => {
-          const payload = decideExperimentCommandSchema.parse({
-            expectedVersion: experiment.version,
-          });
-          command.submit(payload, (idempotencyKey) =>
-            createBrowserControlPlaneClient().decideExperiment(
-              experiment.id,
-              payload,
-              idempotencyKey,
-            ),
-          );
-        }}
-        type="button"
-        variant="primary"
-      >
-        {command.pending ? "Evaluating…" : "Decide experiment"}
-      </Button>
+      </form>
     </Panel>
   );
 }

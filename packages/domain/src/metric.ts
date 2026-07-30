@@ -38,6 +38,11 @@ export type DecisionResult = {
   reason: DecisionReason;
 };
 
+export type AppliedDecision = {
+  finalDecision: ExperimentDecision;
+  overrideReason: string | null;
+};
+
 export class MetricProtocolError extends Error {
   constructor(
     readonly code:
@@ -49,6 +54,39 @@ export class MetricProtocolError extends Error {
     super(message);
     this.name = "MetricProtocolError";
   }
+}
+
+export class DecisionOverrideError extends Error {
+  constructor(
+    readonly code: "unsafe_kept_override",
+    message: string,
+  ) {
+    super(message);
+    this.name = "DecisionOverrideError";
+  }
+}
+
+export function applyDecisionOverride(
+  automated: DecisionResult,
+  override?: { decision: ExperimentDecision; reason: string },
+): AppliedDecision {
+  const finalDecision = override?.decision ?? automated.decision;
+
+  if (
+    finalDecision === "kept" &&
+    ["guardrail_failed", "invalid_measurement"].includes(automated.reason)
+  ) {
+    throw new DecisionOverrideError(
+      "unsafe_kept_override",
+      "Invalid or guardrail-failing evidence cannot be kept.",
+    );
+  }
+
+  return {
+    finalDecision,
+    overrideReason:
+      finalDecision === automated.decision ? null : (override?.reason ?? null),
+  };
 }
 
 function assertProtocolValue(

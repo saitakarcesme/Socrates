@@ -159,7 +159,23 @@ export default async function ExperimentPage({ params }: ExperimentPageProps) {
               <div className="grid gap-px bg-[var(--border)] sm:grid-cols-2">
                 <div className="bg-[var(--surface)] p-4">
                   <div className="text-[10px] uppercase tracking-[0.08em] text-[var(--text-subtle)]">
-                    Result
+                    Automated
+                  </div>
+                  <div className="mt-2 font-mono text-xs">
+                    {experiment.decision?.automatedDecision ?? "Pending"}
+                  </div>
+                </div>
+                <div className="bg-[var(--surface)] p-4">
+                  <div className="text-[10px] uppercase tracking-[0.08em] text-[var(--text-subtle)]">
+                    Policy reason
+                  </div>
+                  <div className="mt-2 font-mono text-xs">
+                    {experiment.decision?.reason ?? "Awaiting measurement"}
+                  </div>
+                </div>
+                <div className="bg-[var(--surface)] p-4">
+                  <div className="text-[10px] uppercase tracking-[0.08em] text-[var(--text-subtle)]">
+                    Final
                   </div>
                   <div className="mt-2 font-mono text-xs">
                     {experiment.decision?.finalDecision ?? "Pending"}
@@ -167,12 +183,10 @@ export default async function ExperimentPage({ params }: ExperimentPageProps) {
                 </div>
                 <div className="bg-[var(--surface)] p-4">
                   <div className="text-[10px] uppercase tracking-[0.08em] text-[var(--text-subtle)]">
-                    Reason
+                    Override reason
                   </div>
-                  <div className="mt-2 font-mono text-xs">
-                    {experiment.decision?.overrideReason ??
-                      experiment.decision?.reason ??
-                      "Awaiting measurement"}
+                  <div className="mt-2 text-xs leading-5">
+                    {experiment.decision?.overrideReason ?? "Not overridden"}
                   </div>
                 </div>
               </div>

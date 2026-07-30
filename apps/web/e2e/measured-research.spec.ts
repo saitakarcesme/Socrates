@@ -79,8 +79,26 @@ test("completes a measured project-to-learning journey", async ({ page }) => {
     page.getByRole("heading", { name: "Record guardrail · Error rate" }),
   ).toHaveCount(0);
 
+  const overrideReason =
+    "The latency gain does not justify the operational complexity.";
+  await page.getByLabel("Set a manual final decision").check();
+  await page
+    .getByLabel("Final decision", { exact: true })
+    .selectOption("discarded");
+  await page.getByLabel("Override reason").fill(overrideReason);
   await page.getByRole("button", { name: "Decide experiment" }).click();
-  await expect(page.getByText("kept", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("kept", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("discarded", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(page.getByText(overrideReason, { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth,
+    ),
+  ).toBe(false);
+  await page.setViewportSize({ width: 1280, height: 720 });
 
   const learning =
     "Request-scoped normalization caching reduced p95 latency by 10 ms.";
