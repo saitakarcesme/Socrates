@@ -172,6 +172,13 @@ export function createControlPlaneClient(options: ControlPlaneClientOptions) {
         }`,
         learningListResponseSchema,
       ),
+    listWorkspaceLearnings: (cursor?: string) =>
+      request(
+        `/v1/learnings?limit=100${
+          cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""
+        }`,
+        learningListResponseSchema,
+      ),
     listRunEvents: (runId: string, after = 0) =>
       request(
         `/v1/runs/${encodeURIComponent(runId)}/events?after=${after}&limit=500`,

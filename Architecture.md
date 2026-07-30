@@ -734,6 +734,21 @@ violation and is never rendered as trusted data. The development default is
 `http://127.0.0.1:3001`; deployed environments must set the internal API URL
 to their control-plane service.
 
+### ADR-023: Cross-project knowledge is a workspace projection
+
+The global Learnings surface reads `GET /v1/learnings`, a workspace-scoped,
+cursor-paginated projection. It does not fan out one request per project.
+Project-scoped knowledge remains available at
+`GET /v1/projects/:projectId/learnings` for project and run context. Both
+representations share the same learning resource and stable created-at cursor
+ordering.
+
+Workspace identity continues to come from the control-plane boundary in Phase
+1, never from a caller-supplied query parameter. The database query joins
+projects to enforce workspace isolation before pagination. Project names are
+resolved from the already required project summary projection in the web
+surface; the learning record remains normalized and carries only `projectId`.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

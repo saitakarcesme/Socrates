@@ -160,6 +160,12 @@ integration("read API with PostgreSQL", () => {
     const learningPage = learningListResponseSchema.parse(
       await learningResponse.json(),
     );
+    const workspaceLearningResponse = await app.request(
+      "/v1/learnings?limit=100",
+    );
+    const workspaceLearningPage = learningListResponseSchema.parse(
+      await workspaceLearningResponse.json(),
+    );
     const eventResponse = await app.request(
       `/v1/runs/${developmentSeedIds.atlasRun}/events?after=1`,
     );
@@ -169,6 +175,14 @@ integration("read API with PostgreSQL", () => {
 
     expect(learningPage.data).toHaveLength(1);
     expect(learningPage.page.nextCursor).toEqual(expect.any(String));
+    expect(
+      new Set(workspaceLearningPage.data.map((learning) => learning.projectId)),
+    ).toEqual(
+      new Set([
+        developmentSeedIds.atlasProject,
+        developmentSeedIds.meridianProject,
+      ]),
+    );
     expect(eventPage.data.map((event) => event.sequence)).toEqual([2]);
     expect(eventPage.page.nextCursor).toBeNull();
   });

@@ -24,6 +24,11 @@ export function mapProjectSummary(project: ProjectRead) {
     status: project.status,
     version: project.version,
     currentMetricDefinitionId: project.currentMetric.id,
+    currentMetric: {
+      name: project.currentMetric.name,
+      unit: project.currentMetric.unit,
+      direction: project.currentMetric.direction,
+    },
     createdAt: iso(project.createdAt),
     updatedAt: iso(project.updatedAt),
   };

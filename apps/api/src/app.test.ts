@@ -1,5 +1,5 @@
 import type { ReadRepository } from "@socrates/database";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createApp } from "./app";
 
@@ -15,6 +15,7 @@ const unreachableReads: ReadRepository = {
   listExperiments: async () => unexpectedRead(),
   getExperiment: async () => unexpectedRead(),
   listLearnings: async () => unexpectedRead(),
+  listWorkspaceLearnings: async () => unexpectedRead(),
   listRunEvents: async () => unexpectedRead(),
 };
 
@@ -109,6 +110,41 @@ describe("control-plane API", () => {
         code: "validation_failed",
         message: "The supplied cursor is invalid.",
       },
+    });
+  });
+
+  it("reads workspace knowledge without a project fan-out", async () => {
+    const listWorkspaceLearnings = vi.fn<
+      ReadRepository["listWorkspaceLearnings"]
+    >(async () => ({
+      items: [
+        {
+          id: "019c1170-8b7a-7a60-b7f8-f35c85d75001",
+          projectId: "019c1170-8b7a-7a60-b7f8-f35c85d75002",
+          statement: "A measured change improved the target metric.",
+          confidence: 0.9,
+          status: "active",
+          supersededLearningId: null,
+          createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      ],
+      nextCursor: null,
+    }));
+    const response = await createApp({
+      reads: { ...unreachableReads, listWorkspaceLearnings },
+      workspaceId: "019c1170-8b7a-7a60-b7f8-f35c85d75003",
+    }).request("/v1/learnings?limit=25");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      data: [{ confidence: 0.9, status: "active" }],
+      page: { nextCursor: null },
+    });
+    expect(listWorkspaceLearnings).toHaveBeenCalledWith({
+      workspaceId: "019c1170-8b7a-7a60-b7f8-f35c85d75003",
+      cursor: null,
+      limit: 25,
     });
   });
 

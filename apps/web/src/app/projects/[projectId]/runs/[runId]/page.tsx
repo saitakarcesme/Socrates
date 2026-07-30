@@ -6,57 +6,89 @@ import { Button, Metric, Panel, StatusBadge } from "@socrates/design-system";
 
 import { ExperimentTimeline } from "@/components/experiment-timeline";
 import { PageHeader } from "@/components/page-header";
+import { ControlPlaneError } from "@/lib/api/client";
 import {
-  getExperimentsForRun,
+  getExperiments,
+  getLearnings,
   getProject,
   getRun,
-  learnings,
-  runs,
-} from "@/lib/fixtures";
+} from "@/lib/api/queries";
+import {
+  formatDuration,
+  formatMetric,
+  selectBestMetric,
+} from "@/lib/metric-presentation";
 
 type RunPageProps = {
   params: Promise<{ projectId: string; runId: string }>;
 };
 
-export const dynamicParams = false;
+export const dynamic = "force-dynamic";
 
-export function generateStaticParams() {
-  return runs.map((run) => ({
-    projectId: run.projectId,
-    runId: run.id,
-  }));
+async function loadRun(projectId: string, runId: string) {
+  try {
+    const [project, run, experiments, learnings] = await Promise.all([
+      getProject(projectId),
+      getRun(runId),
+      getExperiments(runId),
+      getLearnings(projectId),
+    ]);
+
+    if (run.projectId !== projectId) {
+      notFound();
+    }
+
+    return { project, run, experiments, learnings };
+  } catch (error) {
+    if (error instanceof ControlPlaneError && error.status === 404) {
+      notFound();
+    }
+    throw error;
+  }
 }
 
 export async function generateMetadata({
   params,
 }: RunPageProps): Promise<Metadata> {
   const { projectId, runId } = await params;
-  const run = getRun(projectId, runId);
-
-  if (!run) {
-    return { title: "Run not found" };
-  }
+  const { run } = await loadRun(projectId, runId);
 
   return {
-    title: `Run ${run.number} · ${run.title}`,
-    description: run.description,
+    title: `Run ${run.sequence} · ${run.title}`,
+    description: run.objective,
   };
 }
 
 export default async function RunPage({ params }: RunPageProps) {
   const { projectId, runId } = await params;
-  const project = getProject(projectId);
-  const run = getRun(projectId, runId);
-
-  if (!project || !run) {
-    notFound();
-  }
-
-  const runExperiments = getExperimentsForRun(projectId, runId);
-  const projectLearnings = learnings
-    .filter((learning) => learning.project === project.name)
-    .slice(0, 3);
+  const { project, run, experiments, learnings } = await loadRun(
+    projectId,
+    runId,
+  );
   const runHref = `/projects/${projectId}/runs/${runId}`;
+  const latestAfter = experiments
+    .flatMap((experiment) =>
+      experiment.observations.filter(
+        (observation) => observation.kind === "after",
+      ),
+    )
+    .at(0)?.value;
+  const best = selectBestMetric(
+    run.baseline,
+    experiments,
+    project.currentMetric.direction,
+  );
+  const estimatedCost = experiments.reduce(
+    (total, experiment) => total + experiment.estimatedCostMinor,
+    0,
+  );
+  const budgetPercent =
+    run.budget.maximumCostMinor > 0
+      ? Math.min(
+          100,
+          Math.round((estimatedCost / run.budget.maximumCostMinor) * 100),
+        )
+      : 0;
 
   return (
     <>
@@ -84,18 +116,22 @@ export default async function RunPage({ params }: RunPageProps) {
             </Button>
           </div>
         }
-        description={run.description}
+        description={run.objective}
         eyebrow={
           <span className="flex items-center gap-2">
             {project.name} <span className="text-[var(--text-subtle)]">/</span>{" "}
-            Run {run.number}
+            Run {run.sequence}
             <StatusBadge
               tone={
                 run.status === "running"
                   ? "running"
-                  : run.status === "paused"
-                    ? "warning"
-                    : "success"
+                  : run.status === "failed" ||
+                      run.status === "cancelled" ||
+                      run.status === "budget_exhausted"
+                    ? "danger"
+                    : run.status === "completed"
+                      ? "success"
+                      : "neutral"
               }
             >
               {run.status}
@@ -111,32 +147,24 @@ export default async function RunPage({ params }: RunPageProps) {
             <div>
               <h2 className="text-sm font-semibold">Experiment timeline</h2>
               <p className="mt-1 text-xs text-[var(--text-muted)]">
-                {run.experiments} experiments · newest first
+                {experiments.length} experiments · newest first
               </p>
             </div>
-            <button
-              className="text-xs text-[var(--text-muted)] disabled:opacity-40"
-              disabled
-              title="Timeline filters are planned for Phase 1"
-              type="button"
-            >
-              Filter
-            </button>
           </div>
-          {runExperiments.length > 0 ? (
-            <ExperimentTimeline items={[...runExperiments]} runHref={runHref} />
+          {experiments.length > 0 ? (
+            <ExperimentTimeline items={experiments} runHref={runHref} />
           ) : (
             <Panel className="flex min-h-52 items-center justify-center p-8 text-center">
               <div className="max-w-sm">
                 <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--text-subtle)]">
-                  Historical run
+                  No experiments
                 </div>
                 <p className="mt-3 text-sm text-[var(--text)]">
-                  Experiment details are not included in this skeleton fixture.
+                  This run has no proposed experiments yet.
                 </p>
                 <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
-                  The route and run summary remain available to demonstrate the
-                  complete navigation model.
+                  Experiments will appear here as the control plane records
+                  hypotheses, observations, decisions, and learnings.
                 </p>
               </div>
             </Panel>
@@ -147,32 +175,35 @@ export default async function RunPage({ params }: RunPageProps) {
           <div className="grid grid-cols-2 border-b border-[var(--border)]">
             <div className="border-r border-[var(--border)] p-4">
               <Metric
-                detail={project.metric}
+                detail={project.currentMetric.name}
                 label="Current metric"
-                value={run.metric}
+                value={formatMetric(latestAfter ?? run.baseline)}
               />
             </div>
             <div className="p-4">
               <Metric
-                detail={`${project.change} overall`}
+                detail={project.currentMetric.direction}
                 label="Best result"
-                value={project.best}
+                value={formatMetric(best)}
               />
             </div>
           </div>
           <div className="grid grid-cols-2 border-b border-[var(--border)]">
             <div className="border-r border-[var(--border)] p-4">
               <Metric
-                detail="wall-clock"
+                detail="observed wall-clock"
                 label="Elapsed time"
-                value={run.time}
+                value={formatDuration(
+                  run.startedAt,
+                  run.completedAt ?? run.updatedAt,
+                )}
               />
             </div>
             <div className="p-4">
               <Metric
-                detail="consumed / limit"
+                detail="estimated minor units"
                 label="Budget"
-                value={run.budget}
+                value={`${estimatedCost} / ${run.budget.maximumCostMinor}`}
               />
             </div>
           </div>
@@ -181,14 +212,20 @@ export default async function RunPage({ params }: RunPageProps) {
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-xs font-medium">Budget usage</h3>
               <span className="font-mono text-[10px] text-[var(--text-muted)]">
-                40%
+                {budgetPercent}%
               </span>
             </div>
             <div className="h-1 overflow-hidden rounded-[2px] bg-neutral-900">
-              <div className="h-full w-[40%] bg-neutral-400" />
+              <div
+                className="h-full bg-neutral-400"
+                style={{ width: `${budgetPercent}%` }}
+              />
             </div>
             <div className="mt-3 flex justify-between font-mono text-[10px] text-[var(--text-subtle)]">
-              <span>{run.experiments} experiments</span>
+              <span>
+                {experiments.length} / {run.budget.maximumExperiments}{" "}
+                experiments
+              </span>
               <span>{run.status}</span>
             </div>
           </div>
@@ -197,36 +234,29 @@ export default async function RunPage({ params }: RunPageProps) {
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-xs font-medium">Knowledge</h3>
               <span className="font-mono text-[10px] text-[var(--text-subtle)]">
-                {projectLearnings.length} items
+                {learnings.length} items
               </span>
             </div>
-            <div className="space-y-3">
-              {projectLearnings.map((learning) => (
-                <div className="flex gap-2.5" key={learning.title}>
-                  <span className="mt-1.5 size-1 shrink-0 rounded-full bg-neutral-500" />
-                  <p className="text-[11px] leading-[17px] text-[var(--text-muted)]">
-                    {learning.summary}
-                  </p>
-                  <span className="ml-auto font-mono text-[9px] text-[var(--text-subtle)]">
-                    {learning.confidence === "High" ? "0.9" : "0.7"}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {learnings.length > 0 ? (
+              <div className="space-y-3">
+                {learnings.slice(0, 3).map((learning) => (
+                  <div className="flex gap-2.5" key={learning.id}>
+                    <span className="mt-1.5 size-1 shrink-0 rounded-full bg-neutral-500" />
+                    <p className="text-[11px] leading-[17px] text-[var(--text-muted)]">
+                      {learning.statement}
+                    </p>
+                    <span className="ml-auto font-mono text-[9px] text-[var(--text-subtle)]">
+                      {learning.confidence.toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] leading-[17px] text-[var(--text-muted)]">
+                No durable knowledge has been recorded for this project.
+              </p>
+            )}
           </div>
-
-          <Panel className="m-4 p-3">
-            <div className="flex items-center gap-2">
-              <span className="size-1.5 rounded-full bg-blue-400" />
-              <span className="text-[11px] font-medium">Runner local-01</span>
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-2 font-mono text-[9px] text-[var(--text-subtle)]">
-              <span>CPU 38%</span>
-              <span>MEM 1.8 GB</span>
-              <span>Node 22.17</span>
-              <span>Lease 28s</span>
-            </div>
-          </Panel>
         </aside>
       </div>
     </>

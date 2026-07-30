@@ -530,6 +530,33 @@ export class PostgresReadRepository implements ReadRepository {
     cursor: CreatedCursor | null;
     limit: number;
   }): Promise<ReadPage<LearningRead>> {
+    return this.learningPage(
+      input.workspaceId,
+      eq(schema.learnings.projectId, input.projectId),
+      input.cursor,
+      input.limit,
+    );
+  }
+
+  async listWorkspaceLearnings(input: {
+    workspaceId: string;
+    cursor: CreatedCursor | null;
+    limit: number;
+  }): Promise<ReadPage<LearningRead>> {
+    return this.learningPage(
+      input.workspaceId,
+      undefined,
+      input.cursor,
+      input.limit,
+    );
+  }
+
+  private async learningPage(
+    workspaceId: string,
+    scope: SQL | undefined,
+    cursor: CreatedCursor | null,
+    limit: number,
+  ): Promise<ReadPage<LearningRead>> {
     const rows = await this.database
       .select({
         id: schema.learnings.id,
@@ -548,19 +575,19 @@ export class PostgresReadRepository implements ReadRepository {
       )
       .where(
         and(
-          eq(schema.projects.workspaceId, input.workspaceId),
-          eq(schema.learnings.projectId, input.projectId),
+          eq(schema.projects.workspaceId, workspaceId),
+          scope,
           createdBefore(
             schema.learnings.createdAt,
             schema.learnings.id,
-            input.cursor,
+            cursor,
           ),
         ),
       )
       .orderBy(desc(schema.learnings.createdAt), desc(schema.learnings.id))
-      .limit(input.limit + 1);
+      .limit(limit + 1);
 
-    return pageFromRows(rows, input.limit);
+    return pageFromRows(rows, limit);
   }
 
   async listRunEvents(input: {

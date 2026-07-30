@@ -101,6 +101,13 @@ export const projectResourceSchema = z
     status: projectStatusSchema,
     version: expectedVersionSchema,
     currentMetricDefinitionId: entityIdSchema,
+    currentMetric: z
+      .object({
+        name: z.string(),
+        unit: z.string(),
+        direction: metricDirectionSchema,
+      })
+      .strict(),
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
   })

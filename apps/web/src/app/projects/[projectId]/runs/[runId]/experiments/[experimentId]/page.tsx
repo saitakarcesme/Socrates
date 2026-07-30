@@ -1,11 +1,13 @@
-import { Check, Copy, ExternalLink, FileDiff } from "lucide-react";
+import { Check, FileDiff } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { Button, Metric, Panel, StatusBadge } from "@socrates/design-system";
+import { Metric, Panel, StatusBadge } from "@socrates/design-system";
 
 import { PageHeader } from "@/components/page-header";
-import { experiments, getExperiment, getRun, runs } from "@/lib/fixtures";
+import { ControlPlaneError } from "@/lib/api/client";
+import { getExperiment, getProject, getRun } from "@/lib/api/queries";
+import { formatDuration, formatMetric } from "@/lib/metric-presentation";
 
 type ExperimentPageProps = {
   params: Promise<{
@@ -15,29 +17,38 @@ type ExperimentPageProps = {
   }>;
 };
 
-export const dynamicParams = false;
+export const dynamic = "force-dynamic";
 
-export function generateStaticParams() {
-  return runs.flatMap((run) =>
-    experiments
-      .filter((experiment) => run.experimentIds.includes(experiment.id))
-      .map((experiment) => ({
-        projectId: run.projectId,
-        runId: run.id,
-        experimentId: experiment.id,
-      })),
-  );
+async function loadExperiment(
+  projectId: string,
+  runId: string,
+  experimentId: string,
+) {
+  try {
+    const [project, run, experiment] = await Promise.all([
+      getProject(projectId),
+      getRun(runId),
+      getExperiment(experimentId),
+    ]);
+
+    if (run.projectId !== projectId || experiment.runId !== runId) {
+      notFound();
+    }
+
+    return { project, run, experiment };
+  } catch (error) {
+    if (error instanceof ControlPlaneError && error.status === 404) {
+      notFound();
+    }
+    throw error;
+  }
 }
 
 export async function generateMetadata({
   params,
 }: ExperimentPageProps): Promise<Metadata> {
   const { projectId, runId, experimentId } = await params;
-  const experiment = getExperiment(projectId, runId, experimentId);
-
-  if (!experiment) {
-    return { title: "Experiment not found" };
-  }
+  const { experiment } = await loadExperiment(projectId, runId, experimentId);
 
   return {
     title: `Experiment ${experiment.sequence}`,
@@ -47,44 +58,41 @@ export async function generateMetadata({
 
 export default async function ExperimentPage({ params }: ExperimentPageProps) {
   const { projectId, runId, experimentId } = await params;
-  const run = getRun(projectId, runId);
-  const experiment = getExperiment(projectId, runId, experimentId);
-
-  if (!run || !experiment) {
-    notFound();
-  }
+  const { project, run, experiment } = await loadExperiment(
+    projectId,
+    runId,
+    experimentId,
+  );
+  const before = experiment.observations.find(
+    (observation) => observation.kind === "before",
+  );
+  const after = experiment.observations.find(
+    (observation) => observation.kind === "after",
+  );
+  const guardrailObservations = experiment.observations.filter(
+    (observation) => observation.kind === "guardrail",
+  );
+  const displayStatus = experiment.decision?.finalDecision ?? experiment.status;
 
   return (
     <>
       <PageHeader
-        actions={
-          <div className="flex gap-2">
-            <Button disabled title="Clipboard actions are planned for Phase 1">
-              <Copy className="size-3.5" />
-              Copy ID
-            </Button>
-            <Button disabled title="Artifact storage is planned for Phase 1">
-              <ExternalLink className="size-3.5" />
-              Open artifact
-            </Button>
-          </div>
-        }
         description={experiment.hypothesis}
         eyebrow={
           <span className="flex items-center gap-2">
-            Run {run.number}{" "}
+            Run {run.sequence}{" "}
             <span className="text-[var(--text-subtle)]">/</span> Experiment{" "}
             {experiment.sequence}
             <StatusBadge
               tone={
-                experiment.decision === "kept"
+                displayStatus === "kept"
                   ? "success"
-                  : experiment.decision === "discarded"
+                  : displayStatus === "discarded" || displayStatus === "failed"
                     ? "danger"
                     : "running"
               }
             >
-              {experiment.decision}
+              {displayStatus}
             </StatusBadge>
           </span>
         }
@@ -93,21 +101,26 @@ export default async function ExperimentPage({ params }: ExperimentPageProps) {
 
       <div className="mx-auto max-w-5xl p-6 sm:p-8">
         <section className="grid grid-cols-2 border-y border-[var(--border)] py-5 md:grid-cols-4">
-          <Metric label="Metric before" value={experiment.before} />
+          <Metric label="Metric before" value={formatMetric(before?.value)} />
           <Metric
             className="border-l border-[var(--border)] pl-5"
             label="Metric after"
-            value={experiment.after ?? "Running"}
+            value={formatMetric(after?.value)}
           />
           <Metric
             className="mt-5 border-t border-[var(--border)] pt-5 md:mt-0 md:border-l md:border-t-0 md:pl-5 md:pt-0"
-            label="Delta"
-            value={experiment.delta ?? "—"}
+            detail={project.currentMetric.unit}
+            label="Improvement"
+            value={experiment.decision?.calculatedImprovement ?? "Pending"}
           />
           <Metric
             className="mt-5 border-l border-t border-[var(--border)] pl-5 pt-5 md:mt-0 md:border-t-0 md:pt-0"
             label="Duration"
-            value={experiment.duration}
+            value={formatDuration(
+              experiment.startedAt,
+              experiment.completedAt,
+              experiment.estimatedDurationMs,
+            )}
           />
         </section>
 
@@ -126,21 +139,34 @@ export default async function ExperimentPage({ params }: ExperimentPageProps) {
               <div className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3 text-xs font-medium">
                 <FileDiff className="size-3.5 text-[var(--text-muted)]" />
                 Action
-                <span className="ml-auto font-mono text-[10px] text-[var(--text-subtle)]">
-                  2 files · +11 −4
-                </span>
               </div>
-              <p className="border-b border-[var(--border)] p-4 text-[13px] leading-6 text-[var(--text-muted)]">
+              <p className="p-4 text-[13px] leading-6 text-[var(--text-muted)]">
                 {experiment.action}
               </p>
-              <div className="overflow-x-auto bg-[#090909] p-4 font-mono text-[11px] leading-5">
-                <div className="text-[var(--text-subtle)]">app/layout.tsx</div>
-                <div className="mt-2 text-emerald-400">
-                  + &lt;link rel=&quot;preload&quot; as=&quot;image&quot;
-                  href=&quot;/hero.webp&quot; /&gt;
+            </Panel>
+
+            <Panel>
+              <div className="border-b border-[var(--border)] px-4 py-3 text-xs font-medium">
+                Decision
+              </div>
+              <div className="grid gap-px bg-[var(--border)] sm:grid-cols-2">
+                <div className="bg-[var(--surface)] p-4">
+                  <div className="text-[10px] uppercase tracking-[0.08em] text-[var(--text-subtle)]">
+                    Result
+                  </div>
+                  <div className="mt-2 font-mono text-xs">
+                    {experiment.decision?.finalDecision ?? "Pending"}
+                  </div>
                 </div>
-                <div className="text-emerald-400">
-                  + fetchPriority=&quot;high&quot;
+                <div className="bg-[var(--surface)] p-4">
+                  <div className="text-[10px] uppercase tracking-[0.08em] text-[var(--text-subtle)]">
+                    Reason
+                  </div>
+                  <div className="mt-2 font-mono text-xs">
+                    {experiment.decision?.overrideReason ??
+                      experiment.decision?.reason ??
+                      "Awaiting measurement"}
+                  </div>
                 </div>
               </div>
             </Panel>
@@ -149,14 +175,30 @@ export default async function ExperimentPage({ params }: ExperimentPageProps) {
               <div className="border-b border-[var(--border)] px-4 py-3 text-xs font-medium">
                 Learned knowledge
               </div>
-              <div className="flex gap-3 p-4">
-                <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-emerald-900 text-emerald-400">
-                  <Check className="size-3" />
-                </span>
-                <p className="text-[13px] leading-6 text-[var(--text-muted)]">
-                  {experiment.learnedKnowledge}
+              {experiment.learnings.length > 0 ? (
+                <div className="divide-y divide-[var(--border)]">
+                  {experiment.learnings.map((learning) => (
+                    <div className="flex gap-3 p-4" key={learning.id}>
+                      <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-emerald-900 text-emerald-400">
+                        <Check className="size-3" />
+                      </span>
+                      <div>
+                        <p className="text-[13px] leading-6 text-[var(--text-muted)]">
+                          {learning.statement}
+                        </p>
+                        <p className="mt-1 font-mono text-[9px] uppercase text-[var(--text-subtle)]">
+                          {learning.evidenceRole} · confidence{" "}
+                          {learning.confidence.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="p-4 text-[13px] text-[var(--text-muted)]">
+                  No durable learning has been linked to this experiment.
                 </p>
-              </div>
+              )}
             </Panel>
           </div>
 
@@ -167,12 +209,26 @@ export default async function ExperimentPage({ params }: ExperimentPageProps) {
               </div>
               <dl className="divide-y divide-[var(--border)]">
                 {[
-                  ["Protocol", "LCP Mobile v3"],
-                  ["Samples", experiment.after ? "3 / 3" : "2 / 3"],
-                  ["Direction", "Minimize"],
-                  ["Threshold", "−0.05s"],
-                  ["Guardrails", "Passed"],
-                  ["Environment", "runner-local-01"],
+                  ["Protocol", `v${project.currentMetric.version}`],
+                  [
+                    "Samples",
+                    String(
+                      experiment.observations.reduce(
+                        (total, observation) => total + observation.sampleCount,
+                        0,
+                      ),
+                    ),
+                  ],
+                  ["Direction", project.currentMetric.direction],
+                  [
+                    "Threshold",
+                    `${project.currentMetric.minimumImprovement} ${project.currentMetric.unit}`,
+                  ],
+                  [
+                    "Guardrails",
+                    `${guardrailObservations.length} / ${project.currentMetric.guardrails.length} measured`,
+                  ],
+                  ["Policy", experiment.decision?.policyVersion ?? "Pending"],
                 ].map(([term, value]) => (
                   <div
                     className="flex justify-between gap-3 px-4 py-3"
@@ -196,16 +252,20 @@ export default async function ExperimentPage({ params }: ExperimentPageProps) {
               <div className="space-y-3 p-4 font-mono text-[10px]">
                 <div>
                   <div className="text-[var(--text-subtle)]">BEFORE</div>
-                  <div className="mt-1 text-[var(--text-muted)]">1f69c4a</div>
+                  <div className="mt-1 break-all text-[var(--text-muted)]">
+                    {before?.id ?? "Not recorded"}
+                  </div>
                 </div>
                 <div>
                   <div className="text-[var(--text-subtle)]">AFTER</div>
-                  <div className="mt-1 text-[var(--text-muted)]">c31d8e2</div>
+                  <div className="mt-1 break-all text-[var(--text-muted)]">
+                    {after?.id ?? "Not recorded"}
+                  </div>
                 </div>
                 <div>
-                  <div className="text-[var(--text-subtle)]">TASK</div>
-                  <div className="mt-1 truncate text-[var(--text-muted)]">
-                    tsk_01JYN5A8P4M
+                  <div className="text-[var(--text-subtle)]">EXPERIMENT</div>
+                  <div className="mt-1 break-all text-[var(--text-muted)]">
+                    {experiment.id}
                   </div>
                 </div>
               </div>

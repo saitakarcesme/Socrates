@@ -202,6 +202,11 @@ export interface ReadRepository {
     cursor: CreatedCursor | null;
     limit: number;
   }): Promise<ReadPage<LearningRead>>;
+  listWorkspaceLearnings(input: {
+    workspaceId: string;
+    cursor: CreatedCursor | null;
+    limit: number;
+  }): Promise<ReadPage<LearningRead>>;
   listRunEvents(input: {
     workspaceId: string;
     runId: string;

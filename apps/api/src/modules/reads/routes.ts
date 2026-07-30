@@ -52,6 +52,7 @@ export function createReadRoutes(options: ReadRoutesOptions) {
     app.get("/runs/:runId", unavailable);
     app.get("/runs/:runId/experiments", unavailable);
     app.get("/experiments/:experimentId", unavailable);
+    app.get("/learnings", unavailable);
     app.get("/projects/:projectId/learnings", unavailable);
     app.get("/runs/:runId/events", unavailable);
 
@@ -185,6 +186,26 @@ export function createReadRoutes(options: ReadRoutesOptions) {
       }
 
       return context.json({ data: mapExperiment(experiment) });
+    },
+  );
+
+  app.get(
+    "/learnings",
+    sValidator("query", cursorQuerySchema, validationHook),
+    async (context) => {
+      const query = context.req.valid("query");
+      const page = await reads.listWorkspaceLearnings({
+        workspaceId: options.workspaceId,
+        cursor: decodeCursor(query.cursor),
+        limit: query.limit,
+      });
+
+      return context.json({
+        data: page.items.map(mapLearning),
+        page: {
+          nextCursor: page.nextCursor ? encodeCursor(page.nextCursor) : null,
+        },
+      });
     },
   );
 
