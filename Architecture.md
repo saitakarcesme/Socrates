@@ -779,6 +779,23 @@ projection. Receiving a new durable event schedules one coalesced
 the query cursor, and the server remains responsible for replay. Zustand is not
 used for durable research facts.
 
+### ADR-025: Web acceptance tests cross the real process boundaries
+
+Phase 1 browser acceptance tests run Chromium against the Next.js development
+server, the Hono API, and a migrated PostgreSQL database. They do not intercept
+control-plane requests or replace command responses with fixtures. A dedicated
+development seed command establishes the single-tenant workspace and stable
+reference records before the servers start; each journey creates uniquely
+named resources and asserts only its own resulting facts.
+
+Playwright owns repeatable browser automation, failure screenshots, and traces.
+The CI PostgreSQL service is migrated and seeded explicitly, then one Chromium
+project exercises project creation through run completion. The journey also
+checks durable SSE connection state, the learning projection, framework error
+overlays, and horizontal overflow at a 390-pixel viewport. Unit and API tests
+remain the primary exhaustive coverage; browser tests cover one critical
+cross-process story rather than duplicating every domain permutation.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

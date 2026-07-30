@@ -1,9 +1,9 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 
 import {
   createProjectCommandSchema,
@@ -32,6 +32,8 @@ function focusFirstError(errors: FieldErrors) {
 
 export function CreateProjectForm() {
   const router = useRouter();
+  const nextGuardrailId = useRef(1);
+  const [guardrailIds, setGuardrailIds] = useState<number[]>([]);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const {
     clearError,
@@ -42,6 +44,21 @@ export function CreateProjectForm() {
     onSuccess: (response) =>
       router.push(`/projects/${response.data.projectId}`),
   });
+
+  function addGuardrail() {
+    const id = nextGuardrailId.current++;
+    setGuardrailIds((current) => [...current, id]);
+    setFieldErrors({});
+    clearError();
+  }
+
+  function removeGuardrail(id: number) {
+    setGuardrailIds((current) =>
+      current.filter((candidate) => candidate !== id),
+    );
+    setFieldErrors({});
+    clearError();
+  }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -67,7 +84,13 @@ export function CreateProjectForm() {
         direction: String(form.get("metric.direction") ?? ""),
         minimumImprovement: String(form.get("metric.minimumImprovement") ?? ""),
         noiseTolerance: String(form.get("metric.noiseTolerance") ?? ""),
-        guardrails: [],
+        guardrails: guardrailIds.map((id) => ({
+          name: String(form.get(`guardrail.${id}.name`) ?? ""),
+          unit: String(form.get(`guardrail.${id}.unit`) ?? ""),
+          operator: String(form.get(`guardrail.${id}.operator`) ?? ""),
+          threshold: String(form.get(`guardrail.${id}.threshold`) ?? ""),
+          hard: form.get(`guardrail.${id}.hard`) === "on",
+        })),
       },
     };
     const parsed = createProjectCommandSchema.safeParse(candidate);
@@ -245,6 +268,125 @@ export function CreateProjectForm() {
             />
           </FormField>
         </div>
+      </section>
+
+      <section>
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] pb-3">
+          <div>
+            <h2 className="text-sm font-semibold">Guardrails</h2>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              Optional constraints measured alongside the primary metric.
+            </p>
+          </div>
+          <Button
+            disabled={guardrailIds.length >= 20}
+            onClick={addGuardrail}
+            size="sm"
+            type="button"
+          >
+            <Plus className="size-3.5" />
+            Add guardrail
+          </Button>
+        </div>
+        {guardrailIds.length > 0 ? (
+          <div className="divide-y divide-[var(--border)]">
+            {guardrailIds.map((id, index) => {
+              const errorPrefix = `metric.guardrails.${index}`;
+              return (
+                <div className="py-5" key={id}>
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--text-subtle)]">
+                      Guardrail {index + 1}
+                    </h3>
+                    <Button
+                      aria-label={`Remove guardrail ${index + 1}`}
+                      onClick={() => removeGuardrail(id)}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <X className="size-3.5" />
+                    </Button>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormField
+                      error={fieldErrors[`${errorPrefix}.name`]}
+                      htmlFor={`guardrail.${id}.name`}
+                      label="Name"
+                    >
+                      <FormInput
+                        id={`guardrail.${id}.name`}
+                        maxLength={120}
+                        name={`guardrail.${id}.name`}
+                        placeholder="Error rate"
+                        required
+                      />
+                    </FormField>
+                    <FormField
+                      error={fieldErrors[`${errorPrefix}.unit`]}
+                      htmlFor={`guardrail.${id}.unit`}
+                      label="Unit"
+                    >
+                      <FormInput
+                        id={`guardrail.${id}.unit`}
+                        maxLength={32}
+                        name={`guardrail.${id}.unit`}
+                        placeholder="%"
+                        required
+                      />
+                    </FormField>
+                    <FormField
+                      error={fieldErrors[`${errorPrefix}.operator`]}
+                      htmlFor={`guardrail.${id}.operator`}
+                      label="Operator"
+                    >
+                      <FormSelect
+                        defaultValue="less_than_or_equal"
+                        id={`guardrail.${id}.operator`}
+                        name={`guardrail.${id}.operator`}
+                      >
+                        <option value="less_than">Less than</option>
+                        <option value="less_than_or_equal">
+                          Less than or equal
+                        </option>
+                        <option value="greater_than">Greater than</option>
+                        <option value="greater_than_or_equal">
+                          Greater than or equal
+                        </option>
+                      </FormSelect>
+                    </FormField>
+                    <FormField
+                      error={fieldErrors[`${errorPrefix}.threshold`]}
+                      htmlFor={`guardrail.${id}.threshold`}
+                      label="Threshold"
+                    >
+                      <FormInput
+                        id={`guardrail.${id}.threshold`}
+                        inputMode="decimal"
+                        name={`guardrail.${id}.threshold`}
+                        required
+                      />
+                    </FormField>
+                  </div>
+                  <label className="mt-4 flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                    <input
+                      className="size-3.5 accent-white"
+                      defaultChecked
+                      name={`guardrail.${id}.hard`}
+                      type="checkbox"
+                    />
+                    Hard guardrail — a failed or missing measurement prevents a
+                    kept decision.
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="pt-4 text-xs text-[var(--text-subtle)]">
+            No guardrails. The decision will use only the primary metric.
+          </p>
+        )}
       </section>
 
       {formError ? (

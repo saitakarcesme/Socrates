@@ -1,4 +1,4 @@
-import { MoreHorizontal, Pause, Square } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
@@ -6,6 +6,7 @@ import { Button, Metric, Panel, StatusBadge } from "@socrates/design-system";
 
 import { ExperimentTimeline } from "@/components/experiment-timeline";
 import { RunSetupControls } from "@/components/forms/run-setup-controls";
+import { RunLifecycleActions } from "@/components/forms/run-lifecycle-actions";
 import { ProposeExperimentForm } from "@/components/forms/propose-experiment-form";
 import { PageHeader } from "@/components/page-header";
 import { RunEventReconciler } from "@/components/run-event-reconciler";
@@ -92,6 +93,10 @@ export default async function RunPage({ params }: RunPageProps) {
           Math.round((estimatedCost / run.budget.maximumCostMinor) * 100),
         )
       : 0;
+  const openExperiments = experiments.filter(
+    ({ status }) =>
+      !["kept", "discarded", "inconclusive", "failed"].includes(status),
+  ).length;
 
   return (
     <>
@@ -105,18 +110,7 @@ export default async function RunPage({ params }: RunPageProps) {
             >
               <MoreHorizontal className="size-3.5" />
             </Button>
-            <Button disabled title="Run control is planned for Phase 2">
-              <Pause className="size-3.5" />
-              Pause
-            </Button>
-            <Button
-              disabled
-              title="Run control is planned for Phase 2"
-              variant="danger"
-            >
-              <Square className="size-3" />
-              Stop
-            </Button>
+            <RunLifecycleActions openExperiments={openExperiments} run={run} />
           </div>
         }
         description={run.objective}

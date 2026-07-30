@@ -66,3 +66,7 @@ Verified on 2026-07-30 with PostgreSQL 17.10 and an automated Chromium journey
 at desktop and 390 × 844 viewports. The run timeline connected to durable SSE,
 rendered the committed experiment, and had no horizontal overflow, framework
 overlay, or browser console error.
+
+The same critical path is retained as a Playwright acceptance test under
+`apps/web/e2e`; CI runs it against the PostgreSQL service and real API/web
+processes as specified by ADR-025.

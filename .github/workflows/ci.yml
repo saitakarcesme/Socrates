@@ -69,8 +69,17 @@ jobs:
       - name: Apply database migrations
         run: pnpm --filter @socrates/database db:migrate
 
+      - name: Seed development workspace
+        run: pnpm --filter @socrates/database db:seed-development
+
       - name: Test
         run: pnpm test
+
+      - name: Install Chromium
+        run: pnpm --filter @socrates/web exec playwright install --with-deps chromium
+
+      - name: Test browser journey
+        run: pnpm test:e2e
 
       - name: Build
         run: pnpm build
