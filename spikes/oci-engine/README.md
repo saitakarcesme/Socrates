@@ -35,9 +35,11 @@ pnpm spike:oci -- --engine docker --image <name@sha256:digest> \
   --allow-development-host --latency-samples 30
 ```
 
-Podman and nerdctl currently record availability only. Their executor adapters
-must be implemented and proven on the native Linux reference host before the
-engine decision can close.
+Docker, Podman, and nerdctl share the same adversarial executor. Engine
+adapters normalize Docker-compatible and Podman-native fact/inspection fields,
+while the fixed command profile records the few intentional CLI differences.
+Podman and nerdctl still require live proof on the native Linux reference host
+before the engine decision can close.
 
 Evidence is written to `spikes/oci-engine/evidence/<engine>-current-host.json`.
 It contains selected version and enforcement facts, not raw environment or

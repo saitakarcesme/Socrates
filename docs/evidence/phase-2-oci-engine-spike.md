@@ -41,11 +41,13 @@ resolved digest rather than the tag.
 - root filesystem: read-only
 - `/workspace`: 1 MiB tmpfs with `noexec,nosuid,nodev`
 - `/tmp`: 256 KiB tmpfs with `noexec,nosuid,nodev`
+- `/dev/shm`: 64 KiB with no implicit extra writable tmpfs mounts
 - network: none
 - user: `65534:65534`
 - capabilities: all dropped
 - no-new-privileges: enabled
 - devices and host/runtime socket mounts: none
+- implicit image pulls and daemon log storage: disabled
 
 Docker inspect confirmed every requested fixed-profile field. The container
 also observed delegated CPU, memory, and PID controllers.
@@ -72,9 +74,9 @@ an unbounded host fork bomb or disk fill.
 
 After five warm-up iterations, 30 run-and-remove samples produced:
 
-- median: `256.92 ms`
-- p95: `284.24 ms`
-- maximum: `296.57 ms`
+- median: `244.21 ms`
+- p95: `297.81 ms`
+- maximum: `297.99 ms`
 
 These numbers include Docker Desktop/WSL overhead and are not production
 capacity estimates.
@@ -93,7 +95,9 @@ capacity estimates.
 No engine is selected. Promoting Docker Desktop evidence would violate ADR-041
 and conceal missing rootless/LSM guarantees. Slice 2.5 remains gated on a
 native Linux rerun with at least Docker and Podman; nerdctl remains a candidate
-if its full executor adapter and dependencies are provisioned on that host.
+if its dependencies are provisioned on that host. The same typed executor now
+drives all three candidates; Docker-compatible and Podman-native fact and
+inspect fields have fixture coverage.
 
 Machine-readable evidence:
 

@@ -1187,12 +1187,16 @@ development evidence only. The reviewed selection requires a repeat run on the
 documented native Linux reference host.
 
 Every candidate receives the same default-deny profile: non-root process,
-read-only root filesystem, a size-bounded tmpfs at `/workspace`, no host PID,
-IPC, network, user, or cgroup namespace sharing, no devices, all capabilities
+read-only root filesystem, size-bounded tmpfs mounts at `/workspace`, `/tmp`,
+and `/dev/shm`, no engine-added writable temporary mounts, no host PID, IPC,
+network, user, or cgroup namespace sharing, no devices, all capabilities
 dropped, no-new-privileges, the engine's default seccomp profile, no host
 environment inheritance, no Docker/containerd/Podman socket, and no bind mount
 outside a runner-created source snapshot. Network mode `disabled` creates an
 unconfigured network namespace rather than relying on application behavior.
+Images must already exist by digest and implicit pulls are disabled; daemon log
+storage is disabled because ordered bounded logs belong to the Socrates
+evidence channel.
 
 The spike proves enforcement from inside and outside the sandbox. It attempts
 host-path and runtime-socket access, privilege gain, fork pressure, memory

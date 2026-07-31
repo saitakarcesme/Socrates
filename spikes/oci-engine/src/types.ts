@@ -54,6 +54,7 @@ export type SpikeEvidence = {
     maximumPids: number;
     workspaceBytes: number;
     temporaryBytes: number;
+    sharedMemoryBytes: number;
     network: "none";
     rootFilesystem: "read-only";
   };

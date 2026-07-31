@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1",
-  "spikeId": "8e4a366c-f3e0-4957-8c71-05e34943a8fa",
-  "recordedAt": "2026-07-31T00:52:10.513Z",
+  "spikeId": "d96871fb-19f6-41be-95bb-ccdcb674da9a",
+  "recordedAt": "2026-07-31T01:07:59.713Z",
   "image": "node@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32",
   "profile": {
     "memoryBytes": 67108864,
@@ -9,6 +9,7 @@
     "maximumPids": 32,
     "workspaceBytes": 1048576,
     "temporaryBytes": 262144,
+    "sharedMemoryBytes": 65536,
     "network": "none",
     "rootFilesystem": "read-only"
   },
@@ -32,7 +33,7 @@
     {
       "name": "engine available",
       "passed": true,
-      "detail": "docker client and daemon responded"
+      "detail": "docker client and engine responded"
     },
     {
       "name": "image pinned by digest",
@@ -111,8 +112,8 @@
     {
       "name": "hard cancellation",
       "passed": true,
-      "detail": "TERM-resistant workload stopped in 1104.89 ms",
-      "durationMs": 1104.89
+      "detail": "TERM-resistant workload stopped in 1102.31 ms",
+      "durationMs": 1102.31
     }
   ],
   "cleanup": [
@@ -160,9 +161,9 @@
   "latency": {
     "runAndRemove": {
       "samples": 30,
-      "medianMs": 256.92,
-      "p95Ms": 284.24,
-      "maximumMs": 296.57
+      "medianMs": 244.21,
+      "p95Ms": 297.81,
+      "maximumMs": 297.99
     }
   },
   "eligibleForNativeSelection": false,

@@ -14,6 +14,12 @@ describe("OCI spike sandbox profile", () => {
       );
 
       expect(args).toContain("none");
+      expect(args).toContain("--ipc");
+      expect(args).toContain("--cgroupns");
+      expect(args).toContain("--pull");
+      expect(args).toContain("never");
+      expect(args).toContain("--log-driver");
+      expect(args).toContain("none");
       expect(args).toContain("--read-only");
       expect(args).toContain("65534:65534");
       expect(args).toContain("ALL");
@@ -24,6 +30,10 @@ describe("OCI spike sandbox profile", () => {
       expect(args.join(" ")).not.toContain("--privileged");
       expect(args.join(" ")).not.toContain("/var/run/docker.sock");
       expect(args.at(-1)).toBe("/bin/true");
+      expect(args.includes("--pid")).toBe(engine === "podman");
+      expect(args.includes("--read-only-tmpfs=false")).toBe(
+        engine === "podman",
+      );
     },
   );
 

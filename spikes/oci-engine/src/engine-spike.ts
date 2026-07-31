@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import { commandExists, runCommand } from "./process";
+import { runCommand } from "./process";
+import { readEngineFacts } from "./engine-adapter";
 import {
   ownedContainerFilter,
   sandboxProfile,
@@ -10,30 +11,12 @@ import { summarizeLatency } from "./statistics";
 
 import type {
   CommandResult,
-  EngineFacts,
   EngineName,
   GateResult,
   SpikeEvidence,
 } from "./types";
 
-type DockerInfo = {
-  Architecture?: string;
-  CgroupDriver?: string;
-  CgroupVersion?: string;
-  Driver?: string;
-  KernelVersion?: string;
-  OperatingSystem?: string;
-  OSType?: string;
-  SecurityOptions?: string[];
-  ServerVersion?: string;
-};
-
-type DockerVersion = {
-  Client?: { Version?: string };
-  Server?: { Version?: string };
-};
-
-type DockerInspection = {
+export type ContainerInspection = {
   State?: {
     ExitCode?: number;
     OOMKilled?: boolean;
@@ -42,10 +25,12 @@ type DockerInspection = {
   HostConfig?: {
     AutoRemove?: boolean;
     CapDrop?: string[];
+    CgroupMode?: string;
     CgroupnsMode?: string;
     CpuQuota?: number;
     Devices?: unknown[];
     IpcMode?: string;
+    LogConfig?: { Type?: string };
     Memory?: number;
     MemorySwap?: number;
     NanoCpus?: number;
@@ -55,10 +40,15 @@ type DockerInspection = {
     Privileged?: boolean;
     ReadonlyRootfs?: boolean;
     SecurityOpt?: string[];
+    ShmSize?: number;
+    Tmpfs?: Record<string, string>;
   };
 };
 
 const probeTimeoutMs = 20_000;
+type EngineRuntime = {
+  name: EngineName;
+};
 
 function parseJson<T>(result: CommandResult, description: string): T {
   if (result.exitCode !== 0) {
@@ -71,68 +61,28 @@ function parseJson<T>(result: CommandResult, description: string): T {
   }
 }
 
-function isDesktopOrVm(info: DockerInfo): boolean {
-  const description =
-    `${info.OperatingSystem ?? ""} ${info.KernelVersion ?? ""}`.toLowerCase();
-  return ["docker desktop", "linuxkit", "microsoft", "wsl"].some((value) =>
-    description.includes(value),
-  );
-}
-
 function securityOption(options: readonly string[], expected: string): boolean {
   return options.some((option) => option.toLowerCase().includes(expected));
 }
 
-async function readDockerFacts(): Promise<EngineFacts> {
-  if (!(await commandExists("docker"))) {
-    return {
-      engine: "docker",
-      available: false,
-      securityOptions: [],
-      nativeLinux: false,
-      rootless: false,
-      desktopOrVm: false,
-    };
-  }
-
-  const [infoResult, versionResult] = await Promise.all([
-    runCommand("docker", ["info", "--format", "{{json .}}"]),
-    runCommand("docker", ["version", "--format", "{{json .}}"]),
-  ]);
-  const info = parseJson<DockerInfo>(infoResult, "docker info");
-  const version = parseJson<DockerVersion>(versionResult, "docker version");
-  const securityOptions = info.SecurityOptions ?? [];
-  const desktopOrVm = isDesktopOrVm(info);
-  return {
-    engine: "docker",
-    available: true,
-    clientVersion: version.Client?.Version,
-    serverVersion: version.Server?.Version ?? info.ServerVersion,
-    operatingSystem: info.OperatingSystem,
-    architecture: info.Architecture,
-    kernelVersion: info.KernelVersion,
-    cgroupVersion: info.CgroupVersion,
-    cgroupDriver: info.CgroupDriver,
-    storageDriver: info.Driver,
-    securityOptions,
-    nativeLinux: info.OSType === "linux" && !desktopOrVm,
-    rootless: securityOption(securityOptions, "rootless"),
-    desktopOrVm,
-  };
-}
-
-async function inspectContainer(name: string): Promise<DockerInspection> {
-  const result = await runCommand("docker", [
+async function inspectContainer(
+  runtime: EngineRuntime,
+  name: string,
+): Promise<ContainerInspection> {
+  const result = await runCommand(runtime.name, [
     "inspect",
     "--format",
     "{{json .}}",
     name,
   ]);
-  return parseJson<DockerInspection>(result, `inspect ${name}`);
+  return parseJson<ContainerInspection>(result, `inspect ${name}`);
 }
 
-async function ownedContainerIds(spikeId: string): Promise<string[]> {
-  const result = await runCommand("docker", ownedContainerFilter(spikeId));
+async function ownedContainerIds(
+  runtime: EngineRuntime,
+  spikeId: string,
+): Promise<string[]> {
+  const result = await runCommand(runtime.name, ownedContainerFilter(spikeId));
   if (result.exitCode !== 0) return [];
   return result.stdout
     .split(/\r?\n/)
@@ -140,12 +90,15 @@ async function ownedContainerIds(spikeId: string): Promise<string[]> {
     .filter(Boolean);
 }
 
-async function cleanupOwnedContainers(spikeId: string): Promise<GateResult> {
-  const ids = await ownedContainerIds(spikeId);
+async function cleanupOwnedContainers(
+  runtime: EngineRuntime,
+  spikeId: string,
+): Promise<GateResult> {
+  const ids = await ownedContainerIds(runtime, spikeId);
   if (ids.length > 0) {
-    await runCommand("docker", ["rm", "--force", ...ids], 15_000);
+    await runCommand(runtime.name, ["rm", "--force", ...ids], 15_000);
   }
-  const remaining = await ownedContainerIds(spikeId);
+  const remaining = await ownedContainerIds(runtime, spikeId);
   return {
     name: "owned container cleanup",
     passed: remaining.length === 0,
@@ -157,34 +110,49 @@ async function cleanupOwnedContainers(spikeId: string): Promise<GateResult> {
 }
 
 async function runProbe(
+  runtime: EngineRuntime,
   spikeId: string,
   image: string,
   nameSuffix: string,
   command: readonly string[],
 ): Promise<{
   result: CommandResult;
-  inspection: DockerInspection;
+  inspection: ContainerInspection;
   cleanup: GateResult;
 }> {
   const name = `socrates-spike-${nameSuffix}-${randomUUID().slice(0, 8)}`;
   try {
     const result = await runCommand(
-      "docker",
-      secureRunArguments("docker", { name, spikeId }, image, command),
+      runtime.name,
+      secureRunArguments(runtime.name, { name, spikeId }, image, command),
       probeTimeoutMs,
     );
+    let inspection: ContainerInspection;
+    try {
+      inspection = await inspectContainer(runtime, name);
+    } catch (error) {
+      if (result.exitCode !== 0) {
+        throw new Error(
+          `${runtime.name} ${nameSuffix} probe exited ${result.exitCode}: ${result.stderr.slice(0, 1_000)}`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
     return {
       result,
-      inspection: await inspectContainer(name),
-      cleanup: await cleanupOwnedContainers(spikeId),
+      inspection,
+      cleanup: await cleanupOwnedContainers(runtime, spikeId),
     };
   } catch (error) {
-    await cleanupOwnedContainers(spikeId);
+    await cleanupOwnedContainers(runtime, spikeId);
     throw error;
   }
 }
 
-function fixedProfileIsApplied(inspection: DockerInspection): GateResult {
+export function evaluateFixedProfile(
+  inspection: ContainerInspection,
+): GateResult {
   const host = inspection.HostConfig;
   const passed =
     host?.NetworkMode === "none" &&
@@ -195,10 +163,20 @@ function fixedProfileIsApplied(inspection: DockerInspection): GateResult {
     host.PidsLimit === sandboxProfile.maximumPids &&
     ((host.NanoCpus ?? 0) > 0 || (host.CpuQuota ?? 0) > 0) &&
     host.CapDrop?.includes("ALL") === true &&
-    host.CgroupnsMode === "private" &&
+    (host.CgroupnsMode === "private" || host.CgroupMode === "private") &&
     host.IpcMode === "private" &&
-    (host.PidMode ?? "") === "" &&
+    ["", "private"].includes(host.PidMode ?? "") &&
     (host.Devices?.length ?? 0) === 0 &&
+    host.LogConfig?.Type === "none" &&
+    host.Tmpfs?.["/workspace"]?.includes(
+      `size=${sandboxProfile.workspaceBytes}`,
+    ) === true &&
+    host.Tmpfs?.["/tmp"]?.includes(`size=${sandboxProfile.temporaryBytes}`) ===
+      true &&
+    (host.ShmSize === sandboxProfile.sharedMemoryBytes ||
+      host.Tmpfs?.["/dev/shm"]?.includes(
+        `size=${sandboxProfile.sharedMemoryBytes}`,
+      ) === true) &&
     host.SecurityOpt?.some((option) =>
       option.toLowerCase().includes("no-new-privileges"),
     ) === true;
@@ -212,6 +190,7 @@ function fixedProfileIsApplied(inspection: DockerInspection): GateResult {
 }
 
 async function runAdversarialProbes(
+  runtime: EngineRuntime,
   spikeId: string,
   image: string,
 ): Promise<{
@@ -221,7 +200,7 @@ async function runAdversarialProbes(
   const gates: GateResult[] = [];
   const cleanup: GateResult[] = [];
 
-  const security = await runProbe(spikeId, image, "security", [
+  const security = await runProbe(runtime, spikeId, image, "security", [
     "/bin/sh",
     "-c",
     [
@@ -263,10 +242,10 @@ async function runAdversarialProbes(
         ? "non-root identity, empty effective capabilities, absent sockets, mount denial, and namespace denial observed"
         : `probe exited ${security.result.exitCode}`,
   });
-  gates.push(fixedProfileIsApplied(security.inspection));
+  gates.push(evaluateFixedProfile(security.inspection));
   cleanup.push(security.cleanup);
 
-  const network = await runProbe(spikeId, image, "network", [
+  const network = await runProbe(runtime, spikeId, image, "network", [
     "/bin/sh",
     "-c",
     [
@@ -288,7 +267,7 @@ async function runAdversarialProbes(
   });
   cleanup.push(network.cleanup);
 
-  const secrets = await runProbe(spikeId, image, "secrets", [
+  const secrets = await runProbe(runtime, spikeId, image, "secrets", [
     "/bin/sh",
     "-c",
     [
@@ -311,7 +290,7 @@ async function runAdversarialProbes(
   });
   cleanup.push(secrets.cleanup);
 
-  const disk = await runProbe(spikeId, image, "disk", [
+  const disk = await runProbe(runtime, spikeId, image, "disk", [
     "/bin/sh",
     "-c",
     [
@@ -334,7 +313,7 @@ async function runAdversarialProbes(
   });
   cleanup.push(disk.cleanup);
 
-  const pids = await runProbe(spikeId, image, "pids", [
+  const pids = await runProbe(runtime, spikeId, image, "pids", [
     "node",
     "-e",
     [
@@ -364,7 +343,7 @@ async function runAdversarialProbes(
   });
   cleanup.push(pids.cleanup);
 
-  const memory = await runProbe(spikeId, image, "memory", [
+  const memory = await runProbe(runtime, spikeId, image, "memory", [
     "node",
     "-e",
     "Buffer.alloc(128*1024*1024).fill(1); setTimeout(()=>{},10000);",
@@ -385,6 +364,7 @@ async function runAdversarialProbes(
 }
 
 async function runCancellationProbe(
+  runtime: EngineRuntime,
   spikeId: string,
   image: string,
 ): Promise<{
@@ -395,12 +375,12 @@ async function runCancellationProbe(
   const cleanup: GateResult[] = [];
   try {
     const secureArguments = secureRunArguments(
-      "docker",
+      runtime.name,
       { name, spikeId },
       image,
       ["/bin/sh", "-c", 'trap "" TERM; sleep 300 & wait'],
     );
-    const started = await runCommand("docker", [
+    const started = await runCommand(runtime.name, [
       secureArguments[0]!,
       "--detach",
       ...secureArguments.slice(1),
@@ -414,16 +394,16 @@ async function runCancellationProbe(
             detail: `detached start exited ${started.exitCode}`,
           },
         ],
-        cleanup: [await cleanupOwnedContainers(spikeId)],
+        cleanup: [await cleanupOwnedContainers(runtime, spikeId)],
       };
     }
 
     const stopped = await runCommand(
-      "docker",
+      runtime.name,
       ["stop", "--time", "1", name],
       10_000,
     );
-    const inspection = await inspectContainer(name);
+    const inspection = await inspectContainer(runtime, name);
     const cancellationGate = {
       name: "hard cancellation",
       passed:
@@ -436,46 +416,51 @@ async function runCancellationProbe(
           : `stop exited ${stopped.exitCode}`,
       durationMs: stopped.durationMs,
     };
-    cleanup.push(await cleanupOwnedContainers(spikeId));
+    cleanup.push(await cleanupOwnedContainers(runtime, spikeId));
     return { gates: [cancellationGate], cleanup };
   } catch (error) {
-    cleanup.push(await cleanupOwnedContainers(spikeId));
+    cleanup.push(await cleanupOwnedContainers(runtime, spikeId));
     throw error;
   }
 }
 
 async function measureRunAndRemove(
+  runtime: EngineRuntime,
   spikeId: string,
   image: string,
   warmups: number,
   samples: number,
 ): Promise<ReturnType<typeof summarizeLatency>> {
   for (let index = 0; index < warmups; index += 1) {
-    await runProbe(spikeId, image, "warmup", ["/bin/true"]);
+    await runProbe(runtime, spikeId, image, "warmup", ["/bin/true"]);
   }
   const durations: number[] = [];
   for (let index = 0; index < samples; index += 1) {
-    const probe = await runProbe(spikeId, image, "latency", ["/bin/true"]);
+    const probe = await runProbe(runtime, spikeId, image, "latency", [
+      "/bin/true",
+    ]);
     durations.push(probe.result.durationMs);
   }
   return summarizeLatency(durations);
 }
 
-export async function runDockerSpike(input: {
+export async function runEngineSpike(input: {
+  engine: EngineName;
   image: string;
   allowDevelopmentHost: boolean;
   latencySamples: number;
 }): Promise<SpikeEvidence> {
   const spikeId = randomUUID();
   const recordedAt = new Date().toISOString();
-  const facts = await readDockerFacts();
+  const runtime = { name: input.engine } satisfies EngineRuntime;
+  const facts = await readEngineFacts(input.engine);
   const pinnedImage = /@sha256:[a-f0-9]{64}$/.test(input.image);
   const preflight: GateResult[] = [
     {
       name: "engine available",
       passed: facts.available,
       detail: facts.available
-        ? "docker client and daemon responded"
+        ? `${input.engine} client and engine responded`
         : "missing",
     },
     {
@@ -544,6 +529,7 @@ export async function runDockerSpike(input: {
   try {
     if (canRunDevelopmentEvidence) {
       const adversarialResult = await runAdversarialProbes(
+        runtime,
         spikeId,
         input.image,
       );
@@ -551,6 +537,7 @@ export async function runDockerSpike(input: {
       cleanup.push(...adversarialResult.cleanup);
 
       const cancellationResult = await runCancellationProbe(
+        runtime,
         spikeId,
         input.image,
       );
@@ -559,6 +546,7 @@ export async function runDockerSpike(input: {
 
       latency = {
         runAndRemove: await measureRunAndRemove(
+          runtime,
           spikeId,
           input.image,
           5,
@@ -573,7 +561,7 @@ export async function runDockerSpike(input: {
   } finally {
     delete process.env["SOCRATES_SPIKE_SENTINEL_SECRET"];
     if (facts.available) {
-      cleanup.push(await cleanupOwnedContainers(spikeId));
+      cleanup.push(await cleanupOwnedContainers(runtime, spikeId));
     }
   }
 
@@ -598,43 +586,5 @@ export async function runDockerSpike(input: {
     latency,
     eligibleForNativeSelection,
     limitations,
-  };
-}
-
-export async function unavailableEngineEvidence(
-  engine: Exclude<EngineName, "docker">,
-  image: string,
-): Promise<SpikeEvidence> {
-  const available = await commandExists(engine);
-  return {
-    schemaVersion: "1",
-    spikeId: randomUUID(),
-    recordedAt: new Date().toISOString(),
-    image,
-    profile: sandboxProfile,
-    facts: {
-      engine,
-      available,
-      securityOptions: [],
-      nativeLinux: false,
-      rootless: false,
-      desktopOrVm: false,
-    },
-    preflight: [
-      {
-        name: "engine available",
-        passed: false,
-        detail: available
-          ? "candidate adapter is not implemented in this host spike"
-          : `${engine} is not installed`,
-      },
-    ],
-    adversarial: [],
-    cancellation: [],
-    cleanup: [],
-    eligibleForNativeSelection: false,
-    limitations: [
-      "No evidence was executed for this candidate on the current host.",
-    ],
   };
 }

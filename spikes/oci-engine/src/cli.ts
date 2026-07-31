@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-import { runDockerSpike, unavailableEngineEvidence } from "./docker-spike";
+import { runEngineSpike } from "./engine-spike";
 import { supportedEngines, type EngineName } from "./types";
 
 function option(name: string): string | undefined {
@@ -33,16 +33,12 @@ async function main(): Promise<void> {
   const image = option("--image");
   if (!image) throw new Error("--image with an immutable digest is required.");
 
-  const evidence =
-    engine === "docker"
-      ? await runDockerSpike({
-          image,
-          allowDevelopmentHost: process.argv.includes(
-            "--allow-development-host",
-          ),
-          latencySamples: positiveIntegerOption("--latency-samples", 30),
-        })
-      : await unavailableEngineEvidence(engine, image);
+  const evidence = await runEngineSpike({
+    engine,
+    image,
+    allowDevelopmentHost: process.argv.includes("--allow-development-host"),
+    latencySamples: positiveIntegerOption("--latency-samples", 30),
+  });
 
   const evidenceRoot = resolve("spikes", "oci-engine", "evidence");
   await mkdir(evidenceRoot, { recursive: true });

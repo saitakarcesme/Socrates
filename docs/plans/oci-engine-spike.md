@@ -78,6 +78,7 @@ facts are observable:
 - `--read-only`
 - `/workspace` backed by size-bounded tmpfs
 - `/tmp` backed by a smaller size-bounded tmpfs
+- `/dev/shm` bounded explicitly and engine-added writable tmpfs mounts disabled
 - non-root UID/GID
 - all Linux capabilities dropped
 - no-new-privileges enabled
@@ -87,6 +88,8 @@ facts are observable:
   mounts
 - explicit empty environment plus a minimal allowlist
 - unique `socrates.spike.id` and `socrates.managed=true` labels
+- digest-pinned image already present with implicit pulls and daemon logs
+  disabled
 
 ## Adversarial matrix
 
@@ -137,5 +140,7 @@ new plan and typed runner adapter after the engine decision is reviewed.
 The Docker Desktop development run passed all eight adversarial enforcement
 gates, hard cancellation, label-scoped cleanup, and 30 latency samples. It
 failed the native Linux, rootless, and host-LSM preflight gates exactly as
-expected. Podman and nerdctl are not installed. No engine is selected and Slice
-2.5 remains gated; see `docs/evidence/phase-2-oci-engine-spike.md`.
+expected. The typed executor and fact normalization now cover Docker, Podman,
+and nerdctl, but the latter two are not installed on this host. No engine is
+selected and Slice 2.5 remains gated; see
+`docs/evidence/phase-2-oci-engine-spike.md`.

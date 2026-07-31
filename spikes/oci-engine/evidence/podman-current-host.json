@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1",
-  "spikeId": "d5ecd935-098c-4b65-bc7c-f026019c9d2e",
-  "recordedAt": "2026-07-31T00:52:42.823Z",
+  "spikeId": "f1ce7233-0b91-498d-aec2-0c8d1d9f9e7c",
+  "recordedAt": "2026-07-31T01:08:23.454Z",
   "image": "node@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32",
   "profile": {
     "memoryBytes": 67108864,
@@ -9,6 +9,7 @@
     "maximumPids": 32,
     "workspaceBytes": 1048576,
     "temporaryBytes": 262144,
+    "sharedMemoryBytes": 65536,
     "network": "none",
     "rootFilesystem": "read-only"
   },
@@ -24,7 +25,37 @@
     {
       "name": "engine available",
       "passed": false,
-      "detail": "podman is not installed"
+      "detail": "missing"
+    },
+    {
+      "name": "image pinned by digest",
+      "passed": true,
+      "detail": "immutable digest supplied"
+    },
+    {
+      "name": "native Linux host",
+      "passed": false,
+      "detail": "Desktop, WSL, VM, or non-Linux host observed"
+    },
+    {
+      "name": "rootless engine",
+      "passed": false,
+      "detail": "rootless security option not reported"
+    },
+    {
+      "name": "cgroup v2",
+      "passed": false,
+      "detail": "reported cgroup version unknown"
+    },
+    {
+      "name": "seccomp",
+      "passed": false,
+      "detail": "seccomp not reported"
+    },
+    {
+      "name": "host LSM",
+      "passed": false,
+      "detail": "requires AppArmor or SELinux on the native reference host"
     }
   ],
   "adversarial": [],
@@ -32,6 +63,8 @@
   "cleanup": [],
   "eligibleForNativeSelection": false,
   "limitations": [
-    "No evidence was executed for this candidate on the current host."
+    "Development-host evidence cannot select the production engine.",
+    "The observed engine is not rootless and fails the production preflight.",
+    "Adversarial probes were not run because availability, digest, or host authorization failed."
   ]
 }
