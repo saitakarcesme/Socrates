@@ -55,7 +55,6 @@ jobs:
           test "$(ps -p 1 -o comm=)" = "systemd"
           test -z "${WSL_DISTRO_NAME:-}"
           uname -a
-          systemd-analyze --no-pager
 
       - name: Install rootless engine prerequisites
         shell: bash
@@ -136,7 +135,7 @@ jobs:
           fi
 
       - name: Upload immutable evidence
-        if: always()
+        if: ${{ always() && hashFiles('spikes/oci-engine/evidence/native/**') != '' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: oci-reference-host-evidence
