@@ -8,6 +8,10 @@ import {
 } from "./identity";
 import { parseNativeSpec, verifyNativeSpec } from "./native-spec";
 import { buildCreateArguments } from "./profile";
+import {
+  resolveMaterializedSourceSnapshot,
+  type MaterializedSourceSnapshot,
+} from "../source/capability";
 
 import type { SandboxAttemptIdentity, SandboxOwnership } from "./identity";
 import type { ProcessExecutor, ProcessResult } from "./process";
@@ -25,6 +29,7 @@ export type SandboxExecution = Readonly<{
   image: AdmittedSandboxImage;
   profile: SandboxResourceProfile;
   command: SandboxCommand;
+  source?: MaterializedSourceSnapshot;
   signal?: AbortSignal;
 }>;
 
@@ -236,6 +241,13 @@ export class NerdctlSandboxBackend {
         "Attempt runner does not own this backend.",
       );
     }
+    if (input.source) {
+      resolveMaterializedSourceSnapshot(
+        input.source,
+        this.options.deploymentId,
+        input.identity,
+      );
+    }
     const readiness = await this.attest();
     if (readiness.architecture !== input.image.architecture) {
       throw new SandboxBackendError(
@@ -316,6 +328,13 @@ export class NerdctlSandboxBackend {
       this.options.deploymentId,
       input.identity,
     );
+    const sourcePath = input.source
+      ? resolveMaterializedSourceSnapshot(
+          input.source,
+          this.options.deploymentId,
+          input.identity,
+        )
+      : undefined;
     let created = false;
     try {
       await this.requireSuccess(
@@ -324,6 +343,9 @@ export class NerdctlSandboxBackend {
           image: input.image,
           profile: input.profile,
           command: input.command,
+          source: input.source,
+          deploymentId: this.options.deploymentId,
+          identity: input.identity,
         }),
         "nerdctl create",
       );
@@ -342,7 +364,11 @@ export class NerdctlSandboxBackend {
         ["inspect", "--mode", "native", ownership.containerName],
         "nerdctl native inspect",
       );
-      verifyNativeSpec(parseNativeSpec(native.stdout), input.profile);
+      verifyNativeSpec(
+        parseNativeSpec(native.stdout),
+        input.profile,
+        sourcePath,
+      );
 
       const result = await this.run(
         ["start", "--attach", ownership.containerName],

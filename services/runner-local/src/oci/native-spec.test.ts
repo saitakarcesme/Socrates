@@ -109,4 +109,32 @@ describe("native OCI spec verification", () => {
       SandboxInspectionError,
     );
   });
+
+  it("admits exactly one expected recursive read-only source bind", () => {
+    const sourcePath = "/runner/sources/source-owned/tree";
+    const parsed = parseNativeSpec(fixtureNativeInspection());
+    const mounts = parsed["mounts"] as unknown[];
+    mounts.push({
+      destination: "/socrates/source",
+      source: sourcePath,
+      type: "bind",
+      options: ["rbind", "rprivate", "ro"],
+    });
+
+    expect(() =>
+      verifyNativeSpec(parsed, fixtureProfile, sourcePath),
+    ).not.toThrow();
+    expect(() => verifyNativeSpec(parsed, fixtureProfile)).toThrow(
+      SandboxInspectionError,
+    );
+
+    (mounts.at(-1) as Record<string, unknown>)["options"] = [
+      "rbind",
+      "rprivate",
+      "rw",
+    ];
+    expect(() => verifyNativeSpec(parsed, fixtureProfile, sourcePath)).toThrow(
+      SandboxInspectionError,
+    );
+  });
 });

@@ -1,4 +1,9 @@
 import type { SandboxOwnership } from "./identity";
+import {
+  resolveMaterializedSourceSnapshot,
+  type MaterializedSourceSnapshot,
+} from "../source/capability";
+import type { SandboxAttemptIdentity } from "./identity";
 
 export const sandboxAppArmorProfile = "socrates-sandbox";
 
@@ -126,12 +131,18 @@ export function buildCreateArguments(input: {
   image: AdmittedSandboxImage;
   profile: SandboxResourceProfile;
   command: SandboxCommand;
+  source?: MaterializedSourceSnapshot;
+  deploymentId?: string;
+  identity?: SandboxAttemptIdentity;
 }): readonly string[] {
   assertAdmittedImage(input.image);
   validateSandboxProfile(input.profile);
   const labels = Object.entries(input.ownership.labels)
     .sort(([left], [right]) => left.localeCompare(right))
     .flatMap(([name, value]) => ["--label", `${name}=${value}`]);
+  const sourceArguments = input.source
+    ? sourceMountArguments(input.source, input.deploymentId, input.identity)
+    : [];
 
   return [
     "create",
@@ -149,6 +160,7 @@ export function buildCreateArguments(input: {
     "--log-driver",
     "none",
     "--read-only",
+    ...sourceArguments,
     "--tmpfs",
     `/workspace:rw,noexec,nosuid,nodev,size=${input.profile.workspaceBytes}`,
     "--tmpfs",
@@ -177,5 +189,29 @@ export function buildCreateArguments(input: {
     "SOCRATES_SANDBOX=1",
     input.image.reference,
     ...commandArguments(input.command),
+  ];
+}
+
+function sourceMountArguments(
+  source: MaterializedSourceSnapshot,
+  deploymentId: string | undefined,
+  identity: SandboxAttemptIdentity | undefined,
+): readonly string[] {
+  if (!deploymentId || !identity) {
+    throw new TypeError(
+      "A source capability requires deployment and attempt identity.",
+    );
+  }
+  const path = resolveMaterializedSourceSnapshot(
+    source,
+    deploymentId,
+    identity,
+  );
+  if (path.includes(",") || path.includes("\0")) {
+    throw new TypeError("Materialized source path is not mount-safe.");
+  }
+  return [
+    "--mount",
+    `type=bind,src=${path},dst=/socrates/source,rro,bind-propagation=rprivate`,
   ];
 }

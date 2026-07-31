@@ -1484,15 +1484,19 @@ verified artifact stream
   -> guarded tar parser
   -> private attempt directory
   -> opaque materialized capability
-  -> /socrates/source (read-only, noexec, nosuid, nodev)
+  -> /socrates/source (recursive read-only, private propagation)
 ```
 
 The OCI builder accepts no raw source path. Native-spec verification requires
-the exact resolved directory, destination, and read-only mount flags in
-addition to the existing sandbox policy. The in-image task runtime will later
-copy this read-only tree into bounded `/workspace`; it will never execute or
-modify the host staging tree. Materialization ownership must match the sandbox
-attempt identity, and release is idempotent.
+the exact resolved directory, destination, recursive read-only state, and
+private propagation in addition to the existing sandbox policy. Nerdctl's
+supported bind surface does not expose portable `noexec`, `nosuid`, or `nodev`
+keys, so this ADR does not pretend to request them. Instead the archive
+admission boundary makes device nodes and links unrepresentable, forbids
+set-ID bits, and publishes an immutable tree. The in-image task runtime will
+later copy that tree into bounded `/workspace`; it will never modify the host
+staging tree. Materialization ownership must match the sandbox attempt
+identity, and release is idempotent.
 
 This ADR does not define source upload, snapshot resolution from durable
 metadata, an admitted image catalog, task-runtime ABI, command execution, or

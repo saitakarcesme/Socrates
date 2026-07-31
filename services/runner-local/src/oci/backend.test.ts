@@ -14,6 +14,7 @@ import {
 
 import type { ProcessExecutor, ProcessRequest, ProcessResult } from "./process";
 import type { ReadinessVerifier } from "./readiness";
+import type { MaterializedSourceSnapshot } from "../source/capability";
 
 const deploymentId = "test-deployment";
 
@@ -104,6 +105,29 @@ function backend(
 }
 
 describe("nerdctl sandbox backend", () => {
+  it("rejects forged source capabilities before host attestation", async () => {
+    const processes = new LifecycleProcesses();
+    const { value, readiness } = backend(processes);
+
+    await expect(
+      value.execute({
+        identity: fixtureIdentity,
+        image: fixtureImage,
+        profile: fixtureProfile,
+        command: { executable: "/bin/true", arguments: [] },
+        source: {
+          attemptKey: "forged",
+          digest: `sha256:${"0".repeat(64)}`,
+          archiveBytes: 1,
+          expandedBytes: 1,
+          entryCount: 1,
+        } as unknown as MaterializedSourceSnapshot,
+      }),
+    ).rejects.toThrow("does not belong");
+    expect(readiness.calls).toBe(0);
+    expect(processes.requests).toEqual([]);
+  });
+
   it("attests, creates, verifies, starts, and removes in order", async () => {
     const processes = new LifecycleProcesses();
     const { value, readiness } = backend(processes);

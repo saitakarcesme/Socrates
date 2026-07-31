@@ -79,6 +79,28 @@ function isOwnedMetadataBind(mount: JsonObject): boolean {
   );
 }
 
+function isExpectedSourceBind(
+  mount: JsonObject,
+  expectedSourcePath: string | undefined,
+): boolean {
+  if (
+    !expectedSourcePath ||
+    mount["destination"] !== "/socrates/source" ||
+    mount["source"] !== expectedSourcePath ||
+    mount["type"] !== "bind"
+  ) {
+    return false;
+  }
+  const options = strings(mount["options"]);
+  return (
+    options !== undefined &&
+    options.includes("rbind") &&
+    (options.includes("ro") || options.includes("rro")) &&
+    !options.includes("rw") &&
+    (options.includes("rprivate") || options.includes("private"))
+  );
+}
+
 function mountOption(mount: JsonObject | undefined, expected: string): boolean {
   return strings(mount?.["options"])?.includes(expected) === true;
 }
@@ -109,6 +131,7 @@ export function parseNativeSpec(output: string): JsonObject {
 export function verifyNativeSpec(
   spec: JsonObject,
   profile: SandboxResourceProfile,
+  expectedSourcePath?: string,
 ): void {
   validateSandboxProfile(profile);
   const failures: string[] = [];
@@ -173,10 +196,25 @@ export function verifyNativeSpec(
           strings(mount["options"])?.some((option) =>
             ["bind", "rbind"].includes(option),
           );
-        return bind && !isOwnedMetadataBind(mount);
+        return (
+          bind &&
+          !isOwnedMetadataBind(mount) &&
+          !isExpectedSourceBind(mount, expectedSourcePath)
+        );
       })
     ) {
       failures.push("mounts.bind");
+    }
+    const sourceMounts = mounts.filter(
+      (mount) => mount["destination"] === "/socrates/source",
+    );
+    if (
+      (expectedSourcePath !== undefined &&
+        (sourceMounts.length !== 1 ||
+          !isExpectedSourceBind(sourceMounts[0]!, expectedSourcePath))) ||
+      (expectedSourcePath === undefined && sourceMounts.length !== 0)
+    ) {
+      failures.push("mounts./socrates/source");
     }
     for (const [destination, size] of [
       ["/workspace", profile.workspaceBytes],

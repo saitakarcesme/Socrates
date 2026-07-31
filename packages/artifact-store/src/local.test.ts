@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -22,6 +22,12 @@ function digest(content: Uint8Array): string {
 
 async function* chunks(...content: Uint8Array[]) {
   yield* content;
+}
+
+async function collect(content: AsyncIterable<Uint8Array>): Promise<Buffer> {
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of content) chunks.push(chunk);
+  return Buffer.concat(chunks);
 }
 
 afterEach(async () => {
@@ -73,6 +79,72 @@ describe("LocalContentAddressedArtifactStore", () => {
     ).resolves.toEqual({
       digest: input.expectedDigest,
       sizeBytes: input.expectedSizeBytes,
+    });
+  });
+
+  it("streams a verified object once without exposing its path", async () => {
+    const store = new LocalContentAddressedArtifactStore(await temporaryRoot());
+    const content = new TextEncoder().encode("source snapshot");
+    const artifact = await store.put({
+      content: chunks(content),
+      expectedDigest: digest(content),
+      expectedSizeBytes: content.byteLength,
+      maxSizeBytes: content.byteLength,
+    });
+    const stream = store.read({
+      artifact,
+      maxSizeBytes: content.byteLength,
+    });
+
+    await expect(collect(stream)).resolves.toEqual(Buffer.from(content));
+    await expect(collect(stream)).rejects.toMatchObject<
+      Partial<ArtifactStoreError>
+    >({
+      code: "invalid_capability",
+    });
+    expect(artifact).not.toHaveProperty("path");
+  });
+
+  it("rejects forged read capabilities before opening storage", async () => {
+    const store = new LocalContentAddressedArtifactStore(await temporaryRoot());
+    const forged = {
+      digest: `sha256:${"0".repeat(64)}`,
+      sizeBytes: 0,
+    };
+
+    expect(() =>
+      store.read({
+        artifact: forged,
+        maxSizeBytes: 0,
+      }),
+    ).toThrowError(
+      expect.objectContaining<Partial<ArtifactStoreError>>({
+        code: "invalid_capability",
+      }),
+    );
+  });
+
+  it("rehashes content changed after capability issuance", async () => {
+    const root = await temporaryRoot();
+    const store = new LocalContentAddressedArtifactStore(root);
+    const content = new TextEncoder().encode("original");
+    const expectedDigest = digest(content);
+    const artifact = await store.put({
+      content: chunks(content),
+      expectedDigest,
+      expectedSizeBytes: content.byteLength,
+      maxSizeBytes: content.byteLength,
+    });
+    const hex = expectedDigest.slice("sha256:".length);
+    await writeFile(
+      join(root, "objects", hex.slice(0, 2), hex.slice(2)),
+      "mutated!",
+    );
+
+    await expect(
+      collect(store.read({ artifact, maxSizeBytes: content.byteLength })),
+    ).rejects.toMatchObject<Partial<ArtifactStoreError>>({
+      code: "digest_mismatch",
     });
   });
 

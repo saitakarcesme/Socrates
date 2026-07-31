@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
 import { mkdir, open, rename, rm, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
@@ -6,10 +7,11 @@ import {
   ArtifactStoreError,
   type ArtifactStore,
   type PutArtifactInput,
+  type ReadArtifactInput,
   type VerifiedArtifact,
   type VerifyArtifactInput,
 } from "./index";
-import { issueVerifiedArtifact } from "./verification";
+import { isVerifiedArtifact, issueVerifiedArtifact } from "./verification";
 
 const digestPattern = /^sha256:([a-f0-9]{64})$/;
 
@@ -154,8 +156,122 @@ export class LocalContentAddressedArtifactStore implements ArtifactStore {
     return issueVerifiedArtifact(identity.digest, identity.sizeBytes);
   }
 
+  read(input: ReadArtifactInput): AsyncIterable<Uint8Array> {
+    if (!isVerifiedArtifact(input.artifact)) {
+      throw new ArtifactStoreError(
+        "invalid_capability",
+        "Artifact reads require a verified capability.",
+      );
+    }
+    const identity = validateIdentity(
+      input.artifact.digest,
+      input.artifact.sizeBytes,
+    );
+    if (!Number.isSafeInteger(input.maxSizeBytes) || input.maxSizeBytes < 0) {
+      throw new ArtifactStoreError(
+        "invalid_size",
+        "Artifact read maximum must be a non-negative safe integer.",
+      );
+    }
+    if (identity.sizeBytes > input.maxSizeBytes) {
+      throw new ArtifactStoreError(
+        "size_limit_exceeded",
+        "Verified artifact exceeds the read limit.",
+      );
+    }
+
+    let consumed = false;
+    const readVerified = () => this.#readVerified(identity, input.maxSizeBytes);
+    return {
+      [Symbol.asyncIterator](): AsyncIterator<Uint8Array> {
+        if (consumed) {
+          throw new ArtifactStoreError(
+            "invalid_capability",
+            "Artifact content streams can be consumed only once.",
+          );
+        }
+        consumed = true;
+        return readVerified();
+      },
+    };
+  }
+
   #objectPath(hex: string): string {
     return join(this.#objectsRoot, hex.slice(0, 2), hex.slice(2));
+  }
+
+  async *#readVerified(
+    identity: ValidatedIdentity,
+    maxSizeBytes: number,
+  ): AsyncGenerator<Uint8Array> {
+    const objectPath = this.#objectPath(identity.hex);
+    let handle;
+    try {
+      handle = await open(
+        objectPath,
+        constants.O_RDONLY | constants.O_NOFOLLOW,
+      );
+      const metadata = await handle.stat();
+      if (!metadata.isFile() || metadata.size !== identity.sizeBytes) {
+        throw new ArtifactStoreError(
+          "size_mismatch",
+          "Stored artifact no longer matches its verified size.",
+        );
+      }
+
+      const hash = createHash("sha256");
+      let readBytes = 0;
+      for (;;) {
+        const buffer = Buffer.allocUnsafe(
+          Math.min(64 * 1_024, identity.sizeBytes - readBytes),
+        );
+        if (buffer.byteLength === 0) break;
+        const result = await handle.read(buffer, 0, buffer.byteLength, null);
+        if (result.bytesRead === 0) break;
+        readBytes += result.bytesRead;
+        if (readBytes > maxSizeBytes || readBytes > identity.sizeBytes) {
+          throw new ArtifactStoreError(
+            "size_limit_exceeded",
+            "Stored artifact exceeds its verified or maximum size.",
+          );
+        }
+        const chunk = buffer.subarray(0, result.bytesRead);
+        hash.update(chunk);
+        yield chunk;
+      }
+
+      if (readBytes !== identity.sizeBytes) {
+        throw new ArtifactStoreError(
+          "size_mismatch",
+          "Stored artifact no longer matches its verified size.",
+        );
+      }
+      if (`sha256:${hash.digest("hex")}` !== identity.digest) {
+        throw new ArtifactStoreError(
+          "digest_mismatch",
+          "Stored artifact no longer matches its verified digest.",
+        );
+      }
+      const finalMetadata = await handle.stat();
+      if (
+        !finalMetadata.isFile() ||
+        finalMetadata.size !== identity.sizeBytes
+      ) {
+        throw new ArtifactStoreError(
+          "size_mismatch",
+          "Stored artifact changed while it was being read.",
+        );
+      }
+    } catch (error) {
+      if (error instanceof ArtifactStoreError) throw error;
+      throw new ArtifactStoreError(
+        "store_unavailable",
+        "Stored artifact could not be read.",
+        { cause: error },
+      );
+    } finally {
+      await handle?.close();
+    }
   }
 
   async #matchesObject(

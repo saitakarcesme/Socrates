@@ -1,9 +1,13 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { LocalContentAddressedArtifactStore } from "@socrates/artifact-store/local";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { performance } from "node:perf_hooks";
-import { resolve } from "node:path";
-import { randomUUID } from "node:crypto";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { pack } from "tar-stream";
 
+import { SourceSnapshotMaterializer } from "../source/materializer";
 import { NerdctlSandboxBackend } from "./backend";
 import { NodeProcessExecutor } from "./process";
 import { unsafeCreateAdmittedImageForTesting } from "./profile";
@@ -16,6 +20,22 @@ import type { SandboxAttemptIdentity } from "./identity";
 import type { SandboxResourceProfile } from "./profile";
 
 const digestPattern = /^.+@sha256:[a-f0-9]{64}$/;
+
+async function sourceArchive(): Promise<Buffer> {
+  const archive = pack();
+  archive.entry(
+    { name: "nested/probe.txt", type: "file", mode: 0o644, size: 18 },
+    "socrates-source-ok",
+  );
+  archive.finalize();
+  const chunks: Buffer[] = [];
+  for await (const chunk of archive) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
+async function* bytes(value: Uint8Array) {
+  yield value;
+}
 
 function argument(name: string): string {
   const index = process.argv.indexOf(name);
@@ -66,80 +86,161 @@ const image = unsafeCreateAdmittedImageForTesting(
   imageReference,
   architecture(),
 );
+const sourceStateRoot = await mkdtemp(
+  join(tmpdir(), "socrates-native-source-"),
+);
 
-const beforeRecovery = await backend.recoverOwned();
-const readiness = await backend.attest();
-const successfulAttempt = identity(runnerId, randomUUID(), randomUUID());
-const successful = await backend.execute({
-  identity: successfulAttempt,
-  image,
-  profile,
-  command: {
-    executable: "/usr/local/bin/node",
-    arguments: ["-e", "process.stdout.write('socrates-native-ok')"],
-  },
-});
-if (successful.exitCode !== 0 || successful.stdout !== "socrates-native-ok") {
-  throw new Error(
-    "Bounded native execution did not return the expected result.",
+try {
+  const artifactStore = new LocalContentAddressedArtifactStore(
+    join(sourceStateRoot, "artifacts"),
   );
-}
+  const materializer = new SourceSnapshotMaterializer(artifactStore, {
+    root: join(sourceStateRoot, "materialized"),
+    deploymentId: "native-reference-host",
+    runnerId,
+    limits: {
+      maximumArchiveBytes: 1 * 1_024 * 1_024,
+      maximumExpandedBytes: 1 * 1_024 * 1_024,
+      maximumEntries: 32,
+      maximumFileBytes: 256 * 1_024,
+      maximumPathBytes: 256,
+      maximumComponentBytes: 128,
+      maximumPathDepth: 16,
+    },
+  });
+  const archive = await sourceArchive();
+  const archiveDigest = `sha256:${createHash("sha256")
+    .update(archive)
+    .digest("hex")}`;
+  const artifact = await artifactStore.put({
+    content: bytes(archive),
+    expectedDigest: archiveDigest,
+    expectedSizeBytes: archive.byteLength,
+    maxSizeBytes: archive.byteLength,
+  });
 
-const cancellationAttempt = identity(runnerId, randomUUID(), randomUUID());
-const running = backend.execute({
-  identity: cancellationAttempt,
-  image,
-  profile,
-  command: {
-    executable: "/usr/local/bin/node",
-    arguments: ["-e", "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],
-  },
-});
-await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
-const cancellationStartedAt = performance.now();
-const cancellationAccepted = await backend.cancel(cancellationAttempt, 1_000);
-const cancellationDurationMs =
-  Math.round((performance.now() - cancellationStartedAt) * 100) / 100;
-const cancelled = await running;
-if (!cancellationAccepted || cancelled.exitCode === 0) {
-  throw new Error("Native cancellation did not terminate the sandbox.");
-}
-const afterRecovery = await backend.recoverOwned();
-if (afterRecovery !== 0) {
-  throw new Error("Native validation left an owned sandbox behind.");
-}
+  const beforeRecovery = await backend.recoverOwned();
+  const sourceRecovery = await materializer.recoverOwned();
+  const readiness = await backend.attest();
+  const successfulAttempt = identity(runnerId, randomUUID(), randomUUID());
+  const source = await materializer.materialize({
+    artifact,
+    identity: successfulAttempt,
+  });
+  const successful = await backend.execute({
+    identity: successfulAttempt,
+    image,
+    profile,
+    source,
+    command: {
+      executable: "/usr/local/bin/node",
+      arguments: [
+        "-e",
+        [
+          "const fs=require('node:fs')",
+          "const path='/socrates/source/nested/probe.txt'",
+          "const value=fs.readFileSync(path,'utf8')",
+          "let readOnly=false",
+          "try{fs.writeFileSync(path,'changed')}catch(error){readOnly=['EACCES','EROFS'].includes(error?.code)}",
+          "process.stdout.write(JSON.stringify({value,readOnly}))",
+        ].join(";"),
+      ],
+    },
+  });
+  const sourceProof = JSON.parse(successful.stdout) as {
+    value?: unknown;
+    readOnly?: unknown;
+  };
+  if (
+    successful.exitCode !== 0 ||
+    sourceProof.value !== "socrates-source-ok" ||
+    sourceProof.readOnly !== true
+  ) {
+    throw new Error(
+      "Native source execution did not prove readable, read-only content.",
+    );
+  }
+  await materializer.release(source);
+  const sourceDirectoriesAfterRelease = await readdir(
+    join(sourceStateRoot, "materialized"),
+  );
 
-const evidence = {
-  schemaVersion: 1,
-  recordedAt: new Date().toISOString(),
-  image: imageReference,
-  readiness,
-  gates: {
-    scopedRecoveryBeforeRun: beforeRecovery === 0,
-    createBeforeNativeInspect: true,
-    nativeSpecVerifiedBeforeStart: true,
-    boundedExecution: true,
-    exactFenceCancellation: cancellationAccepted,
-    cleanup: afterRecovery === 0,
-  },
-  successfulExecution: {
-    exitCode: successful.exitCode,
-    durationMs: successful.durationMs,
-  },
-  cancellation: {
-    exitCode: cancelled.exitCode,
-    durationMs: cancellationDurationMs,
-  },
-};
-const evidenceDirectory = fileURLToPath(
-  new URL("../../evidence/native/", import.meta.url),
-);
-await mkdir(evidenceDirectory, { recursive: true });
-const evidencePath = resolve(
-  evidenceDirectory,
-  `${Date.now()}-${runnerId}.json`,
-);
-await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
-process.stdout.write(
-  `${JSON.stringify({ evidencePath, ...evidence }, null, 2)}\n`,
-);
+  const cancellationAttempt = identity(runnerId, randomUUID(), randomUUID());
+  const running = backend.execute({
+    identity: cancellationAttempt,
+    image,
+    profile,
+    command: {
+      executable: "/usr/local/bin/node",
+      arguments: [
+        "-e",
+        "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)",
+      ],
+    },
+  });
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+  const cancellationStartedAt = performance.now();
+  const cancellationAccepted = await backend.cancel(cancellationAttempt, 1_000);
+  const cancellationDurationMs =
+    Math.round((performance.now() - cancellationStartedAt) * 100) / 100;
+  const cancelled = await running;
+  if (!cancellationAccepted || cancelled.exitCode === 0) {
+    throw new Error("Native cancellation did not terminate the sandbox.");
+  }
+  const afterRecovery = await backend.recoverOwned();
+  if (afterRecovery !== 0) {
+    throw new Error("Native validation left an owned sandbox behind.");
+  }
+
+  const evidence = {
+    schemaVersion: 2,
+    recordedAt: new Date().toISOString(),
+    image: imageReference,
+    readiness,
+    sourceSnapshot: {
+      digest: artifact.digest,
+      archiveBytes: source.archiveBytes,
+      expandedBytes: source.expandedBytes,
+      entryCount: source.entryCount,
+    },
+    gates: {
+      scopedRecoveryBeforeRun: beforeRecovery === 0,
+      sourceRecoveryBeforeRun: sourceRecovery === 0,
+      sourceDigestAndSizeVerified: true,
+      opaqueAttemptCapability: true,
+      recursiveReadOnlySourceBind: sourceProof.readOnly === true,
+      sourceReleased: sourceDirectoriesAfterRelease.length === 0,
+      createBeforeNativeInspect: true,
+      nativeSpecVerifiedBeforeStart: true,
+      boundedExecution: true,
+      exactFenceCancellation: cancellationAccepted,
+      cleanup: afterRecovery === 0,
+    },
+    successfulExecution: {
+      exitCode: successful.exitCode,
+      durationMs: successful.durationMs,
+    },
+    cancellation: {
+      exitCode: cancelled.exitCode,
+      durationMs: cancellationDurationMs,
+    },
+  };
+  const evidenceDirectory = fileURLToPath(
+    new URL("../../evidence/native/", import.meta.url),
+  );
+  await mkdir(evidenceDirectory, { recursive: true });
+  const evidencePath = resolve(
+    evidenceDirectory,
+    `${Date.now()}-${runnerId}.json`,
+  );
+  await writeFile(
+    evidencePath,
+    `${JSON.stringify(evidence, null, 2)}\n`,
+    "utf8",
+  );
+  process.stdout.write(
+    `${JSON.stringify({ evidencePath, ...evidence }, null, 2)}\n`,
+  );
+} finally {
+  await rm(sourceStateRoot, { recursive: true, force: true });
+}

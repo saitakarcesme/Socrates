@@ -101,15 +101,18 @@ The typed argument builder resolves it internally and emits only:
 
 ```text
 --mount
-type=bind,src=<private capability path>,dst=/socrates/source,ro=true,\
-nosuid=true,nodev=true,noexec=true
+type=bind,src=<private capability path>,dst=/socrates/source,rro,\
+bind-propagation=rprivate
 ```
 
 Native OCI inspection must find exactly that source and destination with
-read-only, bind/rbind, nosuid, nodev, and noexec semantics. All other
-non-runtime metadata binds still fail. Backend tests prove that forged,
-released, cross-attempt, and mismatched-digest capabilities never reach
-process execution.
+recursive read-only bind and private propagation semantics. Nerdctl does not
+document `noexec`, `nosuid`, or `nodev` as supported bind keys; links, devices,
+and set-ID content are therefore eliminated before mounting rather than
+represented and weakened by an unsupported CLI option. All other non-runtime
+metadata binds still fail. Backend tests prove that forged, released,
+cross-attempt, and mismatched-digest capabilities never reach process
+execution.
 
 ## Test matrix
 
