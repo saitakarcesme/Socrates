@@ -2143,6 +2143,17 @@ handoff, and return immutable identity/state only. They add no polling timer,
 backoff, heartbeat, execution, outbox mutation, cleanup, or process entry
 point. `LocalRunnerNotEnabledError` remains unchanged after Slice 2.12.
 
+Validation amendment, 2026-07-31: commits `c25f1f6` and `6193aab` passed local
+formatting, typecheck, lint, all workspace tests, 181 runner-local tests, 56 API
+tests, 40 contract tests, Phase 1/2 boundary audits, production builds, and the
+low-severity dependency audit. GitHub Actions run `30650673400` applied schema
+compatibility 7 and passed the isolated real-PostgreSQL two-runner acquire
+race, stable offer replay, delivery/task/attempt conflict checks, atomic
+delivery claim, unchanged outbox state, authenticated acquire-to-terminal
+transport journey, native spool/journal probes, Chromium journey, and builds.
+This admits ADR-049 and closes Slice 2.12. Offer expiry/reassignment and
+production execution remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

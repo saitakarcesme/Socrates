@@ -1,6 +1,6 @@
 # Slice 2.12 fenced task offers plan
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -132,3 +132,24 @@ the same offer. Ambiguous claim preserves the journal attempt as in Slice 2.11.
 11. `LocalRunnerNotEnabledError` remains the production entry-point behavior.
 12. Full repository, PostgreSQL, browser, build, and CI gates pass before the
     slice becomes Complete.
+
+## Validation
+
+Completed on 2026-07-31.
+
+- implementation commit `c25f1f6` added schema compatibility 7, fenced offer
+  persistence, authenticated acquire/delivery-claim routes, the single-attempt
+  client, journaled task source, and delivery-scoped exact reconciler;
+- fixture isolation commit `6193aab` placed concurrent consumers in a dedicated
+  workspace so the test proves one offer for one task without consuming shared
+  queued fixtures;
+- local formatting, typecheck, lint, 181 runner-local tests, 56 API tests, 40
+  contract tests, all workspace tests, Phase 1/2 audits, production builds, and
+  the low-severity dependency audit passed;
+- GitHub Actions run `30650673400` applied migration 0010 and passed real
+  PostgreSQL acquire concurrency, delivery-scoped authenticated claim,
+  heartbeat/cancellation/event replay, native spool/journal probes, the
+  Chromium journey, and production builds;
+- outbox publication state remained unchanged by acquire and claim, while
+  timers, expiry/reassignment, execution, cleanup, and production runner
+  enablement remain absent.

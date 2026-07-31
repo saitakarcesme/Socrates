@@ -528,7 +528,7 @@ passed 178 local tests, including 19 work-journal tests.
 
 ### Slice 2.12 — fenced task offers
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-049.
 
@@ -544,6 +544,11 @@ Detailed plan: `docs/plans/slice-2.12-fenced-task-offers.md`.
 Exit: PostgreSQL concurrency tests prove one active offer per task, runner
 restart re-acquires the same offer, and no delivery becomes claimed without
 the exact journal attempt and scheduler lease committing together.
+
+Evidence: commits `c25f1f6` and `6193aab`; GitHub Actions run `30650673400`
+passed schema compatibility 7, real PostgreSQL delivery concurrency, the
+delivery-scoped authenticated transport journey, native durability probes,
+browser tests, and production builds.
 
 ## Acceptance gates
 
