@@ -12,11 +12,13 @@ import {
   createWorkClaim,
   createWorkCompletion,
   createWorkExecutionStart,
+  createWorkExecutionRetirement,
   createWorkManifest,
   createWorkRejection,
   decodeWorkClaim,
   decodeWorkCompletion,
   decodeWorkExecutionStart,
+  decodeWorkExecutionRetirement,
   decodeWorkManifest,
   decodeWorkRejection,
   deliveryKeyFor,
@@ -28,11 +30,13 @@ import { attemptKeyFor } from "../spool/codec";
 import {
   workJournalLimitsSchema,
   workCompletionCoreSchema,
+  workExecutionRetirementCoreSchema,
   workRejectionCoreSchema,
   WorkJournalError,
   type WorkClaim,
   type WorkCompletion,
   type WorkExecutionStart,
+  type WorkExecutionRetirement,
   type WorkJournalLimits,
   type WorkJournalState,
   type WorkManifest,
@@ -67,6 +71,7 @@ type LoadedWork = Readonly<{
   claim: WorkClaim | null;
   completion: WorkCompletion | null;
   executionStart: WorkExecutionStart | null;
+  executionRetirement: WorkExecutionRetirement | null;
   rejection: WorkRejection | null;
 }>;
 
@@ -134,6 +139,7 @@ export class LocalWorkJournal {
         if (
           (await this.#filesystem.readClaim(key)) ||
           (await this.#filesystem.readExecutionStart(key)) ||
+          (await this.#filesystem.readExecutionRetirement(key)) ||
           (await this.#filesystem.readRejection(key)) ||
           (await this.#filesystem.readCompletion(key))
         ) {
@@ -184,6 +190,7 @@ export class LocalWorkJournal {
           if (
             (await this.#filesystem.readClaim(key)) ||
             (await this.#filesystem.readExecutionStart(key)) ||
+            (await this.#filesystem.readExecutionRetirement(key)) ||
             (await this.#filesystem.readRejection(key)) ||
             (await this.#filesystem.readCompletion(key))
           ) {
@@ -214,7 +221,12 @@ export class LocalWorkJournal {
     const execution = runnerExecutionV1Schema.parse(executionInput);
     return this.#serialize(async () => {
       const loaded = await this.#requireByDeliveryId(deliveryId);
-      if (!loaded.claim || loaded.rejection || loaded.completion) {
+      if (
+        !loaded.claim ||
+        loaded.rejection ||
+        loaded.completion ||
+        loaded.executionRetirement
+      ) {
         throw new WorkJournalError(
           "identity_conflict",
           "Execution can start only from an active durable claim.",
@@ -263,6 +275,77 @@ export class LocalWorkJournal {
         );
       }
       return this.#state(durable);
+    });
+  }
+
+  async commitExecutionRetirement(
+    deliveryId: string,
+    executionInput: RunnerExecutionV1,
+    observationInput: {
+      observedAt: string;
+      reason: WorkExecutionRetirement["reason"];
+    },
+  ): Promise<WorkJournalState> {
+    const execution = runnerExecutionV1Schema.parse(executionInput);
+    const observation = workExecutionRetirementCoreSchema
+      .pick({ observedAt: true, reason: true })
+      .parse(observationInput);
+    return this.#serialize(async () => {
+      const loaded = await this.#requireByDeliveryId(deliveryId);
+      if (
+        !loaded.claim ||
+        !loaded.executionStart ||
+        loaded.rejection ||
+        loaded.completion
+      ) {
+        throw new WorkJournalError(
+          "identity_conflict",
+          "Execution can retire only from an active durable start.",
+        );
+      }
+      const executionDigest = executionDigestFor(execution);
+      const attemptKey = attemptKeyFor(execution);
+      if (
+        loaded.claim.executionDigest !== executionDigest ||
+        loaded.executionStart.executionDigest !== executionDigest ||
+        loaded.executionStart.attemptKey !== attemptKey
+      ) {
+        throw new WorkJournalError(
+          "identity_conflict",
+          "Execution retirement does not match the durable start.",
+        );
+      }
+      if (loaded.executionRetirement) {
+        if (
+          loaded.executionRetirement.executionDigest !== executionDigest ||
+          loaded.executionRetirement.attemptKey !== attemptKey ||
+          loaded.executionRetirement.observedAt !== observation.observedAt ||
+          loaded.executionRetirement.reason !== observation.reason
+        ) {
+          throw new WorkJournalError(
+            "identity_conflict",
+            "Different retirement evidence conflicts with this delivery.",
+          );
+        }
+        return this.#state(loaded);
+      }
+      const retirement = createWorkExecutionRetirement({
+        deliveryKey: loaded.manifest.deliveryKey,
+        execution,
+        ...observation,
+        committedAt: this.#instant(),
+      });
+      const bytes = encodeWorkRecord(retirement);
+      await this.#checkCapacity(
+        bytes.byteLength,
+        this.#limits.maximumClaimBytes,
+        "execution retirement",
+      );
+      await this.#filesystem.publishExecutionRetirement(
+        loaded.manifest.deliveryKey,
+        bytes,
+      );
+      return this.#state(await this.#load(loaded.manifest.deliveryKey));
     });
   }
 
@@ -386,6 +469,12 @@ export class LocalWorkJournal {
           "Work cannot complete without a durable claim.",
         );
       }
+      if (loaded.executionRetirement) {
+        throw new WorkJournalError(
+          "identity_conflict",
+          "Retired work cannot become completed.",
+        );
+      }
       if (loaded.rejection) {
         throw new WorkJournalError(
           "identity_conflict",
@@ -471,6 +560,7 @@ export class LocalWorkJournal {
       if (
         (await this.#filesystem.readClaim(key)) ||
         (await this.#filesystem.readExecutionStart(key)) ||
+        (await this.#filesystem.readExecutionRetirement(key)) ||
         (await this.#filesystem.readRejection(key)) ||
         (await this.#filesystem.readCompletion(key))
       )
@@ -502,6 +592,11 @@ export class LocalWorkJournal {
     const executionStart = executionStartBytes
       ? decodeWorkExecutionStart(executionStartBytes)
       : null;
+    const executionRetirementBytes =
+      await this.#filesystem.readExecutionRetirement(key);
+    const executionRetirement = executionRetirementBytes
+      ? decodeWorkExecutionRetirement(executionRetirementBytes)
+      : null;
     const rejectionBytes = await this.#filesystem.readRejection(key);
     const rejection = rejectionBytes
       ? decodeWorkRejection(rejectionBytes)
@@ -524,6 +619,16 @@ export class LocalWorkJournal {
       throw new WorkJournalError(
         "corrupt",
         "Work completion requires a claim and forbids rejection.",
+      );
+    if (executionRetirement && (!executionStart || !claim || rejection))
+      throw new WorkJournalError(
+        "corrupt",
+        "Work execution retirement requires a start and forbids rejection.",
+      );
+    if (executionRetirement && completion)
+      throw new WorkJournalError(
+        "corrupt",
+        "Work cannot contain both retirement and completion records.",
       );
     if (
       claim &&
@@ -559,11 +664,22 @@ export class LocalWorkJournal {
         "identity_conflict",
         "Work completion identity does not match its claim.",
       );
+    if (
+      executionRetirement &&
+      (executionRetirement.deliveryKey !== key ||
+        executionRetirement.executionDigest !== claim?.executionDigest ||
+        executionRetirement.attemptKey !== attemptKeyFor(claim.execution))
+    )
+      throw new WorkJournalError(
+        "identity_conflict",
+        "Work execution retirement identity does not match its claim.",
+      );
     return Object.freeze({
       manifest,
       claim,
       completion,
       executionStart,
+      executionRetirement,
       rejection,
     });
   }
@@ -590,17 +706,28 @@ export class LocalWorkJournal {
       attemptId: loaded.manifest.identity.attemptId,
       state: loaded.completion
         ? "completed"
-        : loaded.executionStart
-          ? "execution_started"
-          : loaded.claim
-            ? "claimed"
-            : loaded.rejection
-              ? "rejected"
-              : "pending_claim",
+        : loaded.executionRetirement
+          ? "retired"
+          : loaded.executionStart
+            ? "execution_started"
+            : loaded.claim
+              ? "claimed"
+              : loaded.rejection
+                ? "rejected"
+                : "pending_claim",
       admittedAt: loaded.manifest.admittedAt,
       ...(loaded.claim ? { claimedAt: loaded.claim.committedAt } : {}),
       ...(loaded.executionStart
         ? { executionStartedAt: loaded.executionStart.startedAt }
+        : {}),
+      ...(loaded.executionRetirement
+        ? {
+            retiredAt: loaded.executionRetirement.committedAt,
+            retirement: {
+              observedAt: loaded.executionRetirement.observedAt,
+              reason: loaded.executionRetirement.reason,
+            },
+          }
         : {}),
       ...(loaded.rejection
         ? {
@@ -662,6 +789,7 @@ export class LocalWorkJournal {
         if (
           (await this.#filesystem.readClaim(key)) ||
           (await this.#filesystem.readExecutionStart(key)) ||
+          (await this.#filesystem.readExecutionRetirement(key)) ||
           (await this.#filesystem.readRejection(key)) ||
           (await this.#filesystem.readCompletion(key))
         ) {

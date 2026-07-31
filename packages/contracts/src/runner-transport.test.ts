@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   maximumRunnerLeaseDurationMs,
+  runnerAttemptReconcileRequestV1Schema,
+  runnerAttemptReconcileResponseV1Schema,
   runnerBearerTokenSchema,
   runnerEventSubmitResponseV1Schema,
   runnerSourceSnapshotResolveParamsV1Schema,
@@ -121,6 +123,35 @@ describe("runner transport contracts", () => {
         acknowledgement,
       }).acknowledgement,
     ).toEqual(acknowledgement);
+  });
+
+  it("keeps exact-attempt reconciliation closed and non-renewing", () => {
+    expect(
+      runnerAttemptReconcileRequestV1Schema.parse({ version: "1", fence: 1 }),
+    ).toEqual({ version: "1", fence: 1 });
+    expect(
+      runnerAttemptReconcileRequestV1Schema.safeParse({
+        version: "1",
+        fence: 1,
+        leaseDurationMs: 60_000,
+      }).success,
+    ).toBe(false);
+    expect(
+      runnerAttemptReconcileResponseV1Schema.parse({
+        version: "1",
+        state: "retired",
+        observedAt: "2026-07-31T12:00:00.000Z",
+        reason: "lease_expired_requeued",
+      }).state,
+    ).toBe("retired");
+    expect(
+      runnerAttemptReconcileResponseV1Schema.safeParse({
+        version: "1",
+        state: "retired",
+        observedAt: "2026-07-31T12:00:00.000Z",
+        reason: "unknown",
+      }).success,
+    ).toBe(false);
   });
 
   it("keeps task acquisition principal-derived and delivery claims exact", () => {

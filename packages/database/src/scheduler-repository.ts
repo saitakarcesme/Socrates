@@ -47,6 +47,8 @@ import type {
   ReconcileExpiredRunnerTasksResult,
   ReconcileExpiredTaskDeliveriesInput,
   ReconcileExpiredTaskDeliveriesResult,
+  ReconcileRunnerAttemptInput,
+  ReconcileRunnerAttemptResult,
   RequestRunnerTaskCancellationInput,
   RequestRunnerTaskCancellationResult,
   RunnerRegistrationWrite,
@@ -213,6 +215,68 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
       topic,
       payload,
     });
+  }
+
+  private async expireLockedAttempt(input: {
+    taskId: string;
+    taskStatus: PersistedRunnerTaskStatus;
+    retrySafe: boolean;
+    currentFence: number;
+    attemptId: string;
+    fence: number;
+  }): Promise<"requeued" | "failed" | "cancelled"> {
+    if (
+      !["leased", "running", "cancellation_requested"].includes(
+        input.taskStatus,
+      )
+    ) {
+      throw new Error("Only an active locked task can expire its attempt.");
+    }
+    await this.transaction
+      .update(schema.runnerTaskAttempts)
+      .set({
+        status: "expired",
+        completedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(
+        and(
+          eq(schema.runnerTaskAttempts.id, input.attemptId),
+          eq(schema.runnerTaskAttempts.taskId, input.taskId),
+          eq(schema.runnerTaskAttempts.fence, input.fence),
+          inArray(schema.runnerTaskAttempts.status, activeAttemptStatuses),
+        ),
+      );
+
+    const outcome =
+      input.taskStatus === "cancellation_requested"
+        ? "cancelled"
+        : input.retrySafe
+          ? "requeued"
+          : "failed";
+    const taskStatus = outcome === "requeued" ? "queued" : outcome;
+    await this.transaction
+      .update(schema.runnerTasks)
+      .set({
+        status: taskStatus,
+        terminalAt: outcome === "requeued" ? null : sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(
+        and(
+          eq(schema.runnerTasks.id, input.taskId),
+          eq(schema.runnerTasks.currentFence, input.currentFence),
+          eq(schema.runnerTasks.status, input.taskStatus),
+        ),
+      );
+
+    await this.appendTaskOutbox(input.taskId, `runner.task.${outcome}`, {
+      version: "1",
+      taskId: input.taskId,
+      attemptId: input.attemptId,
+      fence: input.fence,
+      outcome,
+    });
+    return outcome;
   }
 
   private async appendProjectedRunnerEvent(
@@ -806,6 +870,91 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
     };
   }
 
+  async reconcileAttempt(
+    input: ReconcileRunnerAttemptInput,
+  ): Promise<ReconcileRunnerAttemptResult> {
+    const [locked] = await this.transaction
+      .select({
+        taskStatus: schema.runnerTasks.status,
+        retrySafe: schema.runnerTasks.retrySafe,
+        currentFence: schema.runnerTasks.currentFence,
+        attemptStatus: schema.runnerTaskAttempts.status,
+        leaseExpiresAt: schema.runnerTaskAttempts.leaseExpiresAt,
+        observedAt: sql<Date>`CURRENT_TIMESTAMP`.mapWith(
+          schema.runnerTaskAttempts.leaseExpiresAt,
+        ),
+      })
+      .from(schema.runnerTasks)
+      .innerJoin(
+        schema.runnerTaskAttempts,
+        and(
+          eq(schema.runnerTaskAttempts.taskId, schema.runnerTasks.id),
+          eq(schema.runnerTaskAttempts.id, input.attemptId),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.runnerTasks.id, input.taskId),
+          eq(schema.runnerTaskAttempts.runnerId, input.runnerId),
+          eq(schema.runnerTaskAttempts.fence, input.fence),
+        ),
+      )
+      .for("update", {
+        of: [schema.runnerTaskAttempts, schema.runnerTasks],
+      });
+
+    if (!locked) return { state: "identity_conflict" };
+    if (terminalTaskStatuses.includes(locked.taskStatus as never)) {
+      return {
+        state: "retired",
+        observedAt: locked.observedAt,
+        reason: "task_terminal",
+      };
+    }
+    if (!activeAttemptStatuses.includes(locked.attemptStatus as never)) {
+      return {
+        state: "retired",
+        observedAt: locked.observedAt,
+        reason: "attempt_terminal",
+      };
+    }
+    if (locked.currentFence !== input.fence) {
+      return {
+        state: "retired",
+        observedAt: locked.observedAt,
+        reason: "fence_superseded",
+      };
+    }
+    if (
+      !["leased", "running", "cancellation_requested"].includes(
+        locked.taskStatus,
+      )
+    ) {
+      return { state: "identity_conflict" };
+    }
+    if (locked.leaseExpiresAt.getTime() > locked.observedAt.getTime()) {
+      return {
+        state: "current",
+        observedAt: locked.observedAt,
+        leaseExpiresAt: locked.leaseExpiresAt,
+      };
+    }
+
+    const outcome = await this.expireLockedAttempt({
+      taskId: input.taskId,
+      taskStatus: locked.taskStatus,
+      retrySafe: locked.retrySafe,
+      currentFence: locked.currentFence,
+      attemptId: input.attemptId,
+      fence: input.fence,
+    });
+    return {
+      state: "retired",
+      observedAt: locked.observedAt,
+      reason: `lease_expired_${outcome}`,
+    };
+  }
+
   async requestCancellation(
     input: RequestRunnerTaskCancellationInput,
   ): Promise<RequestRunnerTaskCancellationResult> {
@@ -1072,49 +1221,13 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
     const reconciled: ReconcileExpiredRunnerTasksResult["reconciled"][number][] =
       [];
     for (const expired of expiredAttempts) {
-      await this.transaction
-        .update(schema.runnerTaskAttempts)
-        .set({
-          status: "expired",
-          completedAt: sql`CURRENT_TIMESTAMP`,
-        })
-        .where(
-          and(
-            eq(schema.runnerTaskAttempts.id, expired.attemptId),
-            eq(schema.runnerTaskAttempts.taskId, expired.taskId),
-            eq(schema.runnerTaskAttempts.fence, expired.fence),
-            inArray(schema.runnerTaskAttempts.status, activeAttemptStatuses),
-          ),
-        );
-
-      const outcome =
-        expired.taskStatus === "cancellation_requested"
-          ? "cancelled"
-          : expired.retrySafe
-            ? "requeued"
-            : "failed";
-      const taskStatus = outcome === "requeued" ? "queued" : outcome;
-      await this.transaction
-        .update(schema.runnerTasks)
-        .set({
-          status: taskStatus,
-          terminalAt: outcome === "requeued" ? null : sql`CURRENT_TIMESTAMP`,
-          updatedAt: sql`CURRENT_TIMESTAMP`,
-        })
-        .where(
-          and(
-            eq(schema.runnerTasks.id, expired.taskId),
-            eq(schema.runnerTasks.currentFence, expired.currentFence),
-            eq(schema.runnerTasks.status, expired.taskStatus),
-          ),
-        );
-
-      await this.appendTaskOutbox(expired.taskId, `runner.task.${outcome}`, {
-        version: "1",
+      const outcome = await this.expireLockedAttempt({
         taskId: expired.taskId,
+        taskStatus: expired.taskStatus,
+        retrySafe: expired.retrySafe,
+        currentFence: expired.currentFence,
         attemptId: expired.attemptId,
         fence: expired.fence,
-        outcome,
       });
       reconciled.push({
         taskId: expired.taskId,

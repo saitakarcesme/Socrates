@@ -128,6 +128,13 @@ export class WorkJournalFilesystem {
     );
   }
 
+  readExecutionRetirement(key: string): Promise<Uint8Array | null> {
+    return this.#durability.readOptional(
+      join(this.#itemPath(key), "execution-retirement.json"),
+      "Work execution retirement",
+    );
+  }
+
   readCompletion(key: string): Promise<Uint8Array | null> {
     return this.#durability.readOptional(
       join(this.#itemPath(key), "completion.json"),
@@ -171,6 +178,15 @@ export class WorkJournalFilesystem {
     );
   }
 
+  publishExecutionRetirement(key: string, bytes: Uint8Array): Promise<void> {
+    return this.#durability.publishImmutable(
+      this.#itemPath(key),
+      "execution-retirement.json",
+      bytes,
+      "work execution retirement",
+    );
+  }
+
   publishCompletion(key: string, bytes: Uint8Array): Promise<void> {
     return this.#durability.publishImmutable(
       this.#itemPath(key),
@@ -191,6 +207,7 @@ export class WorkJournalFilesystem {
           "manifest.json",
           "claim.json",
           "execution-start.json",
+          "execution-retirement.json",
           "rejection.json",
           "completion.json",
         ].includes(entry.name) ||

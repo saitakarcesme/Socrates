@@ -128,6 +128,60 @@ export type RunnerTaskHeartbeatResponseV1 = z.infer<
   typeof runnerTaskHeartbeatResponseV1Schema
 >;
 
+export const runnerAttemptReconcileParamsV1Schema = z
+  .object({
+    taskId: entityIdSchema,
+    attemptId: entityIdSchema,
+  })
+  .strict();
+
+export const runnerAttemptReconcileRequestV1Schema = z
+  .object({
+    version: z.literal("1"),
+    fence: positiveSafeIntegerSchema,
+  })
+  .strict();
+export type RunnerAttemptReconcileRequestV1 = z.infer<
+  typeof runnerAttemptReconcileRequestV1Schema
+>;
+
+export const runnerAttemptRetirementReasonV1Schema = z.enum([
+  "lease_expired_requeued",
+  "lease_expired_failed",
+  "lease_expired_cancelled",
+  "attempt_terminal",
+  "task_terminal",
+  "fence_superseded",
+]);
+export type RunnerAttemptRetirementReasonV1 = z.infer<
+  typeof runnerAttemptRetirementReasonV1Schema
+>;
+
+export const runnerAttemptReconcileResponseV1Schema = z.discriminatedUnion(
+  "state",
+  [
+    z
+      .object({
+        version: z.literal("1"),
+        state: z.literal("current"),
+        observedAt: z.iso.datetime(),
+        leaseExpiresAt: z.iso.datetime(),
+      })
+      .strict(),
+    z
+      .object({
+        version: z.literal("1"),
+        state: z.literal("retired"),
+        observedAt: z.iso.datetime(),
+        reason: runnerAttemptRetirementReasonV1Schema,
+      })
+      .strict(),
+  ],
+);
+export type RunnerAttemptReconcileResponseV1 = z.infer<
+  typeof runnerAttemptReconcileResponseV1Schema
+>;
+
 export const runnerSourceSnapshotResolveParamsV1Schema = z
   .object({
     taskId: entityIdSchema,

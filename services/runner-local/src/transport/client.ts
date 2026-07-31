@@ -1,5 +1,8 @@
 import {
   apiErrorSchema,
+  runnerAttemptReconcileParamsV1Schema,
+  runnerAttemptReconcileRequestV1Schema,
+  runnerAttemptReconcileResponseV1Schema,
   runnerBearerTokenSchema,
   runnerEventSubmitRequestV1Schema,
   runnerEventSubmitResponseV1Schema,
@@ -16,6 +19,8 @@ import {
   runnerTaskHeartbeatRequestV1Schema,
   runnerTaskHeartbeatResponseV1Schema,
   type ApiErrorCode,
+  type RunnerAttemptReconcileRequestV1,
+  type RunnerAttemptReconcileResponseV1,
   type RunnerEventSubmitResponseV1,
   type RunnerEventV2,
   type RunnerExecutionV1,
@@ -78,6 +83,14 @@ export interface RunnerControlPlaneClient {
     request: RunnerTaskClaimRequestV1,
     signal?: AbortSignal,
   ): Promise<RunnerExecutionV1>;
+  reconcileAttempt(
+    input: {
+      taskId: string;
+      attemptId: string;
+      request: RunnerAttemptReconcileRequestV1;
+    },
+    signal?: AbortSignal,
+  ): Promise<RunnerAttemptReconcileResponseV1>;
   heartbeat(
     input: {
       taskId: string;
@@ -325,6 +338,27 @@ export class RunnerHttpClient
       `/v1/runner/tasks/${params.taskId}/attempts/${params.attemptId}/heartbeat`,
       body,
       runnerTaskHeartbeatResponseV1Schema,
+      signal,
+    );
+  }
+
+  reconcileAttempt(
+    input: {
+      taskId: string;
+      attemptId: string;
+      request: RunnerAttemptReconcileRequestV1;
+    },
+    signal?: AbortSignal,
+  ): Promise<RunnerAttemptReconcileResponseV1> {
+    const params = runnerAttemptReconcileParamsV1Schema.parse({
+      taskId: input.taskId,
+      attemptId: input.attemptId,
+    });
+    const body = runnerAttemptReconcileRequestV1Schema.parse(input.request);
+    return this.#request(
+      `/v1/runner/tasks/${params.taskId}/attempts/${params.attemptId}/reconciliation`,
+      body,
+      runnerAttemptReconcileResponseV1Schema,
       signal,
     );
   }

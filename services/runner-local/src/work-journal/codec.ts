@@ -16,6 +16,8 @@ import {
   workCompletionSchema,
   workExecutionStartCoreSchema,
   workExecutionStartSchema,
+  workExecutionRetirementCoreSchema,
+  workExecutionRetirementSchema,
   workManifestCoreSchema,
   workManifestSchema,
   workRejectionCoreSchema,
@@ -27,6 +29,8 @@ import {
   type WorkCompletionCore,
   type WorkExecutionStart,
   type WorkExecutionStartCore,
+  type WorkExecutionRetirement,
+  type WorkExecutionRetirementCore,
   type WorkManifest,
   type WorkManifestCore,
   type WorkRejection,
@@ -203,6 +207,47 @@ export function decodeWorkExecutionStart(
     );
   }
   return start;
+}
+
+export function createWorkExecutionRetirement(input: {
+  deliveryKey: string;
+  execution: RunnerExecutionV1;
+  observedAt: string;
+  reason: WorkExecutionRetirementCore["reason"];
+  committedAt: string;
+}): WorkExecutionRetirement {
+  const core = workExecutionRetirementCoreSchema.parse({
+    version: "1",
+    deliveryKey: input.deliveryKey,
+    executionDigest: executionDigestFor(input.execution),
+    attemptKey: attemptKeyFor(input.execution),
+    observedAt: input.observedAt,
+    reason: input.reason,
+    committedAt: input.committedAt,
+  });
+  return freezeDeep(
+    workExecutionRetirementSchema.parse({ ...core, checksum: checksum(core) }),
+  );
+}
+
+export function decodeWorkExecutionRetirement(
+  bytes: Uint8Array,
+): WorkExecutionRetirement {
+  const retirement = decodeCanonical(
+    bytes,
+    (value) => workExecutionRetirementSchema.parse(value),
+    "Work execution retirement",
+  );
+  const { checksum: actual, ...rawCore } = retirement;
+  const core: WorkExecutionRetirementCore =
+    workExecutionRetirementCoreSchema.parse(rawCore);
+  if (actual !== checksum(core)) {
+    throw new WorkJournalError(
+      "corrupt",
+      "Work execution retirement checksum does not match.",
+    );
+  }
+  return retirement;
 }
 
 export function createWorkCompletion(input: {

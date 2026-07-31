@@ -845,6 +845,111 @@ integration("PostgreSQL scheduler persistence", () => {
     ).resolves.toEqual({ state: "stale" });
   });
 
+  it("observes an exact current attempt without renewing its lease", async () => {
+    const taskId = randomUUID();
+    const attemptId = randomUUID();
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.createTask(task(taskId, experimentIds[16]!)),
+    );
+    const claim = await persistence.transaction(({ scheduler }) =>
+      scheduler.claimTask({
+        runnerId,
+        taskId,
+        attemptId,
+        leaseDurationMs: 120_000,
+      }),
+    );
+    if (claim.state !== "claimed") throw new Error("Expected exact claim.");
+
+    const result = await persistence.transaction(({ scheduler }) =>
+      scheduler.reconcileAttempt({
+        runnerId,
+        taskId,
+        attemptId,
+        fence: claim.claim.fence,
+      }),
+    );
+
+    expect(result).toMatchObject({
+      state: "current",
+      leaseExpiresAt: claim.claim.leaseExpiresAt,
+    });
+    if (result.state !== "current") throw new Error("Expected current state.");
+    expect(result.observedAt.getTime()).toBeLessThan(
+      result.leaseExpiresAt.getTime(),
+    );
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.reconcileAttempt({
+          runnerId: secondRunnerId,
+          taskId,
+          attemptId,
+          fence: claim.claim.fence,
+        }),
+      ),
+    ).resolves.toEqual({ state: "identity_conflict" });
+  });
+
+  it("atomically retires an expired exact attempt against heartbeat", async () => {
+    const taskId = randomUUID();
+    const attemptId = randomUUID();
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.createTask(task(taskId, experimentIds[17]!)),
+    );
+    const claim = await persistence.transaction(({ scheduler }) =>
+      scheduler.claimTask({
+        runnerId,
+        taskId,
+        attemptId,
+        leaseDurationMs: 30_000,
+      }),
+    );
+    if (claim.state !== "claimed") throw new Error("Expected exact claim.");
+    await database
+      .update(runnerTaskAttempts)
+      .set({ leaseExpiresAt: new Date(0) })
+      .where(eq(runnerTaskAttempts.id, attemptId));
+
+    const [reconciliation, heartbeat] = await Promise.all([
+      persistence.transaction(({ scheduler }) =>
+        scheduler.reconcileAttempt({
+          runnerId,
+          taskId,
+          attemptId,
+          fence: claim.claim.fence,
+        }),
+      ),
+      persistence.transaction(({ scheduler }) =>
+        scheduler.heartbeat({
+          runnerId,
+          taskId,
+          attemptId,
+          fence: claim.claim.fence,
+          leaseDurationMs: 60_000,
+        }),
+      ),
+    ]);
+
+    expect(reconciliation).toMatchObject({
+      state: "retired",
+      reason: "lease_expired_requeued",
+    });
+    expect(heartbeat).toEqual({ state: "stale" });
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.reconcileAttempt({
+          runnerId,
+          taskId,
+          attemptId,
+          fence: claim.claim.fence,
+        }),
+      ),
+    ).resolves.toMatchObject({
+      state: "retired",
+      reason: "attempt_terminal",
+    });
+  });
+
   it("hides tasks across workspace boundaries", async () => {
     const taskId = randomUUID();
     await persistence.transaction(({ scheduler }) =>

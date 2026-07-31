@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import {
   apiErrorCodeSchema,
+  runnerAttemptRetirementReasonV1Schema,
   runnerExecutionV1Schema,
 } from "@socrates/contracts";
 
@@ -89,6 +90,28 @@ export const workExecutionStartSchema = workExecutionStartCoreSchema
   .strict();
 export type WorkExecutionStart = z.infer<typeof workExecutionStartSchema>;
 
+export const workExecutionRetirementCoreSchema = z
+  .object({
+    version: z.literal("1"),
+    deliveryKey: keySchema,
+    executionDigest: digestSchema,
+    attemptKey: keySchema,
+    observedAt: z.iso.datetime(),
+    reason: runnerAttemptRetirementReasonV1Schema,
+    committedAt: z.iso.datetime(),
+  })
+  .strict();
+export type WorkExecutionRetirementCore = z.infer<
+  typeof workExecutionRetirementCoreSchema
+>;
+
+export const workExecutionRetirementSchema = workExecutionRetirementCoreSchema
+  .safeExtend({ checksum: digestSchema })
+  .strict();
+export type WorkExecutionRetirement = z.infer<
+  typeof workExecutionRetirementSchema
+>;
+
 export const workRejectionCoreSchema = z
   .object({
     version: z.literal("1"),
@@ -136,11 +159,17 @@ export type WorkJournalState = Readonly<{
     | "pending_claim"
     | "claimed"
     | "execution_started"
+    | "retired"
     | "completed"
     | "rejected";
   admittedAt: string;
   claimedAt?: string;
   executionStartedAt?: string;
+  retiredAt?: string;
+  retirement?: Readonly<{
+    observedAt: string;
+    reason: WorkExecutionRetirementCore["reason"];
+  }>;
   rejectedAt?: string;
   rejection?: WorkRejectionCore["response"] & {
     reason: WorkRejectionCore["reason"];

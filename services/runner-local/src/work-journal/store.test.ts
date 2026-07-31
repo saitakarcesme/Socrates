@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RunnerControlPlaneClient } from "../transport/client";
 import {
+  createWorkExecutionRetirement,
   createWorkExecutionStart,
   deliveryKeyFor,
   encodeWorkRecord,
@@ -160,6 +161,150 @@ describe("LocalWorkJournal", () => {
       }
     },
   );
+
+  it.each([
+    "before_temp_open",
+    "after_temp_write",
+    "after_temp_sync",
+    "after_immutable_publish",
+    "after_temp_unlink",
+    "after_directory_sync",
+  ] satisfies WorkJournalFaultPoint[])(
+    "recovers execution-retirement publication after the %s fault boundary",
+    async (faultPoint) => {
+      const rootPath = root();
+      const initial = await open(rootPath);
+      await initial.admit(delivery);
+      await initial.commitClaim(delivery.deliveryId, execution);
+      await initial.commitExecutionStart(delivery.deliveryId, execution);
+      let injected = false;
+      const faulting = await LocalWorkJournal.open({
+        rootPath,
+        limits,
+        identitySource: identities(),
+        directorySync: { sync: async () => undefined },
+        injectFault: (point) => {
+          if (!injected && point === faultPoint) {
+            injected = true;
+            throw new Error(`fault:${point}`);
+          }
+        },
+      });
+      const observation = {
+        observedAt: "2026-07-31T12:02:00.000Z",
+        reason: "lease_expired_requeued" as const,
+      };
+      await expect(
+        faulting.commitExecutionRetirement(
+          delivery.deliveryId,
+          execution,
+          observation,
+        ),
+      ).rejects.toThrow(`fault:${faultPoint}`);
+
+      const restarted = await open(rootPath);
+      const recovered = await restarted.inspect(delivery.deliveryId);
+      if (recovered?.state === "retired") {
+        expect(recovered.retirement).toEqual(observation);
+      } else {
+        expect(recovered?.state).toBe("execution_started");
+        await expect(
+          restarted.commitExecutionRetirement(
+            delivery.deliveryId,
+            execution,
+            observation,
+          ),
+        ).resolves.toMatchObject({ state: "retired" });
+      }
+    },
+  );
+
+  it("commits one exact retirement and forbids terminal acknowledgement", async () => {
+    const journal = await open(root());
+    await journal.admit(delivery);
+    await journal.commitClaim(delivery.deliveryId, execution);
+    await journal.commitExecutionStart(delivery.deliveryId, execution);
+    const observation = {
+      observedAt: "2026-07-31T12:02:00.000Z",
+      reason: "lease_expired_failed" as const,
+    };
+    const retired = await journal.commitExecutionRetirement(
+      delivery.deliveryId,
+      execution,
+      observation,
+    );
+    expect(retired).toMatchObject({
+      state: "retired",
+      retirement: observation,
+    });
+    await expect(
+      journal.commitExecutionRetirement(
+        delivery.deliveryId,
+        execution,
+        observation,
+      ),
+    ).resolves.toEqual(retired);
+    await expect(
+      journal.commitExecutionRetirement(delivery.deliveryId, execution, {
+        ...observation,
+        reason: "lease_expired_cancelled",
+      }),
+    ).rejects.toMatchObject({ code: "identity_conflict" });
+    await expect(
+      journal.commitCompletion(delivery.deliveryId, execution, {
+        attemptKey: "a".repeat(64),
+        acknowledgedSequence: 1,
+      }),
+    ).rejects.toMatchObject({ code: "identity_conflict" });
+  });
+
+  it("fails closed on orphan and checksum-drifted retirement evidence", async () => {
+    const orphanRoot = root();
+    const orphan = await open(orphanRoot);
+    await orphan.admit(delivery);
+    const key = deliveryKeyFor(delivery);
+    await writeFile(
+      join(orphanRoot, "work", key, "execution-retirement.json"),
+      encodeWorkRecord(
+        createWorkExecutionRetirement({
+          deliveryKey: key,
+          execution,
+          observedAt: "2026-07-31T12:02:00.000Z",
+          reason: "lease_expired_requeued",
+          committedAt: "2026-07-31T12:03:00.000Z",
+        }),
+      ),
+      { mode: 0o600 },
+    );
+    await expect(orphan.inspect(delivery.deliveryId)).rejects.toMatchObject({
+      code: "corrupt",
+    });
+
+    const checksumRoot = root();
+    const checksum = await open(checksumRoot);
+    await checksum.admit(delivery);
+    await checksum.commitClaim(delivery.deliveryId, execution);
+    await checksum.commitExecutionStart(delivery.deliveryId, execution);
+    await checksum.commitExecutionRetirement(delivery.deliveryId, execution, {
+      observedAt: "2026-07-31T12:02:00.000Z",
+      reason: "lease_expired_requeued",
+    });
+    const retirementPath = join(
+      checksumRoot,
+      "work",
+      key,
+      "execution-retirement.json",
+    );
+    const record = JSON.parse(await readFile(retirementPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    record["checksum"] = `sha256:${"f".repeat(64)}`;
+    await writeFile(retirementPath, encodeWorkRecord(record));
+    await expect(checksum.inspect(delivery.deliveryId)).rejects.toMatchObject({
+      code: "corrupt",
+    });
+  });
 
   it("commits one exact execution start and permits completion", async () => {
     const rootPath = root();

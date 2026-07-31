@@ -2,6 +2,7 @@ import {
   apiErrorSchema,
   experimentMutationResponseSchema,
   projectMutationResponseSchema,
+  runnerAttemptReconcileResponseV1Schema,
   runnerEventSubmitResponseV1Schema,
   runnerTaskDeliveryAcquireResponseV1Schema,
   runnerTaskClaimResponseV1Schema,
@@ -319,6 +320,18 @@ integration("authenticated runner transport with PostgreSQL", () => {
       ).json(),
     );
     expect(continuing.directive).toBe("continue");
+    const current = runnerAttemptReconcileResponseV1Schema.parse(
+      await (
+        await runnerCommand(
+          `/tasks/${taskId}/attempts/${attemptId}/reconciliation`,
+          { version: "1", fence },
+        )
+      ).json(),
+    );
+    expect(current).toMatchObject({ state: "current" });
+    if (current.state === "current") {
+      expect(current.leaseExpiresAt).toBe(continuing.leaseExpiresAt);
+    }
 
     const source = await runnerCommand(
       `/tasks/${taskId}/attempts/${attemptId}/source-snapshots/resolve`,
@@ -402,6 +415,19 @@ integration("authenticated runner transport with PostgreSQL", () => {
         acknowledgedSequence: 1,
         expectedSequence: 2,
       },
+    });
+
+    const retired = runnerAttemptReconcileResponseV1Schema.parse(
+      await (
+        await runnerCommand(
+          `/tasks/${taskId}/attempts/${attemptId}/reconciliation`,
+          { version: "1", fence },
+        )
+      ).json(),
+    );
+    expect(retired).toMatchObject({
+      state: "retired",
+      reason: "task_terminal",
     });
 
     const replay = runnerEventSubmitResponseV1Schema.parse(

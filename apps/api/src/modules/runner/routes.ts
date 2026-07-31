@@ -2,6 +2,9 @@ import { sValidator } from "@hono/standard-validator";
 import type { ArtifactStore } from "@socrates/artifact-store";
 import {
   experimentTaskV2Schema,
+  runnerAttemptReconcileParamsV1Schema,
+  runnerAttemptReconcileRequestV1Schema,
+  runnerAttemptReconcileResponseV1Schema,
   runnerEventSubmitRequestV1Schema,
   runnerEventSubmitResponseV1Schema,
   runnerExecutionV1Schema,
@@ -36,6 +39,7 @@ type RunnerGateway = Pick<
   | "claimTask"
   | "heartbeat"
   | "ingestEvent"
+  | "reconcileAttempt"
 >;
 
 export type RunnerRouteOptions = {
@@ -179,6 +183,40 @@ export function createRunnerRoutes(options: RunnerRouteOptions) {
 
       return context.json(
         runnerTaskClaimResponseV1Schema.parse({ version: "1", execution }),
+      );
+    },
+  );
+
+  app.post(
+    "/tasks/:taskId/attempts/:attemptId/reconciliation",
+    sValidator("param", runnerAttemptReconcileParamsV1Schema, validationHook),
+    sValidator("json", runnerAttemptReconcileRequestV1Schema, validationHook),
+    async (context) => {
+      const principal = context.get("runnerPrincipal");
+      const params = context.req.valid("param");
+      const request = context.req.valid("json");
+      const result = await gateway.reconcileAttempt({
+        runnerId: principal.runnerId,
+        taskId: params.taskId,
+        attemptId: params.attemptId,
+        fence: request.fence,
+      });
+      return context.json(
+        runnerAttemptReconcileResponseV1Schema.parse(
+          result.state === "current"
+            ? {
+                version: "1",
+                state: "current",
+                observedAt: result.observedAt.toISOString(),
+                leaseExpiresAt: result.leaseExpiresAt.toISOString(),
+              }
+            : {
+                version: "1",
+                state: "retired",
+                observedAt: result.observedAt.toISOString(),
+                reason: result.reason,
+              },
+        ),
       );
     },
   );

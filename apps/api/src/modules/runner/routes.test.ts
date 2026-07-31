@@ -65,6 +65,11 @@ function authenticatedOptions(
         leaseExpiresAt: new Date("2026-07-31T12:01:00.000Z"),
         directive: "continue",
       }),
+      reconcileAttempt: async () => ({
+        state: "current",
+        observedAt: new Date("2026-07-31T12:00:00.000Z"),
+        leaseExpiresAt: new Date("2026-07-31T12:01:00.000Z"),
+      }),
       ingestEvent: async ({ event: value }) => {
         const submitted = value as RunnerEventV2;
         return {
@@ -196,6 +201,40 @@ describe("runner HTTP routes", () => {
       attemptId,
       fence: 4,
       leaseDurationMs: 30_000,
+    });
+  });
+
+  it("injects the principal into exact-attempt reconciliation", async () => {
+    const reconcileAttempt = vi.fn(async () => ({
+      state: "retired" as const,
+      observedAt: new Date("2026-07-31T12:00:30.000Z"),
+      reason: "lease_expired_requeued" as const,
+    }));
+    const taskId = randomUUID();
+    const attemptId = randomUUID();
+    const response = await app(
+      authenticatedOptions({ reconcileAttempt }),
+    ).request(
+      `/v1/runner/tasks/${taskId}/attempts/${attemptId}/reconciliation`,
+      {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ version: "1", fence: 4 }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      version: "1",
+      state: "retired",
+      observedAt: "2026-07-31T12:00:30.000Z",
+      reason: "lease_expired_requeued",
+    });
+    expect(reconcileAttempt).toHaveBeenCalledWith({
+      runnerId: principal.runnerId,
+      taskId,
+      attemptId,
+      fence: 4,
     });
   });
 

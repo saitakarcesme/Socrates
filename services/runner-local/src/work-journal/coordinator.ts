@@ -28,6 +28,14 @@ export type WorkAdmissionResult =
       execution: RunnerExecutionV1;
       work: WorkJournalState;
       recovered: boolean;
+      observedAt: string;
+      leaseExpiresAt: string;
+    }>
+  | Readonly<{
+      state: "retired";
+      execution: RunnerExecutionV1;
+      work: WorkJournalState;
+      recovered: boolean;
     }>;
 
 function deliveryFor(state: WorkJournalState): RunnerTaskDeliveryV1 {
@@ -96,10 +104,36 @@ export class WorkAdmissionCoordinator {
           "Started work has no durable execution.",
         );
       }
-      return Object.freeze({
-        state: "indeterminate",
+      const reconciliation = await this.#client.reconcileAttempt(
+        {
+          taskId: execution.lease.taskId,
+          attemptId: execution.lease.attemptId,
+          request: { version: "1", fence: execution.lease.fence },
+        },
+        signal,
+      );
+      if (reconciliation.state === "current") {
+        return Object.freeze({
+          state: "indeterminate",
+          execution,
+          work,
+          recovered,
+          observedAt: reconciliation.observedAt,
+          leaseExpiresAt: reconciliation.leaseExpiresAt,
+        });
+      }
+      const retired = await this.#journal.commitExecutionRetirement(
+        work.deliveryId,
         execution,
-        work,
+        {
+          observedAt: reconciliation.observedAt,
+          reason: reconciliation.reason,
+        },
+      );
+      return Object.freeze({
+        state: "retired",
+        execution,
+        work: retired,
         recovered,
       });
     }

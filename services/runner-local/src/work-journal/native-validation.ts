@@ -40,6 +40,11 @@ const rejectedDelivery = {
   deliveryId: randomUUID(),
   taskId: task.taskId,
 };
+const retiredDelivery = {
+  version: "1" as const,
+  deliveryId: randomUUID(),
+  taskId: task.taskId,
+};
 const attemptId = randomUUID();
 const runnerId = randomUUID();
 const rootPath = await mkdtemp(join(tmpdir(), "socrates-native-journal-"));
@@ -90,6 +95,17 @@ try {
     attemptKey: "a".repeat(64),
     acknowledgedSequence: 1,
   });
+  await journal.admit(retiredDelivery);
+  await journal.commitClaim(retiredDelivery.deliveryId, execution);
+  await journal.commitExecutionStart(retiredDelivery.deliveryId, execution);
+  await journal.commitExecutionRetirement(
+    retiredDelivery.deliveryId,
+    execution,
+    {
+      observedAt: "2026-07-31T12:02:00.000Z",
+      reason: "lease_expired_requeued",
+    },
+  );
   await journal.admit(rejectedDelivery);
   await journal.commitRejection(rejectedDelivery.deliveryId, {
     status: 409,
@@ -113,8 +129,14 @@ try {
     "work",
     deliveryKeyFor(rejectedDelivery),
   );
+  const retiredItemPath = join(
+    rootPath,
+    "work",
+    deliveryKeyFor(retiredDelivery),
+  );
   const rejectedState = await restarted.inspect(rejectedDelivery.deliveryId);
   const completedState = await restarted.inspect(delivery.deliveryId);
+  const retiredState = await restarted.inspect(retiredDelivery.deliveryId);
   const [
     rootMetadata,
     workMetadata,
@@ -122,6 +144,7 @@ try {
     manifestMetadata,
     claimMetadata,
     executionStartMetadata,
+    executionRetirementMetadata,
     rejectionMetadata,
     completionMetadata,
   ] = await Promise.all([
@@ -131,13 +154,14 @@ try {
     stat(join(itemPath, "manifest.json")),
     stat(join(itemPath, "claim.json")),
     stat(join(itemPath, "execution-start.json")),
+    stat(join(retiredItemPath, "execution-retirement.json")),
     stat(join(rejectedItemPath, "rejection.json")),
     stat(join(itemPath, "completion.json")),
   ]);
   const privateMode = (mode: number, expected: number) =>
     (mode & 0o777) === expected;
   const evidence = {
-    schema: "socrates.runner-work-journal.native.v4",
+    schema: "socrates.runner-work-journal.native.v5",
     recordedAt: new Date().toISOString(),
     host: {
       platform: process.platform,
@@ -151,11 +175,16 @@ try {
       manifestMode0600: privateMode(manifestMetadata.mode, 0o600),
       claimMode0600: privateMode(claimMetadata.mode, 0o600),
       executionStartMode0600: privateMode(executionStartMetadata.mode, 0o600),
+      executionRetirementMode0600: privateMode(
+        executionRetirementMetadata.mode,
+        0o600,
+      ),
       rejectionMode0600: privateMode(rejectionMetadata.mode, 0o600),
       completionMode0600: privateMode(completionMetadata.mode, 0o600),
       manifestSingleLink: manifestMetadata.nlink === 1,
       claimSingleLink: claimMetadata.nlink === 1,
       executionStartSingleLink: executionStartMetadata.nlink === 1,
+      executionRetirementSingleLink: executionRetirementMetadata.nlink === 1,
       rejectionSingleLink: rejectionMetadata.nlink === 1,
       completionSingleLink: completionMetadata.nlink === 1,
       exactAttemptReplay: replay.lease.attemptId === attemptId,
@@ -167,6 +196,10 @@ try {
         completedState?.state === "completed" &&
         completedState.executionStartedAt === "2026-07-31T12:00:00.000Z" &&
         completedState.completion?.acknowledgedSequence === 1,
+      retiredAfterRestart:
+        retiredState?.state === "retired" &&
+        retiredState.retirement?.observedAt === "2026-07-31T12:02:00.000Z" &&
+        retiredState.retirement.reason === "lease_expired_requeued",
     },
   };
   if (Object.values(evidence.gates).some((passed) => !passed))

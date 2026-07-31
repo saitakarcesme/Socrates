@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import {
   runnerExecutionV1Schema,
+  type RunnerAttemptReconcileResponseV1,
   type RunnerTaskDeliveryV1,
 } from "@socrates/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -65,10 +66,19 @@ async function journal(rootPath = root()): Promise<LocalWorkJournal> {
 function client(options: {
   acquire?: () => Promise<RunnerTaskDeliveryV1 | null>;
   claim?: () => Promise<typeof execution>;
+  reconcile?: () => Promise<RunnerAttemptReconcileResponseV1>;
 }): RunnerControlPlaneClient {
   return {
     acquireTaskDelivery: options.acquire ?? (async () => null),
     claimTaskDelivery: options.claim ?? (async () => execution),
+    reconcileAttempt:
+      options.reconcile ??
+      (async () => ({
+        version: "1",
+        state: "current",
+        observedAt: "2026-07-31T12:00:00.000Z",
+        leaseExpiresAt: "2026-07-31T12:01:00.000Z",
+      })),
   } as RunnerControlPlaneClient;
 }
 
@@ -156,7 +166,7 @@ describe("WorkAdmissionCoordinator", () => {
     expect(noNetworkClaim).not.toHaveBeenCalled();
   });
 
-  it("quarantines started execution before any claim or acquisition", async () => {
+  it("keeps a server-current started execution indeterminate", async () => {
     const rootPath = root();
     const durable = await journal(rootPath);
     await durable.admit(delivery);
@@ -178,9 +188,56 @@ describe("WorkAdmissionCoordinator", () => {
       execution,
       work: started,
       recovered: true,
+      observedAt: "2026-07-31T12:00:00.000Z",
+      leaseExpiresAt: "2026-07-31T12:01:00.000Z",
     });
     expect(acquire).not.toHaveBeenCalled();
     expect(claim).not.toHaveBeenCalled();
+  });
+
+  it("durably retires a server-retired start before later acquisition", async () => {
+    const rootPath = root();
+    const durable = await journal(rootPath);
+    await durable.admit(delivery);
+    await durable.commitClaim(delivery.deliveryId, execution);
+    await durable.commitExecutionStart(delivery.deliveryId, execution);
+    const acquire = vi.fn();
+    const reconcile = vi.fn().mockResolvedValue({
+      version: "1",
+      state: "retired",
+      observedAt: "2026-07-31T12:02:00.000Z",
+      reason: "lease_expired_requeued",
+    });
+    const coordinator = new WorkAdmissionCoordinator({
+      journal: await journal(rootPath),
+      client: client({ acquire, reconcile }),
+      leaseDurationMs: 60_000,
+    });
+
+    await expect(coordinator.prepareNext()).resolves.toMatchObject({
+      state: "retired",
+      recovered: true,
+      work: {
+        state: "retired",
+        retirement: {
+          observedAt: "2026-07-31T12:02:00.000Z",
+          reason: "lease_expired_requeued",
+        },
+      },
+    });
+    expect(reconcile).toHaveBeenCalledOnce();
+    expect(acquire).not.toHaveBeenCalled();
+
+    const acquireLater = vi.fn().mockResolvedValue(null);
+    const noReconcile = vi.fn();
+    const restarted = new WorkAdmissionCoordinator({
+      journal: await journal(rootPath),
+      client: client({ acquire: acquireLater, reconcile: noReconcile }),
+      leaseDurationMs: 60_000,
+    });
+    await expect(restarted.prepareNext()).resolves.toEqual({ state: "idle" });
+    expect(acquireLater).toHaveBeenCalledOnce();
+    expect(noReconcile).not.toHaveBeenCalled();
   });
 
   it("durably rejects only an authoritative conflict and then permits acquire", async () => {

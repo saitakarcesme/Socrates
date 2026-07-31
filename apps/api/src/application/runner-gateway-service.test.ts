@@ -9,6 +9,7 @@ import type {
   HeartbeatRunnerTaskResult,
   IngestRunnerEventResult,
   Persistence,
+  ReconcileRunnerAttemptResult,
   SchedulerRepository,
   TransactionRepositories,
 } from "@socrates/database";
@@ -26,6 +27,7 @@ function serviceReturning(options: {
   claim?: ClaimRunnerTaskResult;
   event?: IngestRunnerEventResult;
   heartbeat?: HeartbeatRunnerTaskResult;
+  reconciliation?: ReconcileRunnerAttemptResult;
   source?: AuthorizeRunnerSourceSnapshotResult;
 }): RunnerGatewayService {
   const scheduler = {
@@ -40,6 +42,12 @@ function serviceReturning(options: {
     heartbeat: async () => {
       if (!options.heartbeat) throw new Error("Unexpected heartbeat.");
       return options.heartbeat;
+    },
+    reconcileAttempt: async () => {
+      if (!options.reconciliation) {
+        throw new Error("Unexpected reconciliation.");
+      }
+      return options.reconciliation;
     },
     authorizeSourceSnapshot: async () => {
       if (!options.source) throw new Error("Unexpected source authorization.");
@@ -245,6 +253,32 @@ describe("RunnerGatewayService", () => {
       status: 409,
       code: "resource_conflict",
       details: { runnerReason: "stale" },
+    });
+  });
+
+  it("preserves exact-attempt reconciliation and rejects identity conflict", async () => {
+    const observedAt = new Date("2026-07-31T00:00:30.000Z");
+    await expect(
+      serviceReturning({
+        reconciliation: {
+          state: "retired",
+          observedAt,
+          reason: "lease_expired_failed",
+        },
+      }).reconcileAttempt({ ...claimInput, fence: 3 }),
+    ).resolves.toEqual({
+      state: "retired",
+      observedAt,
+      reason: "lease_expired_failed",
+    });
+    await expect(
+      serviceReturning({
+        reconciliation: { state: "identity_conflict" },
+      }).reconcileAttempt({ ...claimInput, fence: 3 }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "resource_conflict",
+      details: { runnerReason: "identity_conflict" },
     });
   });
 

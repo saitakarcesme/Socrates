@@ -209,6 +209,30 @@ export type HeartbeatRunnerTaskResult =
     }
   | { state: "stale" };
 
+export type ReconcileRunnerAttemptInput = {
+  runnerId: string;
+  taskId: string;
+  attemptId: string;
+  fence: number;
+};
+
+export type RunnerAttemptRetirementReason =
+  | "lease_expired_requeued"
+  | "lease_expired_failed"
+  | "lease_expired_cancelled"
+  | "attempt_terminal"
+  | "task_terminal"
+  | "fence_superseded";
+
+export type ReconcileRunnerAttemptResult =
+  | { state: "current"; observedAt: Date; leaseExpiresAt: Date }
+  | {
+      state: "retired";
+      observedAt: Date;
+      reason: RunnerAttemptRetirementReason;
+    }
+  | { state: "identity_conflict" };
+
 export type RequestRunnerTaskCancellationInput = {
   requestId: string;
   workspaceId: string;
@@ -345,6 +369,9 @@ export interface SchedulerRepository {
   heartbeat(
     input: HeartbeatRunnerTaskInput,
   ): Promise<HeartbeatRunnerTaskResult>;
+  reconcileAttempt(
+    input: ReconcileRunnerAttemptInput,
+  ): Promise<ReconcileRunnerAttemptResult>;
   requestCancellation(
     input: RequestRunnerTaskCancellationInput,
   ): Promise<RequestRunnerTaskCancellationResult>;

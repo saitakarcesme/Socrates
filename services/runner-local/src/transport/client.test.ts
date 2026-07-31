@@ -129,6 +129,35 @@ describe("runner HTTP client", () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
   });
 
+  it("reconciles one exact attempt without sending a lease duration", async () => {
+    const taskId = randomUUID();
+    const attemptId = randomUUID();
+    const fetchImplementation = vi.fn<typeof fetch>(async (input, init) => {
+      expect(String(input)).toBe(
+        `http://control-plane.test/v1/runner/tasks/${taskId}/attempts/${attemptId}/reconciliation`,
+      );
+      expect(JSON.parse(String(init?.body))).toEqual({
+        version: "1",
+        fence: 3,
+      });
+      return jsonResponse({
+        version: "1",
+        state: "current",
+        observedAt: "2026-07-31T12:00:00.000Z",
+        leaseExpiresAt: "2026-07-31T12:01:00.000Z",
+      });
+    });
+
+    await expect(
+      client(fetchImplementation).reconcileAttempt({
+        taskId,
+        attemptId,
+        request: { version: "1", fence: 3 },
+      }),
+    ).resolves.toMatchObject({ state: "current" });
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  });
+
   it("requires HTTPS unless insecure development mode is explicit", () => {
     expect(
       () =>

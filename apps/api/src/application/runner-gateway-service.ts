@@ -9,6 +9,8 @@ import type {
   HeartbeatRunnerTaskInput,
   IngestRunnerEventInput,
   Persistence,
+  ReconcileRunnerAttemptInput,
+  ReconcileRunnerAttemptResult,
   RunnerEventAcknowledgement,
 } from "@socrates/database";
 
@@ -251,6 +253,21 @@ export class RunnerGatewayService {
     return runnerConflict(
       result.state,
       "The runner task lease or fence is stale.",
+    );
+  }
+
+  async reconcileAttempt(
+    input: ReconcileRunnerAttemptInput,
+  ): Promise<
+    Exclude<ReconcileRunnerAttemptResult, { state: "identity_conflict" }>
+  > {
+    const result = await this.persistence.transaction(({ scheduler }) =>
+      scheduler.reconcileAttempt(input),
+    );
+    if (result.state !== "identity_conflict") return result;
+    return runnerConflict(
+      result.state,
+      "The runner attempt identity cannot be reconciled.",
     );
   }
 }
