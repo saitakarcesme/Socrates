@@ -600,7 +600,7 @@ production builds.
 
 ### Slice 2.15 — terminal acknowledgement completion
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-052.
 
@@ -616,6 +616,10 @@ Detailed plan: `docs/plans/slice-2.15-terminal-ack-completion.md`.
 Exit: fault and restart tests prove a claimed item becomes completed only
 after exact terminal acknowledgement, and restart-first admission cannot
 acquire early or remain blocked after durable completion.
+
+Evidence: implementation commit `a48a61f`; GitHub Actions run `30654149358`
+passed 204 runner-local tests, all database/API integrations, native spool and
+v3 work-journal completion durability, browser tests, and production builds.
 
 ## Acceptance gates
 

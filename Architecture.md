@@ -2324,6 +2324,19 @@ schedule heartbeats, observe cancellation, delete spool or journal evidence,
 compact retention, or enable a process loop. It only joins two already durable
 truths. `LocalRunnerNotEnabledError` remains unchanged.
 
+Validation amendment, 2026-07-31: implementation commit `a48a61f` passed
+local formatting, TypeScript, ESLint, 204 runner-local tests, all workspace
+tests, Phase 1/2 dependency-boundary audits, production builds, and the
+low-severity dependency audit with no known vulnerabilities. GitHub Actions
+run `30654149358` passed every PostgreSQL and API integration, the Chromium
+product journey, all builds, and both Linux native durability probes. The v3
+work-journal evidence proved `completion.json` private `0600` mode,
+single-link immutable publication, completed-state recovery after restart,
+exact attempt replay, and no network after commit. Separate spool and journal
+evidence artifacts were uploaded. This admits ADR-052 and closes Slice 2.15;
+execution, lease supervision, cancellation monitoring, and cleanup remain
+disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

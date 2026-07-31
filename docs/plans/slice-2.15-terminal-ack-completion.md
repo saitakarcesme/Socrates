@@ -1,6 +1,6 @@
 # Slice 2.15 terminal acknowledgement completion plan
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -85,3 +85,10 @@ completion remain immutable diagnostic evidence.
 7. Crash recovery is monotonic at every publication boundary.
 8. Execution, supervision, cancellation, and production entry remain absent.
 9. Full repository, native durability, browser, build, and CI gates pass.
+
+## Evidence
+
+Implementation commit `a48a61f`; GitHub Actions run `30654149358` passed 204
+runner-local tests, every PostgreSQL and API integration, native spool
+durability, the v3 native journal proof for private single-link completion and
+restart recovery, the Chromium product journey, and production builds.
