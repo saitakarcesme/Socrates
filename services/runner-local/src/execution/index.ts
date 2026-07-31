@@ -12,3 +12,10 @@ export {
   type ExecutionSourceMaterializerPort,
   type PreparedExecutionAttempt,
 } from "./preparation-coordinator";
+export {
+  RunnerStartupRecoveryBarrier,
+  RunnerStartupRecoveryError,
+  type RunnerStartupRecoveryResult,
+  type SandboxOwnedResourceRecoveryPort,
+  type SourceOwnedResourceRecoveryPort,
+} from "./startup-recovery-barrier";
