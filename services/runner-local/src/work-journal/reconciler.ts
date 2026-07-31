@@ -6,6 +6,7 @@ import {
 } from "@socrates/contracts";
 
 import type { RunnerControlPlaneClient } from "../transport/client";
+import { WorkJournalError } from "./contracts";
 import { LocalWorkJournal } from "./store";
 
 export class ExactClaimReconciler {
@@ -34,6 +35,12 @@ export class ExactClaimReconciler {
     const delivery = runnerTaskDeliveryV1Schema.parse(input);
     return this.#serialize(async () => {
       const state = await this.#journal.admit(delivery);
+      if (state.state === "rejected") {
+        throw new WorkJournalError(
+          "identity_conflict",
+          "A rejected work item cannot be reconciled again.",
+        );
+      }
       const stored = await this.#journal.claimedExecution(delivery.deliveryId);
       if (stored) return stored;
       const execution = await this.#client.claimTaskDelivery(

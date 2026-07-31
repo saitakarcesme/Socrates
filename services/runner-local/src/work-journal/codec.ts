@@ -13,11 +13,15 @@ import {
   workClaimSchema,
   workManifestCoreSchema,
   workManifestSchema,
+  workRejectionCoreSchema,
+  workRejectionSchema,
   WorkJournalError,
   type WorkClaim,
   type WorkClaimCore,
   type WorkManifest,
   type WorkManifestCore,
+  type WorkRejection,
+  type WorkRejectionCore,
 } from "./contracts";
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -153,6 +157,39 @@ export function decodeWorkClaim(bytes: Uint8Array): WorkClaim {
     );
   }
   return claim;
+}
+
+export function createWorkRejection(input: {
+  deliveryKey: string;
+  response: WorkRejectionCore["response"];
+  committedAt: string;
+}): WorkRejection {
+  const core = workRejectionCoreSchema.parse({
+    version: "1",
+    deliveryKey: input.deliveryKey,
+    reason: "control_plane_conflict",
+    response: input.response,
+    committedAt: input.committedAt,
+  });
+  return freezeDeep(
+    workRejectionSchema.parse({ ...core, checksum: checksum(core) }),
+  );
+}
+
+export function decodeWorkRejection(bytes: Uint8Array): WorkRejection {
+  const rejection = decodeCanonical(
+    bytes,
+    (value) => workRejectionSchema.parse(value),
+    "Work rejection",
+  );
+  const { checksum: actual, ...rawCore } = rejection;
+  const core: WorkRejectionCore = workRejectionCoreSchema.parse(rawCore);
+  if (actual !== checksum(core))
+    throw new WorkJournalError(
+      "corrupt",
+      "Work rejection checksum does not match.",
+    );
+  return rejection;
 }
 
 export function immutableExecution(

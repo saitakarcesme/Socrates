@@ -113,6 +113,75 @@ describe("LocalWorkJournal", () => {
     },
   );
 
+  it.each([
+    "before_temp_open",
+    "after_temp_write",
+    "after_temp_sync",
+    "after_immutable_publish",
+    "after_temp_unlink",
+    "after_directory_sync",
+  ] satisfies WorkJournalFaultPoint[])(
+    "recovers rejection publication after the %s fault boundary",
+    async (faultPoint) => {
+      const rootPath = root();
+      await (await open(rootPath)).admit(delivery);
+      let injected = false;
+      const faulting = await LocalWorkJournal.open({
+        rootPath,
+        limits,
+        identitySource: identities(),
+        directorySync: { sync: async () => undefined },
+        injectFault: (point) => {
+          if (!injected && point === faultPoint) {
+            injected = true;
+            throw new Error(`fault:${point}`);
+          }
+        },
+      });
+      const response = {
+        status: 409 as const,
+        apiCode: "resource_conflict" as const,
+        requestId: "request-1",
+      };
+      await expect(
+        faulting.commitRejection(delivery.deliveryId, response),
+      ).rejects.toThrow(`fault:${faultPoint}`);
+      const restarted = await open(rootPath);
+      const state = await restarted.inspect(delivery.deliveryId);
+      if (state?.state === "rejected") {
+        expect(state.rejection).toMatchObject(response);
+      } else {
+        await expect(
+          restarted.commitRejection(delivery.deliveryId, response),
+        ).resolves.toMatchObject({ state: "rejected" });
+      }
+    },
+  );
+
+  it("keeps claim and rejection terminal records mutually exclusive", async () => {
+    const claimed = await open(root());
+    await claimed.admit(delivery);
+    await claimed.commitClaim(delivery.deliveryId, execution);
+    await expect(
+      claimed.commitRejection(delivery.deliveryId, {
+        status: 409,
+        apiCode: "resource_conflict",
+        requestId: "request-1",
+      }),
+    ).rejects.toMatchObject({ code: "identity_conflict" });
+
+    const rejected = await open(root());
+    await rejected.admit(delivery);
+    await rejected.commitRejection(delivery.deliveryId, {
+      status: 409,
+      apiCode: "resource_conflict",
+      requestId: "request-1",
+    });
+    await expect(
+      rejected.commitClaim(delivery.deliveryId, execution),
+    ).rejects.toMatchObject({ code: "identity_conflict" });
+  });
+
   it("reuses one attempt across duplicate admission and restart", async () => {
     const rootPath = root();
     const first = await open(rootPath);

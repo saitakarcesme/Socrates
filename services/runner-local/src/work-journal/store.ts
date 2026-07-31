@@ -6,12 +6,15 @@ import {
   type RunnerExecutionV1,
   type RunnerTaskDeliveryV1,
 } from "@socrates/contracts";
+import { canonicalJson } from "@socrates/runtime-protocol";
 
 import {
   createWorkClaim,
   createWorkManifest,
+  createWorkRejection,
   decodeWorkClaim,
   decodeWorkManifest,
+  decodeWorkRejection,
   deliveryKeyFor,
   encodeWorkRecord,
   executionDigestFor,
@@ -19,11 +22,14 @@ import {
 } from "./codec";
 import {
   workJournalLimitsSchema,
+  workRejectionCoreSchema,
   WorkJournalError,
   type WorkClaim,
   type WorkJournalLimits,
   type WorkJournalState,
   type WorkManifest,
+  type WorkRejection,
+  type WorkRejectionCore,
 } from "./contracts";
 import {
   WorkJournalFilesystem,
@@ -48,7 +54,11 @@ export const systemWorkJournalIdentitySource: WorkJournalIdentitySource =
     now: () => new Date(),
   });
 
-type LoadedWork = Readonly<{ manifest: WorkManifest; claim: WorkClaim | null }>;
+type LoadedWork = Readonly<{
+  manifest: WorkManifest;
+  claim: WorkClaim | null;
+  rejection: WorkRejection | null;
+}>;
 
 export class LocalWorkJournal {
   readonly #filesystem: WorkJournalFilesystem;
@@ -111,10 +121,13 @@ export class LocalWorkJournal {
       await this.#filesystem.cleanup(key);
       const existing = await this.#filesystem.readManifest(key);
       if (!existing) {
-        if (await this.#filesystem.readClaim(key)) {
+        if (
+          (await this.#filesystem.readClaim(key)) ||
+          (await this.#filesystem.readRejection(key))
+        ) {
           throw new WorkJournalError(
             "corrupt",
-            "A work claim exists without a manifest.",
+            "A terminal work record exists without a manifest.",
           );
         }
         const manifest = createWorkManifest({
@@ -156,10 +169,13 @@ export class LocalWorkJournal {
       for (const key of await this.#filesystem.listKeys()) {
         await this.#filesystem.cleanup(key);
         if (!(await this.#filesystem.readManifest(key))) {
-          if (await this.#filesystem.readClaim(key)) {
+          if (
+            (await this.#filesystem.readClaim(key)) ||
+            (await this.#filesystem.readRejection(key))
+          ) {
             throw new WorkJournalError(
               "corrupt",
-              "A work claim exists without a manifest.",
+              "A terminal work record exists without a manifest.",
             );
           }
           continue;
@@ -203,6 +219,12 @@ export class LocalWorkJournal {
         }
         return immutableExecution(loaded.claim.execution);
       }
+      if (loaded.rejection) {
+        throw new WorkJournalError(
+          "identity_conflict",
+          "A rejected work item cannot become claimed.",
+        );
+      }
       const claim = createWorkClaim({
         deliveryKey: manifest.deliveryKey,
         execution,
@@ -222,6 +244,51 @@ export class LocalWorkJournal {
           "The durable work claim is missing after publication.",
         );
       return immutableExecution(durable.claim.execution);
+    });
+  }
+
+  async commitRejection(
+    deliveryId: string,
+    response: WorkRejectionCore["response"],
+  ): Promise<WorkJournalState> {
+    const parsedResponse =
+      workRejectionCoreSchema.shape.response.parse(response);
+    return this.#serialize(async () => {
+      const loaded = await this.#requireByDeliveryId(deliveryId);
+      if (loaded.claim) {
+        throw new WorkJournalError(
+          "identity_conflict",
+          "A claimed work item cannot become rejected.",
+        );
+      }
+      if (loaded.rejection) {
+        if (
+          canonicalJson(loaded.rejection.response) !==
+          canonicalJson(parsedResponse)
+        ) {
+          throw new WorkJournalError(
+            "identity_conflict",
+            "Different control-plane conflicts target one delivery.",
+          );
+        }
+        return this.#state(loaded);
+      }
+      const rejection = createWorkRejection({
+        deliveryKey: loaded.manifest.deliveryKey,
+        response: parsedResponse,
+        committedAt: this.#instant(),
+      });
+      const bytes = encodeWorkRecord(rejection);
+      await this.#checkCapacity(
+        bytes.byteLength,
+        this.#limits.maximumClaimBytes,
+        "rejection",
+      );
+      await this.#filesystem.publishRejection(
+        loaded.manifest.deliveryKey,
+        bytes,
+      );
+      return this.#state(await this.#load(loaded.manifest.deliveryKey));
     });
   }
 
@@ -260,10 +327,13 @@ export class LocalWorkJournal {
     await this.#filesystem.cleanup(key);
     const manifestBytes = await this.#filesystem.readManifest(key);
     if (!manifestBytes) {
-      if (await this.#filesystem.readClaim(key))
+      if (
+        (await this.#filesystem.readClaim(key)) ||
+        (await this.#filesystem.readRejection(key))
+      )
         throw new WorkJournalError(
           "corrupt",
-          "A work claim exists without a manifest.",
+          "A terminal work record exists without a manifest.",
         );
       throw new WorkJournalError(
         "corrupt",
@@ -285,6 +355,15 @@ export class LocalWorkJournal {
       );
     const claimBytes = await this.#filesystem.readClaim(key);
     const claim = claimBytes ? decodeWorkClaim(claimBytes) : null;
+    const rejectionBytes = await this.#filesystem.readRejection(key);
+    const rejection = rejectionBytes
+      ? decodeWorkRejection(rejectionBytes)
+      : null;
+    if (claim && rejection)
+      throw new WorkJournalError(
+        "corrupt",
+        "A work item cannot contain both claim and rejection records.",
+      );
     if (
       claim &&
       (claim.deliveryKey !== key ||
@@ -295,7 +374,12 @@ export class LocalWorkJournal {
         "identity_conflict",
         "Work claim identity does not match its manifest.",
       );
-    return Object.freeze({ manifest, claim });
+    if (rejection && rejection.deliveryKey !== key)
+      throw new WorkJournalError(
+        "identity_conflict",
+        "Work rejection identity does not match its manifest.",
+      );
+    return Object.freeze({ manifest, claim, rejection });
   }
 
   #requireDelivery(
@@ -318,9 +402,22 @@ export class LocalWorkJournal {
       deliveryId: loaded.manifest.identity.deliveryId,
       taskId: loaded.manifest.identity.taskId,
       attemptId: loaded.manifest.identity.attemptId,
-      state: loaded.claim ? "claimed" : "pending_claim",
+      state: loaded.claim
+        ? "claimed"
+        : loaded.rejection
+          ? "rejected"
+          : "pending_claim",
       admittedAt: loaded.manifest.admittedAt,
       ...(loaded.claim ? { claimedAt: loaded.claim.committedAt } : {}),
+      ...(loaded.rejection
+        ? {
+            rejectedAt: loaded.rejection.committedAt,
+            rejection: {
+              reason: loaded.rejection.reason,
+              ...loaded.rejection.response,
+            },
+          }
+        : {}),
     });
   }
 
@@ -360,10 +457,13 @@ export class LocalWorkJournal {
     for (const key of keys) {
       await this.#filesystem.cleanup(key);
       if (!(await this.#filesystem.readManifest(key))) {
-        if (await this.#filesystem.readClaim(key)) {
+        if (
+          (await this.#filesystem.readClaim(key)) ||
+          (await this.#filesystem.readRejection(key))
+        ) {
           throw new WorkJournalError(
             "corrupt",
-            "A work claim exists without a manifest.",
+            "A terminal work record exists without a manifest.",
           );
         }
         continue;

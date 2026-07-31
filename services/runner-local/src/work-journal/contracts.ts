@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { runnerExecutionV1Schema } from "@socrates/contracts";
+import {
+  apiErrorCodeSchema,
+  runnerExecutionV1Schema,
+} from "@socrates/contracts";
 
 const digestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 const keySchema = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -68,13 +71,39 @@ export const workClaimSchema = workClaimCoreSchema
   .strict();
 export type WorkClaim = z.infer<typeof workClaimSchema>;
 
+export const workRejectionCoreSchema = z
+  .object({
+    version: z.literal("1"),
+    deliveryKey: keySchema,
+    reason: z.literal("control_plane_conflict"),
+    response: z
+      .object({
+        status: z.literal(409),
+        apiCode: apiErrorCodeSchema,
+        requestId: z.string().min(1),
+      })
+      .strict(),
+    committedAt: z.iso.datetime(),
+  })
+  .strict();
+export type WorkRejectionCore = z.infer<typeof workRejectionCoreSchema>;
+
+export const workRejectionSchema = workRejectionCoreSchema
+  .safeExtend({ checksum: digestSchema })
+  .strict();
+export type WorkRejection = z.infer<typeof workRejectionSchema>;
+
 export type WorkJournalState = Readonly<{
   deliveryId: string;
   taskId: string;
   attemptId: string;
-  state: "pending_claim" | "claimed";
+  state: "pending_claim" | "claimed" | "rejected";
   admittedAt: string;
   claimedAt?: string;
+  rejectedAt?: string;
+  rejection?: WorkRejectionCore["response"] & {
+    reason: WorkRejectionCore["reason"];
+  };
 }>;
 
 export type WorkJournalErrorCode =

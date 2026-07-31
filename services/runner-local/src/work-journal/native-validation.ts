@@ -35,6 +35,11 @@ const delivery = {
   deliveryId: randomUUID(),
   taskId: task.taskId,
 };
+const rejectedDelivery = {
+  version: "1" as const,
+  deliveryId: randomUUID(),
+  taskId: task.taskId,
+};
 const attemptId = randomUUID();
 const runnerId = randomUUID();
 const rootPath = await mkdtemp(join(tmpdir(), "socrates-native-journal-"));
@@ -80,6 +85,12 @@ try {
     client,
     leaseDurationMs: 60_000,
   }).reconcile(delivery);
+  await journal.admit(rejectedDelivery);
+  await journal.commitRejection(rejectedDelivery.deliveryId, {
+    status: 409,
+    apiCode: "resource_conflict",
+    requestId: "native-rejection-proof",
+  });
 
   const restarted = await LocalWorkJournal.open({
     rootPath,
@@ -92,23 +103,31 @@ try {
     leaseDurationMs: 60_000,
   }).reconcile(delivery);
   const itemPath = join(rootPath, "work", deliveryKeyFor(delivery));
+  const rejectedItemPath = join(
+    rootPath,
+    "work",
+    deliveryKeyFor(rejectedDelivery),
+  );
+  const rejectedState = await restarted.inspect(rejectedDelivery.deliveryId);
   const [
     rootMetadata,
     workMetadata,
     itemMetadata,
     manifestMetadata,
     claimMetadata,
+    rejectionMetadata,
   ] = await Promise.all([
     stat(rootPath),
     stat(join(rootPath, "work")),
     stat(itemPath),
     stat(join(itemPath, "manifest.json")),
     stat(join(itemPath, "claim.json")),
+    stat(join(rejectedItemPath, "rejection.json")),
   ]);
   const privateMode = (mode: number, expected: number) =>
     (mode & 0o777) === expected;
   const evidence = {
-    schema: "socrates.runner-work-journal.native.v1",
+    schema: "socrates.runner-work-journal.native.v2",
     recordedAt: new Date().toISOString(),
     host: {
       platform: process.platform,
@@ -121,10 +140,15 @@ try {
       itemMode0700: privateMode(itemMetadata.mode, 0o700),
       manifestMode0600: privateMode(manifestMetadata.mode, 0o600),
       claimMode0600: privateMode(claimMetadata.mode, 0o600),
+      rejectionMode0600: privateMode(rejectionMetadata.mode, 0o600),
       manifestSingleLink: manifestMetadata.nlink === 1,
       claimSingleLink: claimMetadata.nlink === 1,
+      rejectionSingleLink: rejectionMetadata.nlink === 1,
       exactAttemptReplay: replay.lease.attemptId === attemptId,
       noNetworkAfterCommit: calls === 1,
+      rejectedAfterRestart:
+        rejectedState?.state === "rejected" &&
+        rejectedState.rejection?.apiCode === "resource_conflict",
     },
   };
   if (Object.values(evidence.gates).some((passed) => !passed))
