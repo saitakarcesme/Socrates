@@ -1,3 +1,4 @@
+# Manual-only disposable reference-host validation.
 name: OCI reference-host spike
 
 on:
