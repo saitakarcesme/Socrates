@@ -1250,6 +1250,15 @@ namespaces, and host LSM directly. Desktop Linux VMs, WSL, Podman Machine, and
 shared container jobs remain development-only. Hosted-runner latency is
 contextual comparison evidence, not a production capacity commitment.
 
+The Ubuntu reference workflow also provisions the digest-verified full nerdctl
+v2.3.1 distribution and starts its containerd service rootless under the same
+unprivileged operator. This candidate is retained because nerdctl explicitly
+supports applying an existing AppArmor profile to rootless containers, while
+the measured Docker and Podman rootless configurations do not. Downloaded
+tooling is version- and SHA-256-pinned; an unavailable or non-conforming
+containerd candidate remains recorded evidence rather than an implicit
+fallback.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

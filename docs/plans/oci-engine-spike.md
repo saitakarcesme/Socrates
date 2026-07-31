@@ -182,6 +182,12 @@ image for both engines, executes one native comparison session, and uploads the
 session directory even when a gate fails. It has read-only repository
 permissions and does not run for pull requests or untrusted forks.
 
+The same workflow installs the SHA-256-pinned nerdctl full v2.3.1 distribution
+and starts its bundled containerd service rootless. nerdctl documents support
+for applying an existing AppArmor profile to rootless containers, so this
+candidate is measured after Docker and Podman both proved unable to apply the
+preloaded profile on the Ubuntu reference host.
+
 ## Promotion rule
 
 The harness and its command builders are disposable. Slice 2.5 begins with a
