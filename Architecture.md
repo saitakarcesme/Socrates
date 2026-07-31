@@ -2154,6 +2154,53 @@ transport journey, native spool/journal probes, Chromium journey, and builds.
 This admits ADR-049 and closes Slice 2.12. Offer expiry/reassignment and
 production execution remain disabled.
 
+### ADR-050: Expired unclaimed offers are explicitly revoked before reassignment
+
+Slice 2.13 prevents an abandoned `offered` delivery from pinning a queued task
+forever while preserving the durable-journal fence. Expiry is control-plane
+state, not client authority. A trusted deployment option supplies a bounded
+offer duration; the acquire transaction computes `expires_at` from PostgreSQL
+`CURRENT_TIMESTAMP`. PostgreSQL defines that value as the transaction start
+time, giving every statement in the transaction one stable time basis
+([PostgreSQL date/time](https://www.postgresql.org/docs/current/datatype-datetime.html)).
+Request bodies cannot choose or extend the duration.
+
+Delivery state becomes `offered | claimed | revoked`. An offered row has no
+attempt, fence, claimed timestamp, or revoked timestamp. A claimed row has the
+complete attempt/fence/claimed identity and can never be revoked by this
+protocol. A revoked row has no attempt/fence/claim identity and records a
+revoked timestamp plus the closed reason `expired`. Database checks enforce
+the three complete shapes; partial state is impossible.
+
+A bounded repository reconciler selects expired offered rows in deterministic
+`expires_at, id` order with `FOR UPDATE SKIP LOCKED`, then changes only those
+locked rows to revoked. PostgreSQL explicitly supports ordered, limited update
+batches and `SKIP LOCKED` to reduce contention between workers
+([PostgreSQL UPDATE](https://www.postgresql.org/docs/18/sql-update.html)). The
+slice exposes the repository/service boundary and deterministic tests but no
+timer, cron process, daemon, or production runner loop.
+
+Revocation and claim serialize on the same delivery row lock. If claim locks
+first, the scheduler lease and `claimed` delivery commit together and the
+reconciler observes a non-offered row. If revocation locks first, the stale
+claim observes `revoked` and fails before invoking scheduler claim. There is no
+state in which a revoked delivery creates a lease. The control plane may issue
+a new delivery UUID only after the old row is durably revoked; the partial
+unique active-task index then permits exactly one new owner.
+
+Acquire replays only an unexpired offer. Expired but unreconciled offers are
+not handed to the runner and continue to fence the task until explicit
+reconciliation. After revocation, the same or another compatible runner may
+acquire a new delivery ID. A runner retaining the old local manifest keeps
+diagnostic truth, but its delivery-scoped claim receives an authoritative
+conflict and cannot allocate a scheduler attempt. The local journal is never
+rewritten or deleted automatically.
+
+Slice 2.13 does not expire claimed deliveries; scheduler lease reconciliation
+already owns that lifecycle. It does not retry, quarantine, delete, or compact
+revoked rows, infer runner death, mutate the integration outbox, or enable
+execution. `LocalRunnerNotEnabledError` remains the production entry point.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

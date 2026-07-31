@@ -550,6 +550,24 @@ passed schema compatibility 7, real PostgreSQL delivery concurrency, the
 delivery-scoped authenticated transport journey, native durability probes,
 browser tests, and production builds.
 
+### Slice 2.13 — expired offer revocation
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-050.
+
+Detailed plan: `docs/plans/slice-2.13-expired-offer-revocation.md`.
+
+- compute offer expiry from trusted server configuration and database time;
+- revoke only expired, unclaimed offers in bounded locked batches;
+- permit a new delivery only after the prior offer is durably revoked;
+- prove claim-versus-revoke races cannot create a stale scheduler lease;
+- keep timers, claimed-lease expiry, cleanup, and execution out of scope.
+
+Exit: real PostgreSQL races prove claim or revocation wins one delivery row,
+never both; a revoked delivery cannot claim, while a new delivery can safely
+reserve the still-queued task.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
