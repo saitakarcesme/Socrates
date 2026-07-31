@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type {
   AcquireRunnerTaskDeliveryInput,
+  AuthorizeRunnerSourceSnapshotResult,
   ClaimRunnerTaskResult,
   HeartbeatRunnerTaskResult,
   IngestRunnerEventResult,
@@ -25,6 +26,7 @@ function serviceReturning(options: {
   claim?: ClaimRunnerTaskResult;
   event?: IngestRunnerEventResult;
   heartbeat?: HeartbeatRunnerTaskResult;
+  source?: AuthorizeRunnerSourceSnapshotResult;
 }): RunnerGatewayService {
   const scheduler = {
     claimTask: async () => {
@@ -38,6 +40,10 @@ function serviceReturning(options: {
     heartbeat: async () => {
       if (!options.heartbeat) throw new Error("Unexpected heartbeat.");
       return options.heartbeat;
+    },
+    authorizeSourceSnapshot: async () => {
+      if (!options.source) throw new Error("Unexpected source authorization.");
+      return options.source;
     },
   } as unknown as SchedulerRepository;
   const persistence: Pick<Persistence, "transaction"> = {
@@ -161,6 +167,46 @@ describe("RunnerGatewayService", () => {
         event: { state: "replay", acknowledgement },
       }).ingestEvent({ event: {} }),
     ).resolves.toEqual({ replay: true, acknowledgement });
+  });
+
+  it("returns only authorized immutable source metadata", async () => {
+    const source = {
+      snapshotId: randomUUID(),
+      digest:
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      sizeBytes: 128,
+      mediaType: "application/vnd.socrates.source-snapshot.v1+tar",
+    };
+    await expect(
+      serviceReturning({
+        source: { state: "authorized", source },
+      }).authorizeSourceSnapshot({
+        ...claimInput,
+        fence: 3,
+        snapshotId: source.snapshotId,
+        digest: source.digest,
+      }),
+    ).resolves.toEqual(source);
+  });
+
+  it.each([
+    ["source_not_found", 404, "not_found"],
+    ["source_mismatch", 422, "protocol_mismatch"],
+    ["stale", 409, "resource_conflict"],
+  ] as const)("maps source authorization %s", async (state, status, code) => {
+    await expect(
+      serviceReturning({ source: { state } }).authorizeSourceSnapshot({
+        ...claimInput,
+        fence: 3,
+        snapshotId: randomUUID(),
+        digest:
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      }),
+    ).rejects.toMatchObject({
+      status,
+      code,
+      details: { runnerReason: state },
+    });
   });
 
   it("preserves the database-clocked lease and cancellation directive", async () => {

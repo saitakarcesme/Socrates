@@ -6,6 +6,8 @@ import {
   maximumRunnerLeaseDurationMs,
   runnerBearerTokenSchema,
   runnerEventSubmitResponseV1Schema,
+  runnerSourceSnapshotResolveParamsV1Schema,
+  runnerSourceSnapshotResolveRequestV1Schema,
   runnerTaskDeliveryAcquireRequestV1Schema,
   runnerTaskDeliveryAcquireResponseV1Schema,
   runnerTaskDeliveryClaimRequestV1Schema,
@@ -144,5 +146,31 @@ describe("runner transport contracts", () => {
         leaseDurationMs: maximumRunnerLeaseDurationMs,
       }).taskId,
     ).toBe(taskId);
+  });
+
+  it("requires an exact fenced source identity", () => {
+    const params = { taskId: randomUUID(), attemptId: randomUUID() };
+    const request = {
+      version: "1",
+      fence: 1,
+      snapshotId: randomUUID(),
+      digest: `sha256:${"a".repeat(64)}`,
+    } as const;
+
+    expect(runnerSourceSnapshotResolveParamsV1Schema.parse(params)).toEqual(
+      params,
+    );
+    expect(runnerSourceSnapshotResolveRequestV1Schema.parse(request)).toEqual(
+      request,
+    );
+    for (const invalid of [
+      { ...request, fence: 0 },
+      { ...request, digest: `sha256:${"A".repeat(64)}` },
+      { ...request, runnerId: randomUUID() },
+    ]) {
+      expect(
+        runnerSourceSnapshotResolveRequestV1Schema.safeParse(invalid).success,
+      ).toBe(false);
+    }
   });
 });

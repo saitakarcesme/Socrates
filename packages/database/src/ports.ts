@@ -300,6 +300,35 @@ export type IngestRunnerEventResult =
         | "unsupported_event";
     };
 
+export type CatalogSourceSnapshotInput = {
+  snapshotId: string;
+  artifact: VerifiedArtifact;
+  mediaType: string;
+};
+
+export type CatalogSourceSnapshotResult =
+  { state: "created" | "replay" } | { state: "conflict" };
+
+export type AuthorizeRunnerSourceSnapshotInput = {
+  runnerId: string;
+  taskId: string;
+  attemptId: string;
+  fence: number;
+  snapshotId: string;
+  digest: string;
+};
+
+export type AuthorizedSourceSnapshot = {
+  snapshotId: string;
+  digest: string;
+  sizeBytes: number;
+  mediaType: string;
+};
+
+export type AuthorizeRunnerSourceSnapshotResult =
+  | { state: "authorized"; source: AuthorizedSourceSnapshot }
+  | { state: "source_not_found" | "source_mismatch" | "stale" };
+
 export interface SchedulerRepository {
   registerRunner(input: RunnerRegistrationWrite): Promise<void>;
   createTask(input: RunnerTaskWrite): Promise<CreateRunnerTaskResult>;
@@ -326,6 +355,12 @@ export interface SchedulerRepository {
     input: ReconcileExpiredRunnerTasksInput,
   ): Promise<ReconcileExpiredRunnerTasksResult>;
   ingestEvent(input: IngestRunnerEventInput): Promise<IngestRunnerEventResult>;
+  catalogSourceSnapshot(
+    input: CatalogSourceSnapshotInput,
+  ): Promise<CatalogSourceSnapshotResult>;
+  authorizeSourceSnapshot(
+    input: AuthorizeRunnerSourceSnapshotInput,
+  ): Promise<AuthorizeRunnerSourceSnapshotResult>;
 }
 
 export type TransactionRepositories = {

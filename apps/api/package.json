@@ -15,6 +15,7 @@
   "dependencies": {
     "@hono/node-server": "^2.0.12",
     "@hono/standard-validator": "^0.3.0",
+    "@socrates/artifact-store": "workspace:*",
     "@socrates/contracts": "workspace:*",
     "@socrates/database": "workspace:*",
     "@socrates/domain": "workspace:*",

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { isVerifiedArtifact } from "@socrates/artifact-store";
 import {
   experimentTaskV2Schema,
+  runnerAttemptLeaseV1Schema,
   runnerEventV2Schema,
   runnerRegistrationV1Schema,
 } from "@socrates/contracts";
@@ -27,6 +28,10 @@ import { maximumRunnerTaskOfferDurationMs } from "./ports";
 import type {
   AcquireRunnerTaskDeliveryInput,
   AcquireRunnerTaskDeliveryResult,
+  AuthorizeRunnerSourceSnapshotInput,
+  AuthorizeRunnerSourceSnapshotResult,
+  CatalogSourceSnapshotInput,
+  CatalogSourceSnapshotResult,
   ClaimRunnerTaskInput,
   ClaimRunnerTaskDeliveryInput,
   ClaimRunnerTaskDeliveryResult,
@@ -69,6 +74,8 @@ const cancellationReasons = [
   "runner_shutdown",
 ] as const;
 const terminalTaskStatuses = ["succeeded", "failed", "cancelled"] as const;
+const sourceSnapshotMediaType =
+  "application/vnd.socrates.source-snapshot.v1+tar";
 type PersistedRunnerAttemptStatus =
   (typeof schema.runnerAttemptStatus.enumValues)[number];
 type PersistedRunnerTaskStatus =
@@ -1117,6 +1124,139 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
     }
 
     return { reconciled };
+  }
+
+  async catalogSourceSnapshot(
+    input: CatalogSourceSnapshotInput,
+  ): Promise<CatalogSourceSnapshotResult> {
+    const snapshotId =
+      experimentTaskV2Schema.shape.source.shape.snapshotId.parse(
+        input.snapshotId,
+      );
+    if (
+      !isVerifiedArtifact(input.artifact) ||
+      input.artifact.sizeBytes < 1 ||
+      input.mediaType !== sourceSnapshotMediaType
+    ) {
+      throw new TypeError(
+        "Source snapshot cataloging requires a genuine non-empty canonical artifact.",
+      );
+    }
+
+    await this.transaction
+      .insert(schema.artifactObjects)
+      .values({
+        digest: input.artifact.digest,
+        sizeBytes: input.artifact.sizeBytes,
+      })
+      .onConflictDoNothing();
+    const [artifact] = await this.transaction
+      .select({ sizeBytes: schema.artifactObjects.sizeBytes })
+      .from(schema.artifactObjects)
+      .where(eq(schema.artifactObjects.digest, input.artifact.digest));
+    if (artifact?.sizeBytes !== input.artifact.sizeBytes) {
+      return { state: "conflict" };
+    }
+
+    const [created] = await this.transaction
+      .insert(schema.sourceSnapshots)
+      .values({
+        id: snapshotId,
+        digest: input.artifact.digest,
+        sizeBytes: input.artifact.sizeBytes,
+        mediaType: input.mediaType,
+      })
+      .onConflictDoNothing()
+      .returning({ id: schema.sourceSnapshots.id });
+    if (created) return { state: "created" };
+
+    const [existing] = await this.transaction
+      .select({
+        digest: schema.sourceSnapshots.digest,
+        sizeBytes: schema.sourceSnapshots.sizeBytes,
+        mediaType: schema.sourceSnapshots.mediaType,
+      })
+      .from(schema.sourceSnapshots)
+      .where(eq(schema.sourceSnapshots.id, snapshotId));
+    return existing?.digest === input.artifact.digest &&
+      existing.sizeBytes === input.artifact.sizeBytes &&
+      existing.mediaType === input.mediaType
+      ? { state: "replay" }
+      : { state: "conflict" };
+  }
+
+  async authorizeSourceSnapshot(
+    input: AuthorizeRunnerSourceSnapshotInput,
+  ): Promise<AuthorizeRunnerSourceSnapshotResult> {
+    const runnerId = runnerAttemptLeaseV1Schema.shape.runnerId.parse(
+      input.runnerId,
+    );
+    const taskId = runnerAttemptLeaseV1Schema.shape.taskId.parse(input.taskId);
+    const attemptId = runnerAttemptLeaseV1Schema.shape.attemptId.parse(
+      input.attemptId,
+    );
+    const fence = runnerAttemptLeaseV1Schema.shape.fence.parse(input.fence);
+    const snapshotId =
+      experimentTaskV2Schema.shape.source.shape.snapshotId.parse(
+        input.snapshotId,
+      );
+    const digest = experimentTaskV2Schema.shape.source.shape.digest.parse(
+      input.digest,
+    );
+
+    const [current] = await this.transaction
+      .select({
+        payload: schema.runnerTasks.payload,
+        protocolVersion: schema.runnerTasks.protocolVersion,
+      })
+      .from(schema.runnerTaskAttempts)
+      .innerJoin(
+        schema.runnerTasks,
+        eq(schema.runnerTasks.id, schema.runnerTaskAttempts.taskId),
+      )
+      .where(
+        and(
+          eq(schema.runnerTaskAttempts.id, attemptId),
+          eq(schema.runnerTaskAttempts.taskId, taskId),
+          eq(schema.runnerTaskAttempts.runnerId, runnerId),
+          eq(schema.runnerTaskAttempts.fence, fence),
+          inArray(schema.runnerTaskAttempts.status, activeAttemptStatuses),
+          sql`${schema.runnerTaskAttempts.leaseExpiresAt} > CURRENT_TIMESTAMP`,
+          eq(schema.runnerTasks.id, taskId),
+          eq(schema.runnerTasks.currentFence, fence),
+          inArray(schema.runnerTasks.status, ["leased", "running"]),
+        ),
+      );
+    if (!current || current.protocolVersion !== "2") return { state: "stale" };
+
+    const task = experimentTaskV2Schema.safeParse(current.payload);
+    if (
+      !task.success ||
+      task.data.source.snapshotId !== snapshotId ||
+      task.data.source.digest !== digest
+    ) {
+      return { state: "source_mismatch" };
+    }
+
+    const [source] = await this.transaction
+      .select({
+        snapshotId: schema.sourceSnapshots.id,
+        digest: schema.sourceSnapshots.digest,
+        sizeBytes: schema.sourceSnapshots.sizeBytes,
+        mediaType: schema.sourceSnapshots.mediaType,
+      })
+      .from(schema.sourceSnapshots)
+      .where(eq(schema.sourceSnapshots.id, snapshotId));
+    if (!source) return { state: "source_not_found" };
+    if (
+      source.digest !== digest ||
+      !Number.isSafeInteger(source.sizeBytes) ||
+      source.sizeBytes < 1 ||
+      source.mediaType !== sourceSnapshotMediaType
+    ) {
+      return { state: "source_mismatch" };
+    }
+    return { state: "authorized", source: Object.freeze(source) };
   }
 
   async ingestEvent(

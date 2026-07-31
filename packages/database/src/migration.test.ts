@@ -27,6 +27,7 @@ import {
   runnerTaskEvents,
   runnerTasks,
   schemaMetadata,
+  sourceSnapshots,
   workspaces,
 } from "./schema/index";
 
@@ -138,6 +139,7 @@ describe("Phase 2 scheduler migration", () => {
         runnerTaskDeliveries,
         runnerTaskEvents,
         artifactObjects,
+        sourceSnapshots,
         runnerTaskArtifacts,
         outboxMessages,
       ].map((table) => getTableConfig(table).name),
@@ -150,6 +152,7 @@ describe("Phase 2 scheduler migration", () => {
       "runner_task_deliveries",
       "runner_task_events",
       "artifact_objects",
+      "source_snapshots",
       "runner_task_artifacts",
       "outbox_messages",
     ]);
@@ -333,5 +336,33 @@ describe("Phase 2 scheduler migration", () => {
       migration.indexOf(`ALTER COLUMN "reason" SET NOT NULL`),
     );
     expect(migration.trimEnd()).toMatch(/SET "version" = 9 WHERE "id" = 1;$/u);
+  });
+
+  it("adds immutable source snapshot identities before advancing compatibility", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0013_source_snapshot_catalog.sql", import.meta.url),
+      "utf8",
+    );
+
+    for (const evidence of [
+      `CREATE UNIQUE INDEX "artifact_objects_digest_size_unique"`,
+      `CREATE TABLE "source_snapshots"`,
+      `CONSTRAINT "source_snapshots_size_positive"`,
+      `CONSTRAINT "source_snapshots_media_type"`,
+      `CONSTRAINT "source_snapshots_artifact_identity_fk"`,
+      `CREATE INDEX "source_snapshots_digest_size_idx"`,
+      `SET "version" = 10`,
+    ]) {
+      expect(migration).toContain(evidence);
+    }
+    expect(
+      migration.indexOf(`"artifact_objects_digest_size_unique"`),
+    ).toBeLessThan(
+      migration.indexOf(`"source_snapshots_artifact_identity_fk"`),
+    );
+    expect(migration.indexOf(`CREATE TABLE "source_snapshots"`)).toBeLessThan(
+      migration.indexOf(`"source_snapshots_artifact_identity_fk"`),
+    );
+    expect(migration.trimEnd()).toMatch(/SET "version" = 10 WHERE "id" = 1;$/u);
   });
 });

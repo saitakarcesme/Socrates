@@ -8,6 +8,7 @@ import {
 import {
   runnerCancellationPolicyV1Schema,
   runnerExecutionV1Schema,
+  sha256DigestSchema,
 } from "./runner";
 import { runnerTaskDeliveryV1Schema } from "./runner-delivery";
 
@@ -125,6 +126,25 @@ export const runnerTaskHeartbeatResponseV1Schema = z.discriminatedUnion(
 );
 export type RunnerTaskHeartbeatResponseV1 = z.infer<
   typeof runnerTaskHeartbeatResponseV1Schema
+>;
+
+export const runnerSourceSnapshotResolveParamsV1Schema = z
+  .object({
+    taskId: entityIdSchema,
+    attemptId: entityIdSchema,
+  })
+  .strict();
+
+export const runnerSourceSnapshotResolveRequestV1Schema = z
+  .object({
+    version: z.literal("1"),
+    fence: positiveSafeIntegerSchema,
+    snapshotId: entityIdSchema,
+    digest: sha256DigestSchema,
+  })
+  .strict();
+export type RunnerSourceSnapshotResolveRequestV1 = z.infer<
+  typeof runnerSourceSnapshotResolveRequestV1Schema
 >;
 
 export const runnerEventSubmitRequestV1Schema = z

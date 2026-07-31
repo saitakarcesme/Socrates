@@ -429,10 +429,40 @@ export const artifactObjects = pgTable(
       .notNull(),
   },
   (table) => [
+    uniqueIndex("artifact_objects_digest_size_unique").on(
+      table.digest,
+      table.sizeBytes,
+    ),
     nonNegativeCheck("artifact_objects_size_non_negative", table.sizeBytes),
     check(
       "artifact_objects_digest_sha256",
       sql`${table.digest} ~ '^sha256:[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
+export const sourceSnapshots = pgTable(
+  "source_snapshots",
+  {
+    id: uuid("id").primaryKey(),
+    digest: text("digest").notNull(),
+    sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
+    mediaType: text("media_type").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "source_snapshots_artifact_identity_fk",
+      columns: [table.digest, table.sizeBytes],
+      foreignColumns: [artifactObjects.digest, artifactObjects.sizeBytes],
+    }),
+    index("source_snapshots_digest_size_idx").on(table.digest, table.sizeBytes),
+    positiveCheck("source_snapshots_size_positive", table.sizeBytes),
+    check(
+      "source_snapshots_media_type",
+      sql`${table.mediaType} = 'application/vnd.socrates.source-snapshot.v1+tar'`,
     ),
   ],
 );

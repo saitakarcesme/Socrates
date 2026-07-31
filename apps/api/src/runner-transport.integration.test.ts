@@ -29,6 +29,9 @@ integration("authenticated runner transport with PostgreSQL", () => {
   const runnerId = crypto.randomUUID();
   const taskId = crypto.randomUUID();
   const attemptId = crypto.randomUUID();
+  const sourceSnapshotId = crypto.randomUUID();
+  const sourceBytes = new TextEncoder().encode("authenticated source bytes");
+  const sourceDigest = `sha256:${createHash("sha256").update(sourceBytes).digest("hex")}`;
   const suffix = crypto.randomUUID().slice(0, 12);
   const capabilities = [
     {
@@ -47,6 +50,8 @@ integration("authenticated runner transport with PostgreSQL", () => {
   let experimentId: string;
   let metricDefinitionId: string;
   let fence: number;
+  let artifactRoot: string;
+  let artifactStore: LocalContentAddressedArtifactStore;
 
   const command = (path: string, key: string, body: Record<string, unknown>) =>
     app.request(`/v1${path}`, {
@@ -75,6 +80,8 @@ integration("authenticated runner transport with PostgreSQL", () => {
       name: `Runner Transport ${suffix}`,
     });
     persistence = createPersistence({ connectionString });
+    artifactRoot = await mkdtemp(join(tmpdir(), "socrates-api-integration-"));
+    artifactStore = new LocalContentAddressedArtifactStore(artifactRoot);
     app = createApp({
       manualResearchEnabled: true,
       persistence,
@@ -132,6 +139,14 @@ integration("authenticated runner transport with PostgreSQL", () => {
       ).json(),
     );
     experimentId = experiment.data.experimentId;
+    const sourceArtifact = await artifactStore.put({
+      content: (async function* () {
+        yield sourceBytes;
+      })(),
+      expectedDigest: sourceDigest,
+      expectedSizeBytes: sourceBytes.byteLength,
+      maxSizeBytes: sourceBytes.byteLength,
+    });
 
     await persistence.transaction(async ({ scheduler }) => {
       await scheduler.registerRunner({
@@ -159,8 +174,8 @@ integration("authenticated runner transport with PostgreSQL", () => {
           runId,
           experimentId,
           source: {
-            snapshotId: crypto.randomUUID(),
-            digest: `sha256:${"a".repeat(64)}`,
+            snapshotId: sourceSnapshotId,
+            digest: sourceDigest,
           },
           hypothesis: "An authenticated runner preserves fenced evidence.",
           action: {
@@ -217,6 +232,13 @@ integration("authenticated runner transport with PostgreSQL", () => {
         },
       });
       expect(created).toEqual({ state: "created" });
+      await expect(
+        scheduler.catalogSourceSnapshot({
+          snapshotId: sourceSnapshotId,
+          artifact: sourceArtifact,
+          mediaType: "application/vnd.socrates.source-snapshot.v1+tar",
+        }),
+      ).resolves.toEqual({ state: "created" });
     });
 
     const generated = generateRunnerCredential();
@@ -234,12 +256,16 @@ integration("authenticated runner transport with PostgreSQL", () => {
       runnerAuthenticator: new OpaqueRunnerAuthenticator(
         persistence.runnerCredentials,
       ),
+      runnerArtifactStore: artifactStore,
       workspaceId,
     });
   });
 
   afterAll(async () => {
     await persistence?.close();
+    if (artifactRoot) {
+      await rm(artifactRoot, { recursive: true, force: true });
+    }
   });
 
   it("binds claim, cancellation heartbeat, terminal acknowledgement, and replay", async () => {
@@ -294,6 +320,24 @@ integration("authenticated runner transport with PostgreSQL", () => {
     );
     expect(continuing.directive).toBe("continue");
 
+    const source = await runnerCommand(
+      `/tasks/${taskId}/attempts/${attemptId}/source-snapshots/resolve`,
+      {
+        version: "1",
+        fence,
+        snapshotId: sourceSnapshotId,
+        digest: sourceDigest,
+      },
+    );
+    expect(source.status).toBe(200);
+    expect(source.headers.get("content-type")).toBe(
+      "application/vnd.socrates.source-snapshot.v1+tar",
+    );
+    expect(source.headers.get("content-length")).toBe(
+      String(sourceBytes.byteLength),
+    );
+    expect(new Uint8Array(await source.arrayBuffer())).toEqual(sourceBytes);
+
     await persistence.transaction(({ scheduler }) =>
       scheduler.requestCancellation({
         requestId: crypto.randomUUID(),
@@ -303,6 +347,16 @@ integration("authenticated runner transport with PostgreSQL", () => {
         reason: "operator",
       }),
     );
+    const revokedSource = await runnerCommand(
+      `/tasks/${taskId}/attempts/${attemptId}/source-snapshots/resolve`,
+      {
+        version: "1",
+        fence,
+        snapshotId: sourceSnapshotId,
+        digest: sourceDigest,
+      },
+    );
+    expect(revokedSource.status).toBe(409);
     const cancelling = runnerTaskHeartbeatResponseV1Schema.parse(
       await (
         await runnerCommand(
@@ -361,3 +415,9 @@ integration("authenticated runner transport with PostgreSQL", () => {
     expect(replay).toEqual({ ...accepted, replay: true });
   });
 });
+import { createHash } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { LocalContentAddressedArtifactStore } from "@socrates/artifact-store/local";

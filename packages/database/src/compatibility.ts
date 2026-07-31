@@ -1,6 +1,6 @@
 import postgres from "postgres";
 
-export const supportedSchemaVersion = 9;
+export const supportedSchemaVersion = 10;
 
 export class DatabaseCompatibilityError extends Error {
   constructor(

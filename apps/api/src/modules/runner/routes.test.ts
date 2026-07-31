@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
+import { LocalContentAddressedArtifactStore } from "@socrates/artifact-store/local";
 import type { RunnerEventV2 } from "@socrates/contracts";
 import { Hono } from "hono";
 import { requestId } from "hono/request-id";
@@ -48,6 +52,9 @@ function authenticatedOptions(
     },
     gateway: {
       acquireTaskDelivery: async () => null,
+      authorizeSourceSnapshot: async () => {
+        throw new Error("Unexpected source authorization.");
+      },
       claimTaskDelivery: async () => {
         throw new Error("Unexpected delivery claim.");
       },
@@ -81,6 +88,10 @@ function headers(token = credential) {
     authorization: `Bearer ${token}`,
     "content-type": "application/json",
   };
+}
+
+async function* chunks(content: Uint8Array) {
+  yield content;
 }
 
 describe("runner HTTP routes", () => {
@@ -230,6 +241,84 @@ describe("runner HTTP routes", () => {
         expectedSequence: 2,
         receivedAt: "2026-07-31T12:00:01.000Z",
       },
+    });
+  });
+
+  it("streams only an independently verified authorized source object", async () => {
+    const root = await mkdtemp(join(tmpdir(), "socrates-api-source-"));
+    try {
+      const artifactStore = new LocalContentAddressedArtifactStore(root);
+      const content = new TextEncoder().encode("source bytes");
+      const digest =
+        "sha256:4d4823794cbed3c4ee0bbc684c8f66e1dfd5afa6f078d494ce254ec5a4671753";
+      await artifactStore.put({
+        content: chunks(content),
+        expectedDigest: digest,
+        expectedSizeBytes: content.byteLength,
+        maxSizeBytes: content.byteLength,
+      });
+      const taskId = randomUUID();
+      const attemptId = randomUUID();
+      const snapshotId = randomUUID();
+      const authorizeSourceSnapshot = vi.fn(async () => ({
+        snapshotId,
+        digest,
+        sizeBytes: content.byteLength,
+        mediaType: "application/vnd.socrates.source-snapshot.v1+tar",
+      }));
+      const options = authenticatedOptions({ authorizeSourceSnapshot });
+      options.artifactStore = artifactStore;
+
+      const response = await app(options).request(
+        `/v1/runner/tasks/${taskId}/attempts/${attemptId}/source-snapshots/resolve`,
+        {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify({ version: "1", fence: 7, snapshotId, digest }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe(
+        "application/vnd.socrates.source-snapshot.v1+tar",
+      );
+      expect(response.headers.get("content-length")).toBe(
+        String(content.byteLength),
+      );
+      expect(new Uint8Array(await response.arrayBuffer())).toEqual(content);
+      expect(authorizeSourceSnapshot).toHaveBeenCalledWith({
+        runnerId: principal.runnerId,
+        taskId,
+        attemptId,
+        fence: 7,
+        snapshotId,
+        digest,
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed when the source artifact store is disabled", async () => {
+    const taskId = randomUUID();
+    const attemptId = randomUUID();
+    const response = await app(authenticatedOptions()).request(
+      `/v1/runner/tasks/${taskId}/attempts/${attemptId}/source-snapshots/resolve`,
+      {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({
+          version: "1",
+          fence: 1,
+          snapshotId: randomUUID(),
+          digest:
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        }),
+      },
+    );
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "service_unavailable" },
     });
   });
 

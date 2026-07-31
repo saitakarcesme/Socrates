@@ -3,6 +3,7 @@ import type {
   Persistence,
   ReadRepository,
 } from "@socrates/database";
+import type { ArtifactStore } from "@socrates/artifact-store";
 import {
   ExperimentTransitionError,
   MetricProtocolError,
@@ -31,6 +32,7 @@ export type AppOptions = {
   manualResearchEnabled?: boolean;
   persistence?: Persistence;
   reads?: ReadRepository;
+  runnerArtifactStore?: ArtifactStore;
   runnerAuthenticator?: RunnerAuthenticator;
   runnerOfferDurationMs?: number;
   workspaceId?: string;
@@ -109,6 +111,7 @@ export function createApp(options: AppOptions = {}) {
     "/v1/runner",
     createRunnerRoutes({
       authenticator: options.runnerAuthenticator ?? null,
+      artifactStore: options.runnerArtifactStore ?? null,
       gateway: runnerGateway,
     }),
   );

@@ -33,6 +33,7 @@ import {
   runnerTasks,
   runnerRegistrationTokens,
   runs,
+  sourceSnapshots,
   workspaces,
 } from "./schema/index";
 
@@ -1812,5 +1813,114 @@ integration("PostgreSQL scheduler persistence", () => {
       .where(eq(runnerTasks.id, claim.taskId));
     expect(attempt).toEqual({ status: "cancelled", sequence: 1 });
     expect(storedTask?.status).toBe("cancelled");
+  });
+
+  it("catalogs immutable sources and authorizes only the live owning attempt", async () => {
+    const taskId = randomUUID();
+    const attemptId = randomUUID();
+    const sourceTask = task(taskId, experimentIds[21]!);
+    const sourcePayload = experimentTaskV2Schema.parse(sourceTask.payload);
+    const root = await mkdtemp(join(tmpdir(), "socrates-db-source-"));
+
+    try {
+      const store = new LocalContentAddressedArtifactStore(root);
+      const content = new TextEncoder().encode("immutable source snapshot");
+      const digest = contentDigest(content);
+      const artifact = await store.put({
+        content: binaryChunks(content),
+        expectedDigest: digest,
+        expectedSizeBytes: content.byteLength,
+        maxSizeBytes: content.byteLength,
+      });
+      sourcePayload.source.digest = digest;
+      sourceTask.payload = sourcePayload;
+
+      await persistence.transaction(({ scheduler }) =>
+        scheduler.createTask(sourceTask),
+      );
+      const claim = await persistence.transaction(({ scheduler }) =>
+        scheduler.claimTask({
+          runnerId,
+          taskId,
+          attemptId,
+          leaseDurationMs: 120_000,
+        }),
+      );
+      expect(claim.state).toBe("claimed");
+      if (claim.state !== "claimed") return;
+
+      const catalogInput = {
+        snapshotId: sourcePayload.source.snapshotId,
+        artifact,
+        mediaType: "application/vnd.socrates.source-snapshot.v1+tar",
+      };
+      await expect(
+        persistence.transaction(({ scheduler }) =>
+          scheduler.catalogSourceSnapshot(catalogInput),
+        ),
+      ).resolves.toEqual({ state: "created" });
+      await expect(
+        persistence.transaction(({ scheduler }) =>
+          scheduler.catalogSourceSnapshot(catalogInput),
+        ),
+      ).resolves.toEqual({ state: "replay" });
+
+      const authorization = {
+        runnerId,
+        taskId,
+        attemptId,
+        fence: claim.claim.fence,
+        snapshotId: sourcePayload.source.snapshotId,
+        digest,
+      };
+      await expect(
+        persistence.transaction(({ scheduler }) =>
+          scheduler.authorizeSourceSnapshot(authorization),
+        ),
+      ).resolves.toEqual({
+        state: "authorized",
+        source: {
+          snapshotId: sourcePayload.source.snapshotId,
+          digest,
+          sizeBytes: content.byteLength,
+          mediaType: "application/vnd.socrates.source-snapshot.v1+tar",
+        },
+      });
+      await expect(
+        persistence.transaction(({ scheduler }) =>
+          scheduler.authorizeSourceSnapshot({
+            ...authorization,
+            runnerId: secondRunnerId,
+          }),
+        ),
+      ).resolves.toEqual({ state: "stale" });
+      await expect(
+        persistence.transaction(({ scheduler }) =>
+          scheduler.authorizeSourceSnapshot({
+            ...authorization,
+            digest:
+              "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          }),
+        ),
+      ).resolves.toEqual({ state: "source_mismatch" });
+
+      await expect(
+        database
+          .select()
+          .from(sourceSnapshots)
+          .where(eq(sourceSnapshots.id, sourcePayload.source.snapshotId)),
+      ).resolves.toHaveLength(1);
+      await database
+        .update(runnerTaskAttempts)
+        .set({ leaseExpiresAt: new Date(0) })
+        .where(eq(runnerTaskAttempts.id, attemptId));
+      await expect(
+        persistence.transaction(({ scheduler }) =>
+          scheduler.authorizeSourceSnapshot(authorization),
+        ),
+      ).resolves.toEqual({ state: "stale" });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

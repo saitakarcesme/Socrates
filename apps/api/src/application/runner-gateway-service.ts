@@ -1,6 +1,8 @@
 import { maximumRunnerTaskOfferDurationMs } from "@socrates/database";
 import type {
   AcquireRunnerTaskDeliveryInput,
+  AuthorizedSourceSnapshot,
+  AuthorizeRunnerSourceSnapshotInput,
   ClaimRunnerTaskInput,
   ClaimRunnerTaskDeliveryInput,
   ClaimedRunnerTask,
@@ -190,6 +192,30 @@ export class RunnerGatewayService {
         return runnerConflict(
           result.state,
           "The runner event lease or fence is stale.",
+        );
+    }
+  }
+
+  async authorizeSourceSnapshot(
+    input: AuthorizeRunnerSourceSnapshotInput,
+  ): Promise<AuthorizedSourceSnapshot> {
+    const result = await this.persistence.transaction(({ scheduler }) =>
+      scheduler.authorizeSourceSnapshot(input),
+    );
+    switch (result.state) {
+      case "authorized":
+        return result.source;
+      case "source_not_found":
+        return notFound("source snapshot", { runnerReason: result.state });
+      case "source_mismatch":
+        return protocolMismatch(
+          "The source identity does not match the immutable runner task.",
+          { runnerReason: result.state },
+        );
+      case "stale":
+        return runnerConflict(
+          result.state,
+          "The source request lease or fence is stale.",
         );
     }
   }

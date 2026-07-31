@@ -1,9 +1,12 @@
 import { sValidator } from "@hono/standard-validator";
+import type { ArtifactStore } from "@socrates/artifact-store";
 import {
   experimentTaskV2Schema,
   runnerEventSubmitRequestV1Schema,
   runnerEventSubmitResponseV1Schema,
   runnerExecutionV1Schema,
+  runnerSourceSnapshotResolveParamsV1Schema,
+  runnerSourceSnapshotResolveRequestV1Schema,
   runnerTaskDeliveryAcquireRequestV1Schema,
   runnerTaskDeliveryAcquireResponseV1Schema,
   runnerTaskDeliveryClaimParamsV1Schema,
@@ -28,6 +31,7 @@ const maximumRunnerRequestBytes = 128 * 1_024;
 type RunnerGateway = Pick<
   RunnerGatewayService,
   | "acquireTaskDelivery"
+  | "authorizeSourceSnapshot"
   | "claimTaskDelivery"
   | "claimTask"
   | "heartbeat"
@@ -36,8 +40,29 @@ type RunnerGateway = Pick<
 
 export type RunnerRouteOptions = {
   authenticator: RunnerAuthenticator | null;
+  artifactStore?: ArtifactStore | null;
   gateway: RunnerGateway | null;
 };
+
+function artifactStream(
+  content: AsyncIterable<Uint8Array>,
+): ReadableStream<Uint8Array> {
+  const iterator = content[Symbol.asyncIterator]();
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const next = await iterator.next();
+        if (next.done) controller.close();
+        else controller.enqueue(next.value);
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    async cancel() {
+      await iterator.return?.();
+    },
+  });
+}
 
 export function createRunnerRoutes(options: RunnerRouteOptions) {
   const app = new Hono<RunnerHttpEnvironment>();
@@ -193,6 +218,71 @@ export function createRunnerRoutes(options: RunnerRouteOptions) {
               },
         ),
       );
+    },
+  );
+
+  app.post(
+    "/tasks/:taskId/attempts/:attemptId/source-snapshots/resolve",
+    sValidator(
+      "param",
+      runnerSourceSnapshotResolveParamsV1Schema,
+      validationHook,
+    ),
+    sValidator(
+      "json",
+      runnerSourceSnapshotResolveRequestV1Schema,
+      validationHook,
+    ),
+    async (context) => {
+      if (!options.artifactStore) {
+        return apiError(
+          context,
+          503,
+          "service_unavailable",
+          "The source artifact store is not configured.",
+        );
+      }
+      const principal = context.get("runnerPrincipal");
+      const params = context.req.valid("param");
+      const request = context.req.valid("json");
+      const source = await gateway.authorizeSourceSnapshot({
+        runnerId: principal.runnerId,
+        taskId: params.taskId,
+        attemptId: params.attemptId,
+        fence: request.fence,
+        snapshotId: request.snapshotId,
+        digest: request.digest,
+      });
+      let content: AsyncIterable<Uint8Array> | undefined;
+      try {
+        const artifact = await options.artifactStore.verify({
+          expectedDigest: source.digest,
+          expectedSizeBytes: source.sizeBytes,
+        });
+        if (artifact) {
+          content = options.artifactStore.read({
+            artifact,
+            maxSizeBytes: source.sizeBytes,
+          });
+        }
+      } catch {
+        content = undefined;
+      }
+      if (!content) {
+        return apiError(
+          context,
+          503,
+          "service_unavailable",
+          "The authorized source object is unavailable.",
+        );
+      }
+
+      return context.body(artifactStream(content), 200, {
+        "cache-control": "no-store",
+        "content-length": String(source.sizeBytes),
+        "content-type": source.mediaType,
+        "x-content-type-options": "nosniff",
+      });
     },
   );
 
