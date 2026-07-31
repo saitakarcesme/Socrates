@@ -162,7 +162,8 @@ Runtime stderr must remain empty.
   trailing-byte requests;
 - command order, cwd, argv, timeout, and environment mutations;
 - binary output, frame injection text, invalid base64, oversized frames,
-  sequence gaps, duplicate terminal frames, and trailing output;
+  write-fragment frame amplification, sequence gaps, duplicate terminal
+  frames, and trailing output;
 - source-copy traversal or links;
 - action failure preventing measurement;
 - cancellation, runtime crash, timeout, and cleanup;

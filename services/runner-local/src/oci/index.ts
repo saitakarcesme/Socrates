@@ -25,6 +25,7 @@ export type {
   NerdctlSandboxBackendOptions,
   SandboxExecution,
   SandboxExecutionResult,
+  SandboxRuntimeExecution,
 } from "./backend";
 export type { SandboxAttemptIdentity, SandboxOwnership } from "./identity";
 export type { ProcessExecutor, ProcessRequest, ProcessResult } from "./process";

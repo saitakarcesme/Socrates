@@ -1569,6 +1569,13 @@ budgets. Attempt identity and image digest are compared again before input is
 written. Request data is never stored in image metadata, environment, or a host
 bind.
 
+For every guarded container invocation, the backend maps the authorized outer
+command executable to nerdctl's explicit `--entrypoint` option and places only
+its argument array after the image reference. Image configuration therefore
+cannot prepend a second executable or reinterpret handshake/profile/runtime
+arguments. Task-declared commands remain exclusively inside the framed runtime
+request.
+
 The runtime copies `/socrates/source` into the bounded `/workspace` tmpfs,
 retaining the Slice 2.7 no-exec workspace policy, and invokes each absolute
 executable with an argument array, `shell: false`, an exact workspace working
@@ -1591,6 +1598,12 @@ big-endian length followed by strict UTF-8 JSON and reject unknown fields,
 sequence gaps, trailing bytes, or output after completion. Measurement bytes
 remain untrusted data and are validated by the outer lifecycle adapter in
 Slice 2.8.
+
+Child write fragmentation cannot amplify frame count independently of the byte
+budget. The runtime retains each command's already-bounded stdout and stderr in
+memory until that command exits, then emits deterministic stream chunks of at
+most 48 KiB before the exit frame. The outer backend independently caps the
+attached process output and frame stream.
 
 Slice 2.7 admits the catalog capability, runtime protocol implementation, and
 native handshake/execution proof. It does not enable task leasing, translate

@@ -1,5 +1,6 @@
 import {
   runtimeFrameSchema,
+  runtimeProtocolLimits,
   runtimeRequestSchema,
   type RuntimeFrame,
   type RuntimeRequest,
@@ -13,7 +14,7 @@ import type {
 } from "./process";
 import type { RuntimeWorkspacePreparation } from "./workspace";
 
-const maximumOutputChunkBytes = 48 * 1_024;
+const maximumOutputChunkBytes = runtimeProtocolLimits.outputChunkBytes;
 
 const runtimeEnvironment = Object.freeze({
   HOME: "/tmp",
@@ -170,27 +171,11 @@ export class TaskRuntimeEngine {
 
     this.#write(input.sink, { type: "command.started", ...input.address });
     const stdoutChunks: Uint8Array[] = [];
-    let outputSequence = 0;
+    const stderrChunks: Uint8Array[] = [];
     const onOutput = (stream: RuntimeOutputStream, chunk: Uint8Array) => {
-      if (input.captureStdout && stream === "stdout") {
-        stdoutChunks.push(Uint8Array.from(chunk));
-        return;
-      }
-      for (
-        let offset = 0;
-        offset < chunk.byteLength;
-        offset += maximumOutputChunkBytes
-      ) {
-        const piece = chunk.subarray(offset, offset + maximumOutputChunkBytes);
-        this.#write(input.sink, {
-          type: "command.output",
-          ...input.address,
-          stream,
-          sequence: outputSequence,
-          bytes: Buffer.from(piece).toString("base64"),
-        });
-        outputSequence += 1;
-      }
+      (stream === "stdout" ? stdoutChunks : stderrChunks).push(
+        Uint8Array.from(chunk),
+      );
     };
 
     let result: RuntimeProcessResult;
@@ -222,6 +207,23 @@ export class TaskRuntimeEngine {
       return undefined;
     }
 
+    let outputSequence = 0;
+    if (!input.captureStdout) {
+      outputSequence = this.#writeCommandOutput(
+        input.sink,
+        input.address,
+        "stdout",
+        Buffer.concat(stdoutChunks.map((chunk) => Buffer.from(chunk))),
+        outputSequence,
+      );
+    }
+    this.#writeCommandOutput(
+      input.sink,
+      input.address,
+      "stderr",
+      Buffer.concat(stderrChunks.map((chunk) => Buffer.from(chunk))),
+      outputSequence,
+    );
     this.#write(input.sink, {
       type: "command.exited",
       ...input.address,
@@ -263,6 +265,32 @@ export class TaskRuntimeEngine {
 
   #remainingWallTime(budgetMs: number, startedAt: number): number {
     return Math.max(0, Math.floor(budgetMs - (this.#now() - startedAt)));
+  }
+
+  #writeCommandOutput(
+    sink: RuntimeFrameSink,
+    address: CommandAddress,
+    stream: RuntimeOutputStream,
+    bytes: Uint8Array,
+    initialSequence: number,
+  ): number {
+    let sequence = initialSequence;
+    for (
+      let offset = 0;
+      offset < bytes.byteLength;
+      offset += maximumOutputChunkBytes
+    ) {
+      const piece = bytes.subarray(offset, offset + maximumOutputChunkBytes);
+      this.#write(sink, {
+        type: "command.output",
+        ...address,
+        stream,
+        sequence,
+        bytes: Buffer.from(piece).toString("base64"),
+      });
+      sequence += 1;
+    }
+    return sequence;
   }
 
   #writeMeasurementResult(sink: RuntimeFrameSink, bytes: Uint8Array): void {

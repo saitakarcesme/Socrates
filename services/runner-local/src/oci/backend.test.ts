@@ -12,6 +12,7 @@ import {
   successfulResult,
 } from "./test-fixtures";
 import { issueMaterializedSourceSnapshot } from "../source/capability";
+import { issueInspectedSandboxImage } from "../image/capability";
 
 import type { ProcessExecutor, ProcessRequest, ProcessResult } from "./process";
 import type { ReadinessVerifier } from "./readiness";
@@ -182,6 +183,8 @@ describe("nerdctl sandbox backend", () => {
       exitCode: 0,
       stdout: "ok",
       stderr: "",
+      stdoutBytes: Uint8Array.from(Buffer.from("ok")),
+      stderrBytes: new Uint8Array(),
       durationMs: 17,
     });
 
@@ -204,6 +207,87 @@ describe("nerdctl sandbox backend", () => {
       "native",
       createSandboxOwnership(deploymentId, fixtureIdentity).containerName,
     ]);
+  });
+
+  it("accepts bounded stdin only through an interactive attached sandbox", async () => {
+    const processes = new LifecycleProcesses();
+    const { value } = backend(processes);
+    const stdin = Uint8Array.from([0, 1, 2, 255]);
+
+    await value.executeRuntime({
+      identity: fixtureIdentity,
+      image: fixtureImage,
+      profile: fixtureProfile,
+      stdin,
+      maximumInputBytes: stdin.byteLength,
+    });
+
+    const creates = processes.requests.filter(
+      (request) => request.arguments[0] === "create",
+    );
+    const starts = processes.requests.filter(
+      (request) => request.arguments[0] === "start",
+    );
+    expect(creates[0]?.arguments).not.toContain("--interactive");
+    expect(creates[1]?.arguments).toContain("--interactive");
+    expect(starts[0]?.stdin).toBeUndefined();
+    expect(starts[1]).toMatchObject({
+      stdin,
+      maximumInputBytes: stdin.byteLength,
+    });
+  });
+
+  it("allows inspected images only on the admission-probe path", async () => {
+    const processes = new LifecycleProcesses();
+    const { value } = backend(processes);
+    const inspected = issueInspectedSandboxImage({
+      reference: fixtureImage.reference,
+      digest: fixtureImage.digest,
+      architecture: fixtureImage.architecture,
+      profileProbe: fixtureImage.profileProbe,
+    });
+
+    await expect(
+      value.executeInspectedImage({
+        identity: fixtureIdentity,
+        image: inspected,
+        profile: fixtureProfile,
+        command: {
+          executable: "/usr/local/bin/node",
+          arguments: ["/opt/socrates/task-runtime.mjs", "--handshake"],
+        },
+      }),
+    ).resolves.toMatchObject({ exitCode: 0, stdout: "ok" });
+    await expect(
+      value.execute({
+        identity: fixtureIdentity,
+        image: inspected as unknown as typeof fixtureImage,
+        profile: fixtureProfile,
+        command: fixtureImage.runtime,
+      }),
+    ).rejects.toThrow(/not admitted/u);
+  });
+
+  it("rejects an inspected-image lookalike before host attestation", async () => {
+    const processes = new LifecycleProcesses();
+    const { value, readiness } = backend(processes);
+    const forged = {
+      reference: fixtureImage.reference,
+      digest: fixtureImage.digest,
+      architecture: fixtureImage.architecture,
+      profileProbe: fixtureImage.profileProbe,
+    };
+
+    await expect(
+      value.executeInspectedImage({
+        identity: fixtureIdentity,
+        image: forged as never,
+        profile: fixtureProfile,
+        command: fixtureImage.runtime,
+      }),
+    ).rejects.toThrow(/verified local inspection/u);
+    expect(readiness.calls).toBe(0);
+    expect(processes.requests).toEqual([]);
   });
 
   it("cleans up without starting when native inspection fails", async () => {

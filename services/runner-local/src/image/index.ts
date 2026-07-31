@@ -4,6 +4,7 @@ export {
   parseSandboxImageInspection,
   SandboxImageInspectionError,
 } from "./inspection";
+export { NerdctlImageHandshakeVerifier } from "./handshake";
 
 export type { AdmittedSandboxImage } from "./capability";
 export type {
@@ -15,3 +16,7 @@ export type {
   NerdctlImageInspectorOptions,
   SandboxImageInspection,
 } from "./inspection";
+export type {
+  InspectedImageExecutor,
+  NerdctlImageHandshakeVerifierOptions,
+} from "./handshake";

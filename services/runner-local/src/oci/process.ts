@@ -6,6 +6,8 @@ export type ProcessRequest = Readonly<{
   arguments: readonly string[];
   timeoutMs: number;
   maximumOutputBytes: number;
+  stdin?: Uint8Array;
+  maximumInputBytes?: number;
   signal?: AbortSignal;
 }>;
 
@@ -14,6 +16,8 @@ export type ProcessResult = Readonly<{
   signal: NodeJS.Signals | null;
   stdout: string;
   stderr: string;
+  stdoutBytes: Uint8Array;
+  stderrBytes: Uint8Array;
   durationMs: number;
 }>;
 
@@ -51,6 +55,18 @@ function assertRequest(request: ProcessRequest): void {
   if (request.arguments.some((argument) => argument.includes("\0"))) {
     throw new TypeError("Process arguments cannot contain null bytes.");
   }
+  if (request.stdin) {
+    if (
+      !(request.stdin instanceof Uint8Array) ||
+      !Number.isSafeInteger(request.maximumInputBytes) ||
+      (request.maximumInputBytes ?? 0) < 1 ||
+      request.stdin.byteLength > (request.maximumInputBytes ?? 0)
+    ) {
+      throw new RangeError("Process input exceeds its declared byte limit.");
+    }
+  } else if (request.maximumInputBytes !== undefined) {
+    throw new TypeError("A process input limit requires stdin bytes.");
+  }
 }
 
 export class NodeProcessExecutor implements ProcessExecutor {
@@ -74,7 +90,7 @@ export class NodeProcessExecutor implements ProcessExecutor {
       env: this.environment,
       shell: false,
       windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
@@ -100,6 +116,8 @@ export class NodeProcessExecutor implements ProcessExecutor {
     };
     child.stdout.on("data", collect(stdout));
     child.stderr.on("data", collect(stderr));
+    child.stdin.on("error", () => undefined);
+    child.stdin.end(request.stdin);
 
     const onAbort = () =>
       stop(
@@ -134,10 +152,14 @@ export class NodeProcessExecutor implements ProcessExecutor {
         );
       });
       if (terminalError) throw terminalError;
+      const stdoutBuffer = Buffer.concat(stdout);
+      const stderrBuffer = Buffer.concat(stderr);
       return {
         ...outcome,
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8"),
+        stdout: stdoutBuffer.toString("utf8"),
+        stderr: stderrBuffer.toString("utf8"),
+        stdoutBytes: Uint8Array.from(stdoutBuffer),
+        stderrBytes: Uint8Array.from(stderrBuffer),
         durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
       };
     } finally {

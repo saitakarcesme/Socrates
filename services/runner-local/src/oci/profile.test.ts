@@ -30,10 +30,16 @@ describe("sandbox create profile", () => {
     expect(arguments_).toContain("none");
     expect(arguments_).toContain(fixtureImage.reference);
     expect(arguments_.slice(-3)).toEqual([
-      "/usr/local/bin/node",
+      fixtureImage.reference,
       "-e",
       "process.stdout.write('ok')",
     ]);
+    expect(
+      arguments_.slice(
+        arguments_.indexOf("--entrypoint"),
+        arguments_.indexOf("--entrypoint") + 2,
+      ),
+    ).toEqual(["--entrypoint", "/usr/local/bin/node"]);
     expect(arguments_).not.toContain("/bin/sh");
   });
 

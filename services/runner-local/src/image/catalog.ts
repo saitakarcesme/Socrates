@@ -1,8 +1,12 @@
 import { runtimeAbi } from "@socrates/runtime-protocol";
 
-import { issueAdmittedSandboxImage } from "./capability";
+import {
+  issueAdmittedSandboxImage,
+  issueInspectedSandboxImage,
+} from "./capability";
 
 import type { AdmittedSandboxImage } from "./capability";
+import type { InspectedSandboxImage } from "./capability";
 import type { SandboxImageInspection } from "./inspection";
 import type { SandboxCommand } from "../oci/profile";
 
@@ -30,11 +34,8 @@ export interface SandboxImageInspector {
 
 export interface SandboxImageHandshakeVerifier {
   verify(input: {
-    reference: string;
-    manifestDigest: string;
-    architecture: "amd64" | "arm64";
+    image: InspectedSandboxImage;
     runtime: SandboxCommand;
-    profileProbe: SandboxCommand;
   }): Promise<Readonly<{ abi: string; buildDigest: string }>>;
 }
 
@@ -267,14 +268,16 @@ export class SandboxImageCatalog {
     let handshake: Readonly<{ abi: string; buildDigest: string }>;
     try {
       handshake = await this.handshake.verify({
-        reference: image.reference,
-        manifestDigest: image.manifestDigest,
-        architecture: image.architecture,
+        image: issueInspectedSandboxImage({
+          reference: image.reference,
+          digest: image.manifestDigest,
+          architecture: image.architecture,
+          profileProbe: image.profileProbe,
+        }),
         runtime: Object.freeze({
           executable: image.runtime.executable,
           arguments: Object.freeze([...image.runtime.arguments, "--handshake"]),
         }),
-        profileProbe: image.profileProbe,
       });
     } catch (cause) {
       throw new SandboxImageCatalogError(

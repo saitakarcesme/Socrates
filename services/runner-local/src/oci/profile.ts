@@ -1,11 +1,11 @@
-import { assertAdmittedImage } from "../image/capability";
+import { assertSandboxImageAuthority } from "../image/capability";
 import type { SandboxOwnership } from "./identity";
 import {
   resolveMaterializedSourceSnapshot,
   type MaterializedSourceSnapshot,
 } from "../source/capability";
 import type { SandboxAttemptIdentity } from "./identity";
-import type { AdmittedSandboxImage } from "../image/capability";
+import type { SandboxImageAuthority } from "../image/capability";
 
 export type { AdmittedSandboxImage } from "../image/capability";
 
@@ -72,14 +72,15 @@ function commandArguments(command: SandboxCommand): readonly string[] {
 
 export function buildCreateArguments(input: {
   ownership: SandboxOwnership;
-  image: AdmittedSandboxImage;
+  image: SandboxImageAuthority;
   profile: SandboxResourceProfile;
   command: SandboxCommand;
   source?: MaterializedSourceSnapshot;
   deploymentId?: string;
   identity?: SandboxAttemptIdentity;
+  interactive?: boolean;
 }): readonly string[] {
-  assertAdmittedImage(input.image);
+  assertSandboxImageAuthority(input.image);
   validateSandboxProfile(input.profile);
   const labels = Object.entries(input.ownership.labels)
     .sort(([left], [right]) => left.localeCompare(right))
@@ -103,6 +104,7 @@ export function buildCreateArguments(input: {
     "never",
     "--log-driver",
     "none",
+    ...(input.interactive ? ["--interactive"] : []),
     "--read-only",
     ...sourceArguments,
     "--tmpfs",
@@ -131,8 +133,10 @@ export function buildCreateArguments(input: {
     "socrates-sandbox",
     "--env",
     "SOCRATES_SANDBOX=1",
+    "--entrypoint",
+    input.command.executable,
     input.image.reference,
-    ...commandArguments(input.command),
+    ...commandArguments(input.command).slice(1),
   ];
 }
 

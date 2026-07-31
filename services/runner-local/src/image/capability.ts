@@ -8,7 +8,15 @@ export type AdmittedSandboxImage = Readonly<{
   profileProbe: SandboxCommand;
 }>;
 
+export type InspectedSandboxImage = Readonly<{
+  reference: string;
+  digest: string;
+  architecture: "amd64" | "arm64";
+  profileProbe: SandboxCommand;
+}>;
+
 const admittedImages = new WeakSet<object>();
+const inspectedImages = new WeakSet<object>();
 const digestPattern = /^sha256:[a-f0-9]{64}$/u;
 const imageReferencePattern =
   /^[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[a-f0-9]{64}$/u;
@@ -67,4 +75,51 @@ export function issueAdmittedSandboxImage(input: {
   admittedImages.add(image);
   assertAdmittedImage(image);
   return image;
+}
+
+export function assertInspectedImage(
+  image: InspectedSandboxImage,
+): asserts image is InspectedSandboxImage {
+  if (
+    !inspectedImages.has(image) ||
+    !digestPattern.test(image.digest) ||
+    !imageReferencePattern.test(image.reference) ||
+    !image.reference.endsWith(`@${image.digest}`)
+  ) {
+    throw new TypeError("Image was not issued from verified local inspection.");
+  }
+  assertCommand(image.profileProbe);
+}
+
+export function issueInspectedSandboxImage(input: {
+  reference: string;
+  digest: string;
+  architecture: "amd64" | "arm64";
+  profileProbe: SandboxCommand;
+}): InspectedSandboxImage {
+  const image: InspectedSandboxImage = Object.freeze({
+    reference: input.reference,
+    digest: input.digest,
+    architecture: input.architecture,
+    profileProbe: Object.freeze({
+      executable: input.profileProbe.executable,
+      arguments: Object.freeze([...input.profileProbe.arguments]),
+    }),
+  });
+  inspectedImages.add(image);
+  assertInspectedImage(image);
+  return image;
+}
+
+export type SandboxImageAuthority =
+  AdmittedSandboxImage | InspectedSandboxImage;
+
+export function assertSandboxImageAuthority(
+  image: SandboxImageAuthority,
+): asserts image is SandboxImageAuthority {
+  if (admittedImages.has(image)) {
+    assertAdmittedImage(image as AdmittedSandboxImage);
+    return;
+  }
+  assertInspectedImage(image as InspectedSandboxImage);
 }

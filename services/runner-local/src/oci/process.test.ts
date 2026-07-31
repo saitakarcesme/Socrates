@@ -29,4 +29,35 @@ describe("node process boundary", () => {
       code: "output_limit",
     });
   });
+
+  it("writes bounded binary stdin without a shell or text conversion", async () => {
+    const input = Uint8Array.from([0, 1, 2, 255]);
+    const result = await new NodeProcessExecutor({ environment: {} }).run({
+      executable: process.execPath,
+      arguments: [
+        "-e",
+        "const chunks=[];process.stdin.on('data',c=>chunks.push(c));process.stdin.on('end',()=>process.stdout.write(Buffer.concat(chunks)))",
+      ],
+      timeoutMs: 5_000,
+      maximumOutputBytes: 1_024,
+      stdin: input,
+      maximumInputBytes: input.byteLength,
+    });
+
+    expect(result.stdoutBytes).toEqual(input);
+    expect(result.stderrBytes).toHaveLength(0);
+  });
+
+  it("rejects stdin that exceeds its explicit input bound", async () => {
+    await expect(
+      new NodeProcessExecutor({ environment: {} }).run({
+        executable: process.execPath,
+        arguments: ["-e", "process.exit(0)"],
+        timeoutMs: 5_000,
+        maximumOutputBytes: 1_024,
+        stdin: Uint8Array.from([1, 2]),
+        maximumInputBytes: 1,
+      }),
+    ).rejects.toThrow(/input exceeds/u);
+  });
 });

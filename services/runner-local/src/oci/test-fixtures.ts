@@ -40,11 +40,14 @@ export function successfulResult(
   stdout = "",
   overrides: Partial<ProcessResult> = {},
 ): ProcessResult {
+  const stdoutBytes = Uint8Array.from(Buffer.from(stdout, "utf8"));
   return {
     exitCode: 0,
     signal: null,
     stdout,
     stderr: "",
+    stdoutBytes,
+    stderrBytes: new Uint8Array(),
     durationMs: 1,
     ...overrides,
   };

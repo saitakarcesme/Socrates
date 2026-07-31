@@ -4,6 +4,7 @@ export {
   RuntimeMessageDecoder,
   RuntimeProtocolError,
 } from "./framing";
+export { runtimeProtocolLimits } from "./limits";
 export {
   runtimeAbi,
   runtimeFrameSchema,

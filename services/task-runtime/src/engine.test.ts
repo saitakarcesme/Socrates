@@ -214,6 +214,34 @@ describe("task runtime engine", () => {
     ).toEqual(measurement);
   });
 
+  it("coalesces fragmented child writes before framing", async () => {
+    const fragments = Array.from({ length: 1_000 }, () => ({
+      stream: "stdout" as const,
+      bytes: Uint8Array.of(120),
+    }));
+    const processExecutor = new FakeProcessExecutor([
+      { output: fragments },
+      { output: [{ stream: "stdout", bytes: Buffer.from("1") }] },
+    ]);
+    const sink = frameSink();
+
+    await new TaskRuntimeEngine(new FakeWorkspace(), processExecutor, {
+      now: () => 0,
+    }).execute(request(), sink);
+
+    expectValidSequence(sink.frames, 1);
+    const actionOutput = sink.frames.filter(
+      (frame) => frame.type === "command.output" && frame.phase === "action",
+    );
+    expect(actionOutput).toHaveLength(1);
+    expect(
+      Buffer.from(
+        actionOutput[0]?.type === "command.output" ? actionOutput[0].bytes : "",
+        "base64",
+      ),
+    ).toEqual(Buffer.alloc(1_000, 120));
+  });
+
   it("stops before later actions and measurement after an action failure", async () => {
     const processExecutor = new FakeProcessExecutor([
       { result: { exitCode: 7 } },

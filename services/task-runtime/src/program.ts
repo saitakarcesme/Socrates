@@ -2,6 +2,7 @@ import {
   RuntimeMessageDecoder,
   runtimeAbi,
   runtimeFrameSchema,
+  runtimeProtocolLimits,
   runtimeRequestSchema,
   type RuntimeFrame,
   type RuntimeRequest,
@@ -13,8 +14,9 @@ import type {
   TaskRuntimeEngine,
 } from "./engine";
 
-export const maximumRuntimeRequestBytes = 1 * 1_024 * 1_024;
-export const maximumRuntimeFrameBytes = 96 * 1_024;
+export const maximumRuntimeRequestBytes =
+  runtimeProtocolLimits.maximumRequestBytes;
+export const maximumRuntimeFrameBytes = runtimeProtocolLimits.maximumFrameBytes;
 
 export class TaskRuntimeProgram {
   readonly #engine: Pick<TaskRuntimeEngine, "execute">;

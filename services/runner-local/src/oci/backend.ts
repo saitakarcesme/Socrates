@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { assertAdmittedImage, assertInspectedImage } from "../image/capability";
 import {
   createSandboxOwnership,
   ownershipFilterArguments,
@@ -20,6 +21,10 @@ import type {
   SandboxCommand,
   SandboxResourceProfile,
 } from "./profile";
+import type {
+  InspectedSandboxImage,
+  SandboxImageAuthority,
+} from "../image/capability";
 import type { ReadinessVerifier, SandboxReadiness } from "./readiness";
 
 type JsonObject = Record<string, unknown>;
@@ -34,13 +39,38 @@ export type SandboxExecution = Readonly<{
     expectedDigest: string;
   }>;
   signal?: AbortSignal;
+  stdin?: Uint8Array;
+  maximumInputBytes?: number;
 }>;
+
+export type SandboxImageProbeExecution = Readonly<{
+  identity: SandboxAttemptIdentity;
+  image: InspectedSandboxImage;
+  profile: SandboxResourceProfile;
+  command: SandboxCommand;
+  signal?: AbortSignal;
+}>;
+
+export type SandboxRuntimeExecution = Omit<SandboxExecution, "command">;
 
 export type SandboxExecutionResult = Readonly<{
   exitCode: number;
   stdout: string;
   stderr: string;
+  stdoutBytes: Uint8Array;
+  stderrBytes: Uint8Array;
   durationMs: number;
+}>;
+
+type PreparedSandboxExecution = Readonly<{
+  identity: SandboxAttemptIdentity;
+  image: SandboxImageAuthority;
+  profile: SandboxResourceProfile;
+  command: SandboxCommand;
+  source?: SandboxExecution["source"];
+  signal?: AbortSignal;
+  stdin?: Uint8Array;
+  maximumInputBytes?: number;
 }>;
 
 export type NerdctlSandboxBackendOptions = Readonly<{
@@ -99,7 +129,7 @@ function parseObject(result: ProcessResult, description: string): JsonObject {
 function inspectOwnership(
   inspection: JsonObject,
   ownership: SandboxOwnership,
-  image: AdmittedSandboxImage,
+  image: SandboxImageAuthority,
 ): void {
   const config = object(inspection["Config"]);
   const labels = object(config["Labels"]);
@@ -209,6 +239,8 @@ export class NerdctlSandboxBackend {
     options: {
       timeoutMs?: number;
       maximumOutputBytes?: number;
+      stdin?: Uint8Array;
+      maximumInputBytes?: number;
       signal?: AbortSignal;
     } = {},
   ): Promise<ProcessResult> {
@@ -218,6 +250,8 @@ export class NerdctlSandboxBackend {
       timeoutMs: options.timeoutMs ?? this.controlTimeoutMs,
       maximumOutputBytes:
         options.maximumOutputBytes ?? this.maximumControlOutputBytes,
+      stdin: options.stdin,
+      maximumInputBytes: options.maximumInputBytes,
       signal: options.signal,
     });
   }
@@ -238,6 +272,27 @@ export class NerdctlSandboxBackend {
   }
 
   async execute(input: SandboxExecution): Promise<SandboxExecutionResult> {
+    assertAdmittedImage(input.image);
+    return this.executeAuthorized(input);
+  }
+
+  async executeRuntime(
+    input: SandboxRuntimeExecution,
+  ): Promise<SandboxExecutionResult> {
+    assertAdmittedImage(input.image);
+    return this.executeAuthorized({ ...input, command: input.image.runtime });
+  }
+
+  async executeInspectedImage(
+    input: SandboxImageProbeExecution,
+  ): Promise<SandboxExecutionResult> {
+    assertInspectedImage(input.image);
+    return this.executeAuthorized(input);
+  }
+
+  private async executeAuthorized(
+    input: PreparedSandboxExecution,
+  ): Promise<SandboxExecutionResult> {
     if (input.identity.runnerId !== this.options.runnerId) {
       throw new SandboxBackendError(
         "identity_mismatch",
@@ -269,14 +324,14 @@ export class NerdctlSandboxBackend {
   }
 
   private profileAttestationKey(
-    image: AdmittedSandboxImage,
+    image: SandboxImageAuthority,
     profile: SandboxResourceProfile,
   ): string {
     return `${image.digest}:${JSON.stringify(profile)}`;
   }
 
   private async ensureProfileAttested(
-    image: AdmittedSandboxImage,
+    image: SandboxImageAuthority,
     profile: SandboxResourceProfile,
   ): Promise<void> {
     const attestationKey = this.profileAttestationKey(image, profile);
@@ -324,7 +379,7 @@ export class NerdctlSandboxBackend {
   }
 
   private async executePrepared(
-    input: SandboxExecution,
+    input: PreparedSandboxExecution,
   ): Promise<SandboxExecutionResult> {
     const key = sandboxAttemptKey(input.identity);
     if (this.active.has(key)) {
@@ -355,6 +410,7 @@ export class NerdctlSandboxBackend {
           source: input.source?.snapshot,
           deploymentId: this.options.deploymentId,
           identity: input.identity,
+          interactive: input.stdin !== undefined,
         }),
         "nerdctl create",
       );
@@ -384,6 +440,8 @@ export class NerdctlSandboxBackend {
         {
           timeoutMs: this.executionTimeoutMs,
           maximumOutputBytes: this.maximumExecutionOutputBytes,
+          stdin: input.stdin,
+          maximumInputBytes: input.maximumInputBytes,
           signal: input.signal,
         },
       );
@@ -397,6 +455,8 @@ export class NerdctlSandboxBackend {
         exitCode: result.exitCode,
         stdout: result.stdout,
         stderr: result.stderr,
+        stdoutBytes: result.stdoutBytes,
+        stderrBytes: result.stderrBytes,
         durationMs: result.durationMs,
       };
     } finally {
