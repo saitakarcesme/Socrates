@@ -2520,11 +2520,15 @@ Preparation is a one-shot process-local operation. Concurrent and later calls
 share the first preparation promise; a failure is retained rather than causing
 an implicit retry with potentially changed local state. The first caller's
 cancellation signal is authoritative. The signal is checked before I/O and at
-every awaited boundary. Cooperating ports receive that same signal, but a
-later caller cannot replace it. If cancellation or validation fails after a
-source capability has been issued, the coordinator releases that exact source
-before rejecting. Cleanup failure is surfaced as cleanup uncertainty and is
-never converted into successful preparation.
+every awaited boundary. Attempt-scoped source resolution and materialization
+receive that same signal, but a later caller cannot replace it. Shared image
+admission deliberately does not receive an attempt signal: its in-flight
+promise is cached by image identity, so one attempt must not cancel admission
+needed by another. Cancellation is checked immediately before and after that
+shared operation. If cancellation or validation fails after a source
+capability has been issued, the coordinator releases that exact source before
+rejecting. Cleanup failure is surfaced as cleanup uncertainty and is never
+converted into successful preparation.
 
 The prepared result is immutable and owns exactly one materialized source.
 Release is explicit, idempotent, and concurrency-deduplicated; release failure

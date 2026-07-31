@@ -37,9 +37,12 @@ the OCI backend, or global resource recovery.
 8. Prove the source capability is live and matches the attempt key and digest.
 9. Check cancellation once more before publishing an immutable prepared result.
 
-The same authoritative signal is passed to cooperating I/O ports and checked
-after every await. Image admission precedes per-attempt source materialization
-because catalog admission is shared and owns no attempt-scoped cleanup.
+The same authoritative signal is passed to attempt-scoped source I/O ports and
+checked after every await. It is not passed into image admission because the
+catalog shares an in-flight admission promise by image identity; one attempt
+must not cancel another attempt's shared admission. Image admission is instead
+guarded by immediate pre/post cancellation checks and precedes per-attempt
+source materialization because it owns no attempt-scoped cleanup.
 
 ## Ownership and restart semantics
 
@@ -59,6 +62,7 @@ because catalog admission is shared and owns no attempt-scoped cleanup.
 - malformed execution or lease/task identity drift before I/O;
 - projection rejection before I/O;
 - cancellation before the first port and after every awaited boundary;
+- one cancelled attempt cannot abort shared image admission for another;
 - missing source snapshot;
 - forged artifact capability or source digest drift;
 - artifact resolver rejection;
