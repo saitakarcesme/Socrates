@@ -1169,6 +1169,48 @@ and quota exhaustion fail closed. Retention is recorded as an explicit class
 on metadata; deletion policy remains out of scope until a durable reconciler
 exists.
 
+### ADR-041: OCI engine selection is an enforcement proof, not a CLI choice
+
+The Phase 2.4 spike compares rootless Docker Engine, rootless Podman, and
+rootless containerd through nerdctl. Similar command-line flags are not
+equivalent guarantees. A candidate passes only when a Linux-native host probe
+observes cgroup v2 with delegated CPU, memory, and PID controllers, seccomp, a
+host LSM (AppArmor or SELinux), user-namespace isolation, and an engine that
+reports the requested limits as active. Missing or silently ignored primitives
+are failures, not warnings.
+
+Docker Desktop on Windows or macOS may run the development spike, but it cannot
+select the production backend. Its Linux VM, host-filesystem sharing, licensing
+mode, and resource envelope differ from a native Linux runner. Measurements
+from Desktop are recorded with their backend and host facts and remain
+development evidence only. The reviewed selection requires a repeat run on the
+documented native Linux reference host.
+
+Every candidate receives the same default-deny profile: non-root process,
+read-only root filesystem, a size-bounded tmpfs at `/workspace`, no host PID,
+IPC, network, user, or cgroup namespace sharing, no devices, all capabilities
+dropped, no-new-privileges, the engine's default seccomp profile, no host
+environment inheritance, no Docker/containerd/Podman socket, and no bind mount
+outside a runner-created source snapshot. Network mode `disabled` creates an
+unconfigured network namespace rather than relying on application behavior.
+
+The spike proves enforcement from inside and outside the sandbox. It attempts
+host-path and runtime-socket access, privilege gain, fork pressure, memory
+pressure, workspace disk fill, DNS and direct-IP egress, environment-secret
+discovery, and escape-relevant syscalls. Cancellation sends one bounded
+graceful stop followed by a hard kill, then verifies that the container,
+processes, mounts, networks, and temporary workspace are absent. Every object
+uses a unique Socrates label so a crash-recovery sweep can enumerate only its
+own orphans.
+
+Cold-start latency is measured separately for cached-image create/start and
+end-to-end run/remove paths after warm-up. Performance can choose between
+candidates only after every security and cleanup gate passes. The spike harness
+lives outside `apps`, `packages`, and `services`, is never imported by a
+production package, and requires an explicit engine target. It cannot be
+promoted into Slice 2.5 by copying commands; the guarded adapter must encode
+typed arguments, startup self-checks, and cancellation ownership anew.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

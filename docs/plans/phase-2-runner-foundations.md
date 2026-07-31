@@ -347,6 +347,12 @@ Exit: untrusted outputs cannot escape their storage or rendering boundaries.
 
 ### Slice 2.4 — OCI engine spike
 
+Status: In progress.
+
+Architecture decision: ADR-041.
+
+Detailed plan: `docs/plans/oci-engine-spike.md`.
+
 - compare supported OCI backends against the sandbox policy
 - record host-platform requirements and measured cold-start cost
 - prove hard cancellation and orphan cleanup
