@@ -1,6 +1,6 @@
 # Slice 2.5 guarded OCI adapter plan
 
-Status: Approved for implementation
+Status: Complete
 
 Date: 2026-07-31
 
@@ -173,3 +173,17 @@ Slice 2.5 is complete only when:
 - ordinary tests remain engine-independent;
 - a clean selected-host native run produces reviewable evidence;
 - Architecture.md and this plan match the shipped boundary.
+
+## Completion record
+
+Completed on 2026-07-31. GitHub Actions run `30604679736` passed the selected
+Ubuntu/rootless-containerd host gates, deep AppArmor/user-namespace/live-
+capability attestation, create-before-start native inspection, bounded
+execution, exact-fence cancellation, and cleanup. The guarded evidence artifact
+was published by the workflow and its immutable JSON is committed at
+`services/runner-local/evidence/native/30604679736.json`.
+
+The shipped package intentionally does not implement the higher `Runner`
+lifecycle adapter. The source snapshot and image admission capabilities remain
+real prerequisites assigned to Slices 2.6 and 2.7, after which Slice 2.8 can
+enable task event execution without weakening this boundary.

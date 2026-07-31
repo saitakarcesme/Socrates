@@ -1420,6 +1420,23 @@ engine. An authenticated runner transport, lease polling, heartbeat loop,
 durable event spool, source materializer, image catalog, task-runtime ABI,
 artifact upload, and autonomous research loop remain later slices.
 
+#### ADR-042 validation amendment: guarded backend admitted
+
+GitHub Actions run `30604679736` on the provisioned Ubuntu 24.04 reference-host
+class admits the Slice 2.5 backend. Rootless nerdctl/containerd v2.3.1 passed
+startup readiness, the in-sandbox AppArmor/UID-map/live-capability probe,
+create-before-start native inspection, bounded execution, exact-fence forced
+cancellation, and post-run cleanup. The successful sandbox completed in
+`238.05 ms`; cancellation and removal completed in `1223.42 ms`. These timings
+are validation context, not capacity commitments.
+
+The immutable result is stored at
+`services/runner-local/evidence/native/30604679736.json`. This amendment admits
+the low-level OCI backend only. `LocalRunnerNotEnabledError` remains correct
+until the source materializer, image catalog/task-runtime ABI, lifecycle event
+adapter, durable spool, and authenticated outbound transport land in their
+planned slices.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
