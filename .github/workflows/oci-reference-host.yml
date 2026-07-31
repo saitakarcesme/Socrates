@@ -14,6 +14,11 @@ on:
         required: true
         default: "30"
         type: string
+      run_comparison:
+        description: Re-run the three-engine comparison before adapter validation
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -151,6 +156,7 @@ jobs:
           nerdctl pull "$IMAGE"
 
       - name: Run native comparison
+        if: ${{ inputs.run_comparison }}
         shell: bash
         run: |
           set -euo pipefail
