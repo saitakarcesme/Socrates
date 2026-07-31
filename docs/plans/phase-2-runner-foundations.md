@@ -844,7 +844,7 @@ Linux native work-journal v5, Chromium, and production builds.
 
 ### Slice 2.25 — closed local failure evidence policy
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-062.
 
@@ -861,6 +861,11 @@ Detailed plan: `docs/plans/slice-2.25-local-failure-evidence.md`.
 
 Exit: exhaustive table tests prove every supported local failure produces one
 stable valid draft and every ambiguous post-evidence failure produces none.
+
+Evidence: implementation commit `2527aad`; 28 focused policy tests and 343
+runner-local tests passed locally with all repository quality gates. GitHub
+Actions run `30666098009` passed every integration suite, both Linux native
+durability probes, Chromium, and production builds.
 
 ## Acceptance gates
 

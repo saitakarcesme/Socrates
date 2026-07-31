@@ -1,6 +1,6 @@
 # Slice 2.25 closed local failure evidence policy
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -77,3 +77,15 @@ translated into a competing terminal event.
 5. Mapping is deterministic, frozen, and dependency-free.
 6. Session composition, persistence, execution, and runner enablement remain
    disabled.
+
+## Validation
+
+Implementation commit `2527aad` passed local formatting, TypeScript, ESLint,
+Phase 1/2 dependency-boundary audits, 343 runner-local tests, all workspace
+tests, production builds, and the low-severity dependency audit. The 28 focused
+policy tests covered every closed failure code and budget dimension,
+authenticated and malformed cancellation, arbitrary exception-text redaction,
+mutation resistance, output-contract validation, and all no-evidence
+boundaries. GitHub Actions run `30666098009` passed every PostgreSQL,
+authenticated API, and runner integration, both Linux native durability
+probes, the Chromium product journey, and all production builds.

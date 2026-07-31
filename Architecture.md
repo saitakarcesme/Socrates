@@ -2847,6 +2847,18 @@ draft through the existing one-segment spool, drains acknowledgements, and only
 then invokes work completion. This slice does not compose or enable that
 session.
 
+Validation amendment, 2026-07-31: implementation commit `2527aad` passed local
+formatting, TypeScript, ESLint, Phase 1/2 dependency-boundary audits, 343
+runner-local tests, all workspace tests, production builds, and the
+low-severity dependency audit. Its 28 focused policy tests exhaustively proved
+the closed failure and budget mappings, authenticated cancellation authority,
+redaction under arbitrary exception text, immutable outputs, and explicit
+no-evidence results for ambiguous boundaries. GitHub Actions run `30666098009`
+passed every PostgreSQL, authenticated API, and runner integration, both Linux
+native durability probes, the Chromium product journey, and all production
+builds. This admits ADR-062 and closes Slice 2.25; session composition,
+execution, persistence, and production runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
