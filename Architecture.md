@@ -2337,6 +2337,48 @@ evidence artifacts were uploaded. This admits ADR-052 and closes Slice 2.15;
 execution, lease supervision, cancellation monitoring, and cleanup remain
 disabled.
 
+### ADR-053: Cancellation policy is durable before a heartbeat can command it
+
+Slice 2.16 turns the existing heartbeat `cancel` hint into a complete,
+identity-bound command without inventing policy in the runner. The current
+`RunnerCancellationV1` requires `requestedAt`, `gracePeriodMs`, and `reason`,
+while the control plane persists and returns none of them. Mapping every hint
+to an arbitrary local default would make replay non-deterministic and erase
+whether cancellation came from an operator, budget, policy, or shutdown
+decision.
+
+Cancellation requests therefore freeze a closed reason and bounded grace
+period in `runner_task_cancellations`; PostgreSQL supplies `requested_at`.
+Schema compatibility advances to 9. Existing rows backfill to the historical
+semantics `reason=operator` and a conservative 5-second grace before new
+`NOT NULL` checks are applied. The per-task immutable cancellation row remains
+the source of replay truth; later duplicate requests return its original
+policy rather than replacing it.
+
+Heartbeat response v1 becomes a strict discriminated union. `continue`
+contains the renewed database-clocked lease only. `cancel` additionally
+contains the persisted cancellation policy with the database timestamp. The
+scheduler renews the exact active fence and reads task status plus cancellation
+policy in the same transaction. A `cancellation_requested` task without one
+complete cancellation row fails closed instead of emitting a partial command.
+Runner-authenticated request bodies still cannot choose cancellation policy.
+
+A one-step `LeaseSupervisor` validates one frozen execution, sends an exact
+task/attempt/fence heartbeat with a trusted bounded lease duration, and returns
+one closed outcome. `continue` exposes the new lease timestamp. `cancel`
+constructs `RunnerCancellationV1` solely from the execution identity and
+persisted server policy, validates it, invokes the injected cancellation port,
+then returns the applied command. An authenticated conflict is reported as
+`stale`; abort, timeout, network, authentication, server, size, and protocol
+failures remain errors. The supervisor performs no hidden retry.
+
+The supervisor intentionally owns no clock or timer. It does not decide when
+to heartbeat, calculate a safety margin, mutate the immutable journal claim,
+claim new work, execute a sandbox, or emit `task.cancelled`. A later session
+loop must treat `stale` as loss of authority and will require its own fail-stop
+design before execution can be enabled. `LocalRunnerNotEnabledError` remains
+unchanged.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

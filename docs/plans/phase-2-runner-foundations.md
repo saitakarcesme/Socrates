@@ -621,6 +621,25 @@ Evidence: implementation commit `a48a61f`; GitHub Actions run `30654149358`
 passed 204 runner-local tests, all database/API integrations, native spool and
 v3 work-journal completion durability, browser tests, and production builds.
 
+### Slice 2.16 — durable cancellation policy and one-step lease supervision
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-053.
+
+Detailed plan: `docs/plans/slice-2.16-lease-supervision.md`.
+
+- persist immutable cancellation reason, grace period, and database timestamp;
+- return a complete cancel command only from an exact-fence heartbeat;
+- apply that command through a one-step runner cancellation port;
+- surface stale authority separately from transient transport failure;
+- keep clocks, timers, loops, execution, and terminal event generation out of
+  scope.
+
+Exit: migration, PostgreSQL, transport, and runner tests prove cancel policy is
+stable across replay, cannot be runner-selected, and is applied only to the
+exact execution identity returned by the durable claim.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
