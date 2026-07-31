@@ -1968,6 +1968,22 @@ Slice 2.10. Enabling task discovery, the lease coordinator, OCI execution,
 restart reconciliation, and automatic cancellation is a later architecture
 decision with native end-to-end evidence.
 
+Validation amendment, 2026-07-31: GitHub Actions run `30647374933` passed the
+complete Ubuntu quality pipeline for commit `b20a657`. Schema compatibility 6
+and the revocable credential migration applied successfully. All six database
+integration files, all nine API integration files, all twenty-two runner-local
+test files, the native spool durability probe, the Chromium product journey,
+and every production build passed. The authenticated PostgreSQL journey proved
+missing-credential rejection, principal-bound exact claim, database-clocked
+heartbeat, durable cancellation observation, terminal event acknowledgement,
+and exact terminal replay. Runner-local passed 159 local tests and all 162
+tests in CI; its filesystem-backed sender tests prove ambiguous network failure
+preserves byte-identical pending evidence and acknowledgement mismatch cannot
+advance the spool. Local formatting, typecheck, lint, unit/adversarial tests,
+Phase 1 and Phase 2 dependency audits, production builds, and the low-severity
+dependency audit passed with no known vulnerabilities. This admits ADR-047 and
+closes Slice 2.10. `LocalRunnerNotEnabledError` remains unchanged.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

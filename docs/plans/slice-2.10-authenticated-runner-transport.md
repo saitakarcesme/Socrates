@@ -1,6 +1,6 @@
 # Slice 2.10 authenticated runner transport plan
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -200,3 +200,22 @@ attempt identity for bounded backoff.
 8. `LocalRunnerNotEnabledError` remains the production entry-point behavior.
 9. Full repository, real PostgreSQL, and CI gates pass before the slice becomes
    Complete.
+
+## Validation
+
+Completed on 2026-07-31.
+
+- local formatting, typecheck, lint, unit/adversarial tests, Phase 1 and Phase 2
+  dependency audits, production builds, and low-severity dependency audit
+  passed with no known vulnerabilities;
+- contracts passed 39 tests, runner authentication passed 4 tests, API passed
+  55 local tests, and runner-local passed 159 local tests;
+- GitHub Actions run `30647374933` applied schema compatibility 6 and passed all
+  database, API, runner, native spool, browser, and build gates;
+- the real PostgreSQL transport journey passed missing-auth rejection, exact
+  claim, continue/cancel heartbeat directives, terminal acknowledgement, and
+  exact replay;
+- the real filesystem sender proof preserved pending evidence across ambiguous
+  network failure and rejected mismatched acknowledgement before advancement;
+- task delivery, retry scheduling, the lease coordinator, OCI execution, and
+  production runner enablement remain explicitly out of scope.

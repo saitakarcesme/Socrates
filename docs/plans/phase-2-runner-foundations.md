@@ -479,7 +479,7 @@ runner, browser, build, and native Linux spool gates. Immutable evidence is at
 
 ### Slice 2.10 — authenticated runner transport
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-047.
 
@@ -495,6 +495,11 @@ Detailed plan: `docs/plans/slice-2.10-authenticated-runner-transport.md`.
 
 Exit: authenticated transport tests prove that caller IDs cannot cross the
 principal boundary and that ambiguous delivery never advances durable evidence.
+
+Validation: GitHub Actions run `30647374933` passed schema compatibility 6,
+real PostgreSQL credential/claim/heartbeat/cancellation/event replay, all
+runner-local transport and spool tests, the browser journey, and production
+builds. `LocalRunnerNotEnabledError` remains the production entry point.
 
 ## Acceptance gates
 
