@@ -2548,6 +2548,19 @@ re-materializes from the same frozen identities. Per-attempt preparation must
 not call global recovery because doing so could delete another live session's
 owned resources.
 
+Validation amendment, 2026-07-31: implementation commit `2645428` passed
+local formatting, TypeScript, ESLint, 248 runner-local tests, all workspace
+tests, Phase 1/2 dependency-boundary audits, and production builds. GitHub
+Actions run `30658886159` passed every PostgreSQL, authenticated API, and
+runner integration, both Linux native durability probes, the Chromium product
+journey, and all builds. Deterministic preparation tests proved pre-I/O
+projection and cancellation, exact artifact/image/source authority,
+process-local signal ownership, shared-image cancellation isolation,
+concurrent one-shot replay, post-materialization compensation, explicit
+cleanup uncertainty, and idempotent release. This admits ADR-056 and closes
+Slice 2.19; startup recovery orchestration, runtime execution, lifecycle event
+publication, work completion, and production enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

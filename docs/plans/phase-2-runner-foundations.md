@@ -693,7 +693,7 @@ durability probes, Chromium, and production builds.
 
 ### Slice 2.19 — owned attempt preparation
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-056.
 
@@ -712,6 +712,10 @@ Detailed plan: `docs/plans/slice-2.19-attempt-preparation.md`.
 Exit: adversarial tests prove no identity, image, source, cancellation, or
 cleanup drift can escape the coordinator and restart reconstruction relies
 only on durable execution identity, never serialized local capabilities.
+
+Evidence: implementation commit `2645428`; GitHub Actions run `30658886159`
+passed 248 runner-local tests, all PostgreSQL/API/runner integrations, native
+durability probes, Chromium, and production builds.
 
 ## Acceptance gates
 
