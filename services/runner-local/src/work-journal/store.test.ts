@@ -220,18 +220,25 @@ describe("LocalWorkJournal", () => {
   it("keeps the exact attempt pending when transport is ambiguous", async () => {
     const rootPath = root();
     const journal = await open(rootPath);
-    const claimTask = vi.fn().mockRejectedValue(new Error("response lost"));
+    const claimTaskDelivery = vi
+      .fn()
+      .mockRejectedValue(new Error("response lost"));
     const reconciler = new ExactClaimReconciler({
       journal,
-      client: { claimTask } as unknown as RunnerControlPlaneClient,
+      client: { claimTaskDelivery } as unknown as RunnerControlPlaneClient,
       leaseDurationMs: 60_000,
     });
     await expect(reconciler.reconcile(delivery)).rejects.toThrow(
       "response lost",
     );
-    expect(claimTask).toHaveBeenCalledWith(
-      delivery.taskId,
-      { version: "1", attemptId, leaseDurationMs: 60_000 },
+    expect(claimTaskDelivery).toHaveBeenCalledWith(
+      delivery.deliveryId,
+      {
+        version: "1",
+        taskId: delivery.taskId,
+        attemptId,
+        leaseDurationMs: 60_000,
+      },
       undefined,
     );
     expect(
@@ -242,10 +249,10 @@ describe("LocalWorkJournal", () => {
   it("serializes concurrent reconciliation and reuses stored evidence", async () => {
     const rootPath = root();
     const journal = await open(rootPath);
-    const claimTask = vi.fn().mockResolvedValue(execution);
+    const claimTaskDelivery = vi.fn().mockResolvedValue(execution);
     const reconciler = new ExactClaimReconciler({
       journal,
-      client: { claimTask } as unknown as RunnerControlPlaneClient,
+      client: { claimTaskDelivery } as unknown as RunnerControlPlaneClient,
       leaseDurationMs: 60_000,
     });
     const [first, second] = await Promise.all([
@@ -254,12 +261,14 @@ describe("LocalWorkJournal", () => {
     ]);
     expect(first).toEqual(execution);
     expect(second).toEqual(execution);
-    expect(claimTask).toHaveBeenCalledTimes(1);
+    expect(claimTaskDelivery).toHaveBeenCalledTimes(1);
 
     const noNetwork = vi.fn();
     const restarted = new ExactClaimReconciler({
       journal: await open(rootPath),
-      client: { claimTask: noNetwork } as unknown as RunnerControlPlaneClient,
+      client: {
+        claimTaskDelivery: noNetwork,
+      } as unknown as RunnerControlPlaneClient,
       leaseDurationMs: 60_000,
     });
     expect(await restarted.reconcile(delivery)).toEqual(execution);

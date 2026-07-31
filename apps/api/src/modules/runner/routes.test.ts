@@ -47,6 +47,10 @@ function authenticatedOptions(
       authenticate: async (value) => (value === credential ? principal : null),
     },
     gateway: {
+      acquireTaskDelivery: async () => null,
+      claimTaskDelivery: async () => {
+        throw new Error("Unexpected delivery claim.");
+      },
       claimTask: async () => {
         throw new Error("Unexpected claim.");
       },
@@ -106,6 +110,37 @@ describe("runner HTTP routes", () => {
       'Bearer realm="socrates-runner"',
     );
     expect(ingestEvent).not.toHaveBeenCalled();
+  });
+
+  it("derives task acquisition ownership only from the principal", async () => {
+    const delivery = { deliveryId: randomUUID(), taskId: randomUUID() };
+    const acquireTaskDelivery = vi.fn(async () => delivery);
+    const response = await app(
+      authenticatedOptions({ acquireTaskDelivery }),
+    ).request("/v1/runner/task-deliveries/acquire", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ version: "1" }),
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      version: "1",
+      delivery: { version: "1", ...delivery },
+    });
+    expect(acquireTaskDelivery).toHaveBeenCalledWith({
+      runnerId: principal.runnerId,
+    });
+
+    const noWork = await app(authenticatedOptions()).request(
+      "/v1/runner/task-deliveries/acquire",
+      {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ version: "1" }),
+      },
+    );
+    expect(noWork.status).toBe(204);
+    expect(await noWork.text()).toBe("");
   });
 
   it("injects the principal into a fenced heartbeat", async () => {

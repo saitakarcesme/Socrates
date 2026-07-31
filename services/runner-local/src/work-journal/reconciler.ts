@@ -36,10 +36,11 @@ export class ExactClaimReconciler {
       const state = await this.#journal.admit(delivery);
       const stored = await this.#journal.claimedExecution(delivery.deliveryId);
       if (stored) return stored;
-      const execution = await this.#client.claimTask(
-        delivery.taskId,
+      const execution = await this.#client.claimTaskDelivery(
+        delivery.deliveryId,
         {
           version: "1",
+          taskId: delivery.taskId,
           attemptId: state.attemptId,
           leaseDurationMs: this.#leaseDurationMs,
         },

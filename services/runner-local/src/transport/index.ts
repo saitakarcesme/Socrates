@@ -12,3 +12,8 @@ export {
   type RunnerEventTransport,
   type SendPendingEventResult,
 } from "./sender";
+export {
+  JournaledTaskSource,
+  type TaskDeliveryClient,
+  type TaskDeliveryJournal,
+} from "./task-source";

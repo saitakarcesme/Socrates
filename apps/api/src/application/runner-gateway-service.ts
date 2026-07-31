@@ -1,5 +1,7 @@
 import type {
+  AcquireRunnerTaskDeliveryInput,
   ClaimRunnerTaskInput,
+  ClaimRunnerTaskDeliveryInput,
   ClaimedRunnerTask,
   HeartbeatRunnerTaskInput,
   IngestRunnerEventInput,
@@ -24,42 +26,90 @@ function runnerConflict(reason: string, message: string): never {
 export class RunnerGatewayService {
   constructor(private readonly persistence: RunnerGatewayPersistence) {}
 
+  async acquireTaskDelivery(
+    input: AcquireRunnerTaskDeliveryInput,
+  ): Promise<{ deliveryId: string; taskId: string } | null> {
+    const result = await this.persistence.transaction(({ scheduler }) =>
+      scheduler.acquireTaskDelivery(input),
+    );
+    if (result.state === "acquired") return result.delivery;
+    if (result.state === "none" || result.state === "runner_at_capacity") {
+      return null;
+    }
+    if (result.state === "runner_not_found") {
+      return notFound("runner registration", { runnerReason: result.state });
+    }
+    return runnerConflict(
+      result.state,
+      "The runner registration is not active.",
+    );
+  }
+
+  async claimTaskDelivery(
+    input: ClaimRunnerTaskDeliveryInput,
+  ): Promise<ClaimedRunnerTask> {
+    const result = await this.persistence.transaction(({ scheduler }) =>
+      scheduler.claimTaskDelivery(input),
+    );
+    if (result.state === "claimed") return result.claim;
+    if (result.state === "delivery_not_found") {
+      return notFound("runner task delivery", { runnerReason: result.state });
+    }
+    if (result.state === "delivery_conflict") {
+      return runnerConflict(
+        result.state,
+        "The task delivery conflicts with the claim identity.",
+      );
+    }
+    return this.#claimFailure(result.state);
+  }
+
   async claimTask(input: ClaimRunnerTaskInput): Promise<ClaimedRunnerTask> {
     const result = await this.persistence.transaction(({ scheduler }) =>
       scheduler.claimTask(input),
     );
     if (result.state === "claimed") return result.claim;
 
-    switch (result.state) {
+    return this.#claimFailure(result.state);
+  }
+
+  #claimFailure(
+    state:
+      | "runner_not_found"
+      | "runner_unavailable"
+      | "runner_at_capacity"
+      | "attempt_conflict"
+      | "task_not_found"
+      | "task_unavailable"
+      | "capability_mismatch",
+  ): never {
+    switch (state) {
       case "runner_not_found":
         return notFound("runner registration", {
-          runnerReason: result.state,
+          runnerReason: state,
         });
       case "task_not_found":
-        return notFound("runner task", { runnerReason: result.state });
+        return notFound("runner task", { runnerReason: state });
       case "attempt_conflict":
         return runnerConflict(
-          result.state,
+          state,
           "The attempt ID already identifies different runner work.",
         );
       case "runner_unavailable":
-        return runnerConflict(
-          result.state,
-          "The runner registration is not active.",
-        );
+        return runnerConflict(state, "The runner registration is not active.");
       case "runner_at_capacity":
         return runnerConflict(
-          result.state,
+          state,
           "The runner has no available task capacity.",
         );
       case "task_unavailable":
         return runnerConflict(
-          result.state,
+          state,
           "The task cannot be claimed in its current state.",
         );
       case "capability_mismatch":
         return runnerConflict(
-          result.state,
+          state,
           "The runner does not satisfy the task capabilities.",
         );
     }

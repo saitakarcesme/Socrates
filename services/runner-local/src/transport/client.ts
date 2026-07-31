@@ -3,6 +3,10 @@ import {
   runnerBearerTokenSchema,
   runnerEventSubmitRequestV1Schema,
   runnerEventSubmitResponseV1Schema,
+  runnerTaskDeliveryAcquireRequestV1Schema,
+  runnerTaskDeliveryAcquireResponseV1Schema,
+  runnerTaskDeliveryClaimParamsV1Schema,
+  runnerTaskDeliveryClaimRequestV1Schema,
   runnerTaskClaimParamsV1Schema,
   runnerTaskClaimRequestV1Schema,
   runnerTaskClaimResponseV1Schema,
@@ -13,6 +17,7 @@ import {
   type RunnerEventSubmitResponseV1,
   type RunnerEventV2,
   type RunnerExecutionV1,
+  type RunnerTaskDeliveryV1,
   type RunnerTaskClaimRequestV1,
   type RunnerTaskHeartbeatRequestV1,
   type RunnerTaskHeartbeatResponseV1,
@@ -46,6 +51,19 @@ export class RunnerTransportError extends Error {
 }
 
 export interface RunnerControlPlaneClient {
+  acquireTaskDelivery(
+    signal?: AbortSignal,
+  ): Promise<RunnerTaskDeliveryV1 | null>;
+  claimTaskDelivery(
+    deliveryId: string,
+    request: {
+      version: "1";
+      taskId: string;
+      attemptId: string;
+      leaseDurationMs: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<RunnerExecutionV1>;
   claimTask(
     taskId: string,
     request: RunnerTaskClaimRequestV1,
@@ -226,6 +244,40 @@ export class RunnerHttpClient implements RunnerControlPlaneClient {
     this.#fetch = options.fetch ?? globalThis.fetch;
   }
 
+  async acquireTaskDelivery(
+    signal?: AbortSignal,
+  ): Promise<RunnerTaskDeliveryV1 | null> {
+    const response = await this.#request(
+      "/v1/runner/task-deliveries/acquire",
+      runnerTaskDeliveryAcquireRequestV1Schema.parse({ version: "1" }),
+      runnerTaskDeliveryAcquireResponseV1Schema,
+      signal,
+      true,
+    );
+    return response?.delivery ?? null;
+  }
+
+  async claimTaskDelivery(
+    deliveryId: string,
+    request: {
+      version: "1";
+      taskId: string;
+      attemptId: string;
+      leaseDurationMs: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<RunnerExecutionV1> {
+    const params = runnerTaskDeliveryClaimParamsV1Schema.parse({ deliveryId });
+    const body = runnerTaskDeliveryClaimRequestV1Schema.parse(request);
+    const response = await this.#request(
+      `/v1/runner/task-deliveries/${params.deliveryId}/claims`,
+      body,
+      runnerTaskClaimResponseV1Schema,
+      signal,
+    );
+    return response.execution;
+  }
+
   async claimTask(
     taskId: string,
     request: RunnerTaskClaimRequestV1,
@@ -281,7 +333,22 @@ export class RunnerHttpClient implements RunnerControlPlaneClient {
     body: unknown,
     schema: { parse(value: unknown): T },
     callerSignal?: AbortSignal,
-  ): Promise<T> {
+    allowNoContent?: false,
+  ): Promise<T>;
+  async #request<T>(
+    pathname: string,
+    body: unknown,
+    schema: { parse(value: unknown): T },
+    callerSignal: AbortSignal | undefined,
+    allowNoContent: true,
+  ): Promise<T | null>;
+  async #request<T>(
+    pathname: string,
+    body: unknown,
+    schema: { parse(value: unknown): T },
+    callerSignal?: AbortSignal,
+    allowNoContent = false,
+  ): Promise<T | null> {
     const timeoutSignal = AbortSignal.timeout(this.#timeoutMs);
     const signal = callerSignal
       ? AbortSignal.any([callerSignal, timeoutSignal])
@@ -324,6 +391,15 @@ export class RunnerHttpClient implements RunnerControlPlaneClient {
       );
     }
 
+    if (allowNoContent && response.status === 204) {
+      if (response.body && (await boundedBody(response, 1)).byteLength !== 0) {
+        throw new RunnerTransportError(
+          "protocol",
+          "A no-work response contained a body.",
+        );
+      }
+      return null;
+    }
     if (!isJsonMediaType(response)) {
       throw new RunnerTransportError(
         "protocol",

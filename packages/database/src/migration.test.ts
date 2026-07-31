@@ -23,6 +23,7 @@ import {
   runnerTaskAttempts,
   runnerTaskArtifacts,
   runnerTaskCancellations,
+  runnerTaskDeliveries,
   runnerTaskEvents,
   runnerTasks,
   schemaMetadata,
@@ -134,6 +135,7 @@ describe("Phase 2 scheduler migration", () => {
         runnerTasks,
         runnerTaskAttempts,
         runnerTaskCancellations,
+        runnerTaskDeliveries,
         runnerTaskEvents,
         artifactObjects,
         runnerTaskArtifacts,
@@ -145,6 +147,7 @@ describe("Phase 2 scheduler migration", () => {
       "runner_tasks",
       "runner_task_attempts",
       "runner_task_cancellations",
+      "runner_task_deliveries",
       "runner_task_events",
       "artifact_objects",
       "runner_task_artifacts",
@@ -176,6 +179,29 @@ describe("Phase 2 scheduler migration", () => {
     expect(migration.indexOf(`"projects_workspace_id_unique"`)).toBeLessThan(
       migration.indexOf(`"runner_tasks_project_same_workspace_fk"`),
     );
+  });
+
+  it("adds fenced task offers before advancing compatibility", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0010_fenced_runner_task_offers.sql", import.meta.url),
+      "utf8",
+    );
+    for (const evidence of [
+      `CREATE TABLE "runner_task_deliveries"`,
+      `CREATE UNIQUE INDEX "runner_task_deliveries_one_active_per_task"`,
+      `CONSTRAINT "runner_task_deliveries_task_workspace_fk"`,
+      `CONSTRAINT "runner_task_deliveries_runner_workspace_fk"`,
+      `CONSTRAINT "runner_task_deliveries_attempt_identity_fk"`,
+      `SET "version" = 7`,
+    ]) {
+      expect(migration).toContain(evidence);
+    }
+    expect(
+      migration.indexOf(`"runner_registrations_workspace_id_unique"`),
+    ).toBeLessThan(
+      migration.indexOf(`"runner_task_deliveries_runner_workspace_fk"`),
+    );
+    expect(migration.trimEnd()).toMatch(/SET "version" = 7 WHERE "id" = 1;$/u);
   });
 
   it("adds append-only cancellation identity and advances compatibility", async () => {

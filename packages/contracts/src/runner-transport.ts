@@ -6,6 +6,7 @@ import {
   runnerEventV2Schema,
 } from "./event";
 import { runnerExecutionV1Schema } from "./runner";
+import { runnerTaskDeliveryV1Schema } from "./runner-delivery";
 
 export const maximumRunnerLeaseDurationMs = 15 * 60 * 1_000;
 
@@ -42,6 +43,41 @@ export const runnerTaskClaimResponseV1Schema = z
   .strict();
 export type RunnerTaskClaimResponseV1 = z.infer<
   typeof runnerTaskClaimResponseV1Schema
+>;
+
+export const runnerTaskDeliveryAcquireRequestV1Schema = z
+  .object({ version: z.literal("1") })
+  .strict();
+export type RunnerTaskDeliveryAcquireRequestV1 = z.infer<
+  typeof runnerTaskDeliveryAcquireRequestV1Schema
+>;
+
+export const runnerTaskDeliveryAcquireResponseV1Schema = z
+  .object({
+    version: z.literal("1"),
+    delivery: runnerTaskDeliveryV1Schema,
+  })
+  .strict();
+export type RunnerTaskDeliveryAcquireResponseV1 = z.infer<
+  typeof runnerTaskDeliveryAcquireResponseV1Schema
+>;
+
+export const runnerTaskDeliveryClaimParamsV1Schema = z
+  .object({ deliveryId: entityIdSchema })
+  .strict();
+
+export const runnerTaskDeliveryClaimRequestV1Schema = z
+  .object({
+    version: z.literal("1"),
+    taskId: entityIdSchema,
+    attemptId: entityIdSchema,
+    leaseDurationMs: positiveSafeIntegerSchema.max(
+      maximumRunnerLeaseDurationMs,
+    ),
+  })
+  .strict();
+export type RunnerTaskDeliveryClaimRequestV1 = z.infer<
+  typeof runnerTaskDeliveryClaimRequestV1Schema
 >;
 
 export const runnerTaskHeartbeatParamsV1Schema = z

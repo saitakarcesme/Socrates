@@ -71,6 +71,13 @@
       "when": 1785514358201,
       "tag": "0009_runner_transport_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785517412147,
+      "tag": "0010_fenced_runner_task_offers",
+      "breakpoints": true
     }
   ]
 }

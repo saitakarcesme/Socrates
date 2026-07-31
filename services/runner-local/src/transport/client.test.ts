@@ -47,6 +47,29 @@ function client(
 }
 
 describe("runner HTTP client", () => {
+  it("acquires one strict delivery or accepts an empty 204 response", async () => {
+    const delivery = {
+      version: "1" as const,
+      deliveryId: randomUUID(),
+      taskId: randomUUID(),
+    };
+    const fetchImplementation = vi.fn<typeof fetch>(async (input, init) => {
+      expect(String(input)).toBe(
+        "http://control-plane.test/v1/runner/task-deliveries/acquire",
+      );
+      expect(JSON.parse(String(init?.body))).toEqual({ version: "1" });
+      return jsonResponse({ version: "1", delivery });
+    });
+    await expect(
+      client(fetchImplementation).acquireTaskDelivery(),
+    ).resolves.toEqual(delivery);
+    await expect(
+      client(
+        async () => new Response(null, { status: 204 }),
+      ).acquireTaskDelivery(),
+    ).resolves.toBeNull();
+  });
+
   it("submits one immutable event with credentials and validates its acknowledgement", async () => {
     const submitted = event();
     const fetchImplementation = vi.fn<typeof fetch>(async (input, init) => {

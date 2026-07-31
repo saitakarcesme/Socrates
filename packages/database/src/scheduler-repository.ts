@@ -15,6 +15,7 @@ import {
   eq,
   inArray,
   max,
+  notExists,
   notInArray,
   sql,
 } from "drizzle-orm";
@@ -23,7 +24,11 @@ import type { RunnerEventV2 } from "@socrates/contracts";
 import type { DatabaseTransaction } from "./database-types";
 import type { JsonValue } from "./json";
 import type {
+  AcquireRunnerTaskDeliveryInput,
+  AcquireRunnerTaskDeliveryResult,
   ClaimRunnerTaskInput,
+  ClaimRunnerTaskDeliveryInput,
+  ClaimRunnerTaskDeliveryResult,
   ClaimRunnerTaskResult,
   CompleteRunnerTaskInput,
   CompleteRunnerTaskResult,
@@ -264,6 +269,167 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
       workspaceId: input.workspaceId,
     });
     return { state: "created" };
+  }
+
+  async acquireTaskDelivery(
+    input: AcquireRunnerTaskDeliveryInput,
+  ): Promise<AcquireRunnerTaskDeliveryResult> {
+    const [runner] = await this.transaction
+      .select({
+        id: schema.runnerRegistrations.id,
+        workspaceId: schema.runnerRegistrations.workspaceId,
+        status: schema.runnerRegistrations.status,
+        capabilities: schema.runnerRegistrations.capabilities,
+        maximumConcurrentTasks:
+          schema.runnerRegistrations.maximumConcurrentTasks,
+      })
+      .from(schema.runnerRegistrations)
+      .where(eq(schema.runnerRegistrations.id, input.runnerId))
+      .for("update");
+    if (!runner) return { state: "runner_not_found" };
+    if (runner.status !== "active") return { state: "runner_unavailable" };
+
+    const [existing] = await this.transaction
+      .select({
+        deliveryId: schema.runnerTaskDeliveries.id,
+        taskId: schema.runnerTaskDeliveries.taskId,
+      })
+      .from(schema.runnerTaskDeliveries)
+      .where(
+        and(
+          eq(schema.runnerTaskDeliveries.runnerId, runner.id),
+          eq(schema.runnerTaskDeliveries.state, "offered"),
+        ),
+      )
+      .orderBy(
+        asc(schema.runnerTaskDeliveries.offeredAt),
+        asc(schema.runnerTaskDeliveries.id),
+      )
+      .limit(1)
+      .for("update");
+    if (existing) return { state: "acquired", delivery: existing };
+
+    const [usage] = await this.transaction
+      .select({ value: count() })
+      .from(schema.runnerTaskAttempts)
+      .where(
+        and(
+          eq(schema.runnerTaskAttempts.runnerId, runner.id),
+          inArray(schema.runnerTaskAttempts.status, activeAttemptStatuses),
+          sql`${schema.runnerTaskAttempts.leaseExpiresAt} > CURRENT_TIMESTAMP`,
+        ),
+      );
+    if ((usage?.value ?? 0) >= runner.maximumConcurrentTasks) {
+      return { state: "runner_at_capacity" };
+    }
+
+    const available = capabilityArray(runner.capabilities);
+    if (!available) return { state: "none" };
+    const candidates = await this.transaction
+      .select({
+        id: schema.runnerTasks.id,
+        requiredCapabilities: schema.runnerTasks.requiredCapabilities,
+      })
+      .from(schema.runnerTasks)
+      .where(
+        and(
+          eq(schema.runnerTasks.workspaceId, runner.workspaceId),
+          eq(schema.runnerTasks.status, "queued"),
+          eq(schema.runnerTasks.protocolVersion, "2"),
+          notExists(
+            this.transaction
+              .select({ id: schema.runnerTaskDeliveries.id })
+              .from(schema.runnerTaskDeliveries)
+              .where(
+                and(
+                  eq(schema.runnerTaskDeliveries.taskId, schema.runnerTasks.id),
+                  inArray(schema.runnerTaskDeliveries.state, [
+                    "offered",
+                    "claimed",
+                  ]),
+                ),
+              ),
+          ),
+        ),
+      )
+      .orderBy(asc(schema.runnerTasks.createdAt), asc(schema.runnerTasks.id))
+      .limit(32)
+      .for("update", { of: schema.runnerTasks, skipLocked: true });
+
+    const candidate = candidates.find((task) => {
+      const required = capabilityArray(task.requiredCapabilities);
+      return required && runnerSatisfiesCapabilities(available, required);
+    });
+    if (!candidate) return { state: "none" };
+
+    const [delivery] = await this.transaction
+      .insert(schema.runnerTaskDeliveries)
+      .values({
+        workspaceId: runner.workspaceId,
+        taskId: candidate.id,
+        runnerId: runner.id,
+      })
+      .returning({
+        deliveryId: schema.runnerTaskDeliveries.id,
+        taskId: schema.runnerTaskDeliveries.taskId,
+      });
+    if (!delivery) throw new Error("Task delivery insert returned no record.");
+    return { state: "acquired", delivery };
+  }
+
+  async claimTaskDelivery(
+    input: ClaimRunnerTaskDeliveryInput,
+  ): Promise<ClaimRunnerTaskDeliveryResult> {
+    const [delivery] = await this.transaction
+      .select({
+        id: schema.runnerTaskDeliveries.id,
+        runnerId: schema.runnerTaskDeliveries.runnerId,
+        taskId: schema.runnerTaskDeliveries.taskId,
+        state: schema.runnerTaskDeliveries.state,
+        attemptId: schema.runnerTaskDeliveries.attemptId,
+        fence: schema.runnerTaskDeliveries.fence,
+      })
+      .from(schema.runnerTaskDeliveries)
+      .where(eq(schema.runnerTaskDeliveries.id, input.deliveryId))
+      .for("update");
+    if (!delivery || delivery.runnerId !== input.runnerId) {
+      return { state: "delivery_not_found" };
+    }
+    if (delivery.taskId !== input.taskId) {
+      return { state: "delivery_conflict" };
+    }
+    if (
+      delivery.state === "claimed" &&
+      (delivery.attemptId !== input.attemptId || delivery.fence === null)
+    ) {
+      return { state: "delivery_conflict" };
+    }
+
+    const result = await this.claimTask(input);
+    if (result.state !== "claimed") return result;
+    if (delivery.state === "claimed") {
+      return result.claim.fence === delivery.fence
+        ? result
+        : { state: "delivery_conflict" };
+    }
+
+    const [claimed] = await this.transaction
+      .update(schema.runnerTaskDeliveries)
+      .set({
+        state: "claimed",
+        attemptId: result.claim.attemptId,
+        fence: result.claim.fence,
+        claimedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(
+        and(
+          eq(schema.runnerTaskDeliveries.id, delivery.id),
+          eq(schema.runnerTaskDeliveries.state, "offered"),
+        ),
+      )
+      .returning({ id: schema.runnerTaskDeliveries.id });
+    if (!claimed) return { state: "delivery_conflict" };
+    return result;
   }
 
   async claimTask(input: ClaimRunnerTaskInput): Promise<ClaimRunnerTaskResult> {

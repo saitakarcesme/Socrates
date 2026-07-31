@@ -4,6 +4,10 @@ import {
   runnerEventSubmitRequestV1Schema,
   runnerEventSubmitResponseV1Schema,
   runnerExecutionV1Schema,
+  runnerTaskDeliveryAcquireRequestV1Schema,
+  runnerTaskDeliveryAcquireResponseV1Schema,
+  runnerTaskDeliveryClaimParamsV1Schema,
+  runnerTaskDeliveryClaimRequestV1Schema,
   runnerTaskClaimParamsV1Schema,
   runnerTaskClaimRequestV1Schema,
   runnerTaskClaimResponseV1Schema,
@@ -23,7 +27,11 @@ const maximumRunnerRequestBytes = 128 * 1_024;
 
 type RunnerGateway = Pick<
   RunnerGatewayService,
-  "claimTask" | "heartbeat" | "ingestEvent"
+  | "acquireTaskDelivery"
+  | "claimTaskDelivery"
+  | "claimTask"
+  | "heartbeat"
+  | "ingestEvent"
 >;
 
 export type RunnerRouteOptions = {
@@ -60,6 +68,61 @@ export function createRunnerRoutes(options: RunnerRouteOptions) {
           "The runner request body exceeds its byte limit.",
         ),
     }),
+  );
+
+  app.post(
+    "/task-deliveries/acquire",
+    sValidator(
+      "json",
+      runnerTaskDeliveryAcquireRequestV1Schema,
+      validationHook,
+    ),
+    async (context) => {
+      const principal = context.get("runnerPrincipal");
+      const delivery = await gateway.acquireTaskDelivery({
+        runnerId: principal.runnerId,
+      });
+      if (!delivery) return context.body(null, 204);
+      return context.json(
+        runnerTaskDeliveryAcquireResponseV1Schema.parse({
+          version: "1",
+          delivery: { version: "1", ...delivery },
+        }),
+      );
+    },
+  );
+
+  app.post(
+    "/task-deliveries/:deliveryId/claims",
+    sValidator("param", runnerTaskDeliveryClaimParamsV1Schema, validationHook),
+    sValidator("json", runnerTaskDeliveryClaimRequestV1Schema, validationHook),
+    async (context) => {
+      const principal = context.get("runnerPrincipal");
+      const params = context.req.valid("param");
+      const request = context.req.valid("json");
+      const claim = await gateway.claimTaskDelivery({
+        runnerId: principal.runnerId,
+        deliveryId: params.deliveryId,
+        taskId: request.taskId,
+        attemptId: request.attemptId,
+        leaseDurationMs: request.leaseDurationMs,
+      });
+      const execution = runnerExecutionV1Schema.parse({
+        version: "1",
+        lease: {
+          version: "1",
+          runnerId: claim.runnerId,
+          taskId: claim.taskId,
+          attemptId: claim.attemptId,
+          fence: claim.fence,
+          leasedUntil: claim.leaseExpiresAt.toISOString(),
+        },
+        task: experimentTaskV2Schema.parse(claim.payload),
+      });
+      return context.json(
+        runnerTaskClaimResponseV1Schema.parse({ version: "1", execution }),
+      );
+    },
   );
 
   app.post(

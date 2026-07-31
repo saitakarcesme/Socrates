@@ -3,6 +3,7 @@ import {
   experimentMutationResponseSchema,
   projectMutationResponseSchema,
   runnerEventSubmitResponseV1Schema,
+  runnerTaskDeliveryAcquireResponseV1Schema,
   runnerTaskClaimResponseV1Schema,
   runnerTaskHeartbeatResponseV1Schema,
   runMutationResponseSchema,
@@ -243,15 +244,11 @@ integration("authenticated runner transport with PostgreSQL", () => {
 
   it("binds claim, cancellation heartbeat, terminal acknowledgement, and replay", async () => {
     const unauthorized = await app.request(
-      `/v1/runner/tasks/${taskId}/claims`,
+      "/v1/runner/task-deliveries/acquire",
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          version: "1",
-          attemptId,
-          leaseDurationMs: 30_000,
-        }),
+        body: JSON.stringify({ version: "1" }),
       },
     );
     expect(unauthorized.status).toBe(401);
@@ -259,11 +256,24 @@ integration("authenticated runner transport with PostgreSQL", () => {
       "unauthorized",
     );
 
-    const claimResponse = await runnerCommand(`/tasks/${taskId}/claims`, {
+    const acquired = await runnerCommand("/task-deliveries/acquire", {
       version: "1",
-      attemptId,
-      leaseDurationMs: 30_000,
     });
+    expect(acquired.status).toBe(200);
+    const delivery = runnerTaskDeliveryAcquireResponseV1Schema.parse(
+      await acquired.json(),
+    ).delivery;
+    expect(delivery.taskId).toBe(taskId);
+
+    const claimResponse = await runnerCommand(
+      `/task-deliveries/${delivery.deliveryId}/claims`,
+      {
+        version: "1",
+        taskId,
+        attemptId,
+        leaseDurationMs: 30_000,
+      },
+    );
     expect(claimResponse.status).toBe(200);
     const claim = runnerTaskClaimResponseV1Schema.parse(
       await claimResponse.json(),

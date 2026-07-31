@@ -28,6 +28,7 @@ import {
   runnerTaskAttempts,
   runnerTaskArtifacts,
   runnerTaskCancellations,
+  runnerTaskDeliveries,
   runnerTaskEvents,
   runnerTasks,
   runnerRegistrationTokens,
@@ -353,6 +354,78 @@ integration("PostgreSQL scheduler persistence", () => {
       .from(experiments)
       .where(eq(experiments.id, experimentIds[0]!));
     expect(queuedExperiment).toEqual({ status: "queued", version: 1 });
+  });
+
+  it("reserves one task once and claims only through its exact delivery", async () => {
+    const firstDeliveryRunner = randomUUID();
+    const secondDeliveryRunner = randomUUID();
+    const taskId = randomUUID();
+    await persistence.transaction(async ({ scheduler }) => {
+      await scheduler.registerRunner(registration(firstDeliveryRunner));
+      await scheduler.registerRunner(registration(secondDeliveryRunner));
+      await scheduler.createTask(task(taskId, experimentIds[16]!));
+    });
+
+    const offers = await Promise.all(
+      [firstDeliveryRunner, secondDeliveryRunner].map((candidateRunnerId) =>
+        persistence.transaction(({ scheduler }) =>
+          scheduler.acquireTaskDelivery({ runnerId: candidateRunnerId }),
+        ),
+      ),
+    );
+    const acquired = offers.filter((offer) => offer.state === "acquired");
+    expect(acquired).toHaveLength(1);
+    const winner = acquired[0]!;
+    if (winner.state !== "acquired") throw new Error("Expected one offer.");
+    const winnerRunner =
+      offers[0] === winner ? firstDeliveryRunner : secondDeliveryRunner;
+
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.acquireTaskDelivery({ runnerId: winnerRunner }),
+      ),
+    ).resolves.toEqual(winner);
+
+    const attemptId = randomUUID();
+    const claimInput = {
+      runnerId: winnerRunner,
+      deliveryId: winner.delivery.deliveryId,
+      taskId,
+      attemptId,
+      leaseDurationMs: 30_000,
+    };
+    const claim = await persistence.transaction(({ scheduler }) =>
+      scheduler.claimTaskDelivery(claimInput),
+    );
+    expect(claim).toMatchObject({
+      state: "claimed",
+      claim: { taskId, attemptId, fence: 1 },
+    });
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.claimTaskDelivery(claimInput),
+      ),
+    ).resolves.toEqual(claim);
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.claimTaskDelivery({ ...claimInput, attemptId: randomUUID() }),
+      ),
+    ).resolves.toEqual({ state: "delivery_conflict" });
+
+    const [storedDelivery] = await database
+      .select({
+        state: runnerTaskDeliveries.state,
+        attemptId: runnerTaskDeliveries.attemptId,
+        fence: runnerTaskDeliveries.fence,
+      })
+      .from(runnerTaskDeliveries)
+      .where(eq(runnerTaskDeliveries.id, winner.delivery.deliveryId));
+    const [message] = await database
+      .select({ publishedAt: outboxMessages.publishedAt })
+      .from(outboxMessages)
+      .where(eq(outboxMessages.taskId, taskId));
+    expect(storedDelivery).toEqual({ state: "claimed", attemptId, fence: 1 });
+    expect(message).toEqual({ publishedAt: null });
   });
 
   it("rolls back both task and outbox when the transaction fails", async () => {

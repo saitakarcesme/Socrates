@@ -51,6 +51,10 @@ export const runnerRegistrations = pgTable(
       .notNull(),
   },
   (table) => [
+    uniqueIndex("runner_registrations_workspace_id_unique").on(
+      table.workspaceId,
+      table.id,
+    ),
     index("runner_registrations_workspace_status_heartbeat_idx").on(
       table.workspaceId,
       table.status,
@@ -151,6 +155,10 @@ export const runnerTasks = pgTable(
   },
   (table) => [
     uniqueIndex("runner_tasks_experiment_unique").on(table.experimentId),
+    uniqueIndex("runner_tasks_workspace_id_unique").on(
+      table.workspaceId,
+      table.id,
+    ),
     index("runner_tasks_workspace_queue_created_id_idx").on(
       table.workspaceId,
       table.status,
@@ -273,6 +281,72 @@ export const runnerTaskAttempts = pgTable(
     check(
       "runner_task_attempts_failure_classification",
       sql`(${table.status} = 'failed') = (${table.failureClassification} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const runnerTaskDeliveries = pgTable(
+  "runner_task_deliveries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => runnerTasks.id),
+    runnerId: uuid("runner_id")
+      .notNull()
+      .references(() => runnerRegistrations.id),
+    state: text("state").default("offered").notNull(),
+    attemptId: uuid("attempt_id"),
+    fence: integer("fence"),
+    offeredAt: timestamp("offered_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("runner_task_deliveries_one_active_per_task")
+      .on(table.taskId)
+      .where(sql`${table.state} IN ('offered', 'claimed')`),
+    index("runner_task_deliveries_runner_state_offered_id_idx").on(
+      table.runnerId,
+      table.state,
+      table.offeredAt,
+      table.id,
+    ),
+    foreignKey({
+      name: "runner_task_deliveries_task_workspace_fk",
+      columns: [table.workspaceId, table.taskId],
+      foreignColumns: [runnerTasks.workspaceId, runnerTasks.id],
+    }),
+    foreignKey({
+      name: "runner_task_deliveries_runner_workspace_fk",
+      columns: [table.workspaceId, table.runnerId],
+      foreignColumns: [runnerRegistrations.workspaceId, runnerRegistrations.id],
+    }),
+    foreignKey({
+      name: "runner_task_deliveries_attempt_identity_fk",
+      columns: [table.attemptId, table.taskId, table.runnerId, table.fence],
+      foreignColumns: [
+        runnerTaskAttempts.id,
+        runnerTaskAttempts.taskId,
+        runnerTaskAttempts.runnerId,
+        runnerTaskAttempts.fence,
+      ],
+    }),
+    check(
+      "runner_task_deliveries_state",
+      sql`${table.state} IN ('offered', 'claimed')`,
+    ),
+    check(
+      "runner_task_deliveries_claim_identity_complete",
+      sql`(${table.state} = 'offered' AND ${table.attemptId} IS NULL AND ${table.fence} IS NULL AND ${table.claimedAt} IS NULL) OR (${table.state} = 'claimed' AND ${table.attemptId} IS NOT NULL AND ${table.fence} IS NOT NULL AND ${table.claimedAt} IS NOT NULL)`,
+    ),
+    check(
+      "runner_task_deliveries_claimed_after_offer",
+      sql`${table.claimedAt} IS NULL OR ${table.claimedAt} >= ${table.offeredAt}`,
     ),
   ],
 );

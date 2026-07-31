@@ -6,6 +6,9 @@ import {
   maximumRunnerLeaseDurationMs,
   runnerBearerTokenSchema,
   runnerEventSubmitResponseV1Schema,
+  runnerTaskDeliveryAcquireRequestV1Schema,
+  runnerTaskDeliveryAcquireResponseV1Schema,
+  runnerTaskDeliveryClaimRequestV1Schema,
   runnerTaskClaimRequestV1Schema,
   runnerTaskHeartbeatRequestV1Schema,
   runnerTaskHeartbeatResponseV1Schema,
@@ -80,5 +83,30 @@ describe("runner transport contracts", () => {
         acknowledgement,
       }).acknowledgement,
     ).toEqual(acknowledgement);
+  });
+
+  it("keeps task acquisition principal-derived and delivery claims exact", () => {
+    const deliveryId = randomUUID();
+    const taskId = randomUUID();
+    expect(
+      runnerTaskDeliveryAcquireResponseV1Schema.parse({
+        version: "1",
+        delivery: { version: "1", deliveryId, taskId },
+      }).delivery,
+    ).toEqual({ version: "1", deliveryId, taskId });
+    expect(
+      runnerTaskDeliveryAcquireRequestV1Schema.safeParse({
+        version: "1",
+        runnerId: randomUUID(),
+      }).success,
+    ).toBe(false);
+    expect(
+      runnerTaskDeliveryClaimRequestV1Schema.parse({
+        version: "1",
+        taskId,
+        attemptId: randomUUID(),
+        leaseDurationMs: maximumRunnerLeaseDurationMs,
+      }).taskId,
+    ).toBe(taskId);
   });
 });

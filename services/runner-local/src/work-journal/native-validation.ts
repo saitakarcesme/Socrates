@@ -70,7 +70,7 @@ try {
   });
   let calls = 0;
   const client = {
-    claimTask: async () => {
+    claimTaskDelivery: async () => {
       calls += 1;
       return execution;
     },

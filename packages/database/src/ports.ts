@@ -113,6 +113,38 @@ export type ClaimRunnerTaskInput = {
   leaseDurationMs: number;
 };
 
+export type AcquireRunnerTaskDeliveryInput = {
+  runnerId: string;
+};
+
+export type RunnerTaskDelivery = {
+  deliveryId: string;
+  taskId: string;
+};
+
+export type AcquireRunnerTaskDeliveryResult =
+  | { state: "acquired"; delivery: RunnerTaskDelivery }
+  | {
+      state:
+        | "none"
+        | "runner_not_found"
+        | "runner_unavailable"
+        | "runner_at_capacity";
+    };
+
+export type ClaimRunnerTaskDeliveryInput = ClaimRunnerTaskInput & {
+  deliveryId: string;
+};
+
+export type ClaimRunnerTaskDeliveryResult =
+  | { state: "claimed"; claim: ClaimedRunnerTask }
+  | {
+      state:
+        | "delivery_not_found"
+        | "delivery_conflict"
+        | Exclude<ClaimRunnerTaskResult["state"], "claimed">;
+    };
+
 export type ClaimedRunnerTask = {
   runnerId: string;
   taskId: string;
@@ -241,6 +273,12 @@ export type IngestRunnerEventResult =
 export interface SchedulerRepository {
   registerRunner(input: RunnerRegistrationWrite): Promise<void>;
   createTask(input: RunnerTaskWrite): Promise<CreateRunnerTaskResult>;
+  acquireTaskDelivery(
+    input: AcquireRunnerTaskDeliveryInput,
+  ): Promise<AcquireRunnerTaskDeliveryResult>;
+  claimTaskDelivery(
+    input: ClaimRunnerTaskDeliveryInput,
+  ): Promise<ClaimRunnerTaskDeliveryResult>;
   claimTask(input: ClaimRunnerTaskInput): Promise<ClaimRunnerTaskResult>;
   heartbeat(
     input: HeartbeatRunnerTaskInput,
