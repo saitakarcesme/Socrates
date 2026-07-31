@@ -100,11 +100,12 @@ drives all three candidates; Docker-compatible and Podman-native fact and
 inspect fields have fixture coverage.
 
 The native rerun is now one immutable comparison session. Its manifest requires
-eligible Docker and Podman evidence from the same kernel, architecture, and
-cgroup version with identical image, profile, and latency sample counts. It
-also records nerdctl as measured or unavailable and fails closed if that
-disposition cannot be produced. A passing manifest is review input, not an
-automatic engine choice.
+complete Docker and Podman evidence from the same kernel, architecture, and
+cgroup version with identical image and profile, plus at least one eligible
+candidate. It also records nerdctl as measured or unavailable and fails closed
+if that disposition cannot be produced. A passing manifest is review input,
+not an automatic engine choice. Host LSM availability and the workload's
+non-`unconfined` LSM label are evaluated independently.
 
 Machine-readable evidence:
 

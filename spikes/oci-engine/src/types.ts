@@ -43,8 +43,12 @@ export type EngineFacts = {
   desktopOrVm: boolean;
 };
 
+export type HostFacts = {
+  securityModules: readonly ("apparmor" | "selinux")[];
+};
+
 export type SpikeEvidence = {
-  schemaVersion: "1";
+  schemaVersion: "2";
   spikeId: string;
   recordedAt: string;
   image: string;
@@ -58,6 +62,7 @@ export type SpikeEvidence = {
     network: "none";
     rootFilesystem: "read-only";
   };
+  host: HostFacts;
   facts: EngineFacts;
   preflight: readonly GateResult[];
   adversarial: readonly GateResult[];

@@ -12,11 +12,12 @@ function evidence(
   overrides: Partial<SpikeEvidence> = {},
 ): SpikeEvidence {
   return {
-    schemaVersion: "1",
+    schemaVersion: "2",
     spikeId: `${engine}-spike`,
     recordedAt: "2026-07-31T00:00:00.000Z",
     image,
     profile: sandboxProfile,
+    host: { securityModules: ["apparmor"] },
     facts: {
       engine,
       available: true,
@@ -79,7 +80,9 @@ function reviewableOutcomes(
     {
       engine: "docker",
       evidenceFile: "docker.json",
-      evidence: input.docker ?? evidence("docker"),
+      evidence:
+        input.docker ??
+        evidence("docker", { eligibleForNativeSelection: false }),
     },
     {
       engine: "podman",
@@ -180,7 +183,17 @@ describe("native OCI comparison manifest", () => {
     ).toMatchObject({ passed: false });
   });
 
-  it("rejects a complete but ineligible required candidate", () => {
+  it("keeps an eliminated required candidate as valid comparison evidence", () => {
+    const podman = evidence("podman", {
+      eligibleForNativeSelection: false,
+    });
+    const docker = evidence("docker");
+    const result = comparison(reviewableOutcomes({ docker, podman }));
+
+    expect(result.readyForArchitectureReview).toBe(true);
+  });
+
+  it("rejects a comparison with no eligible candidate", () => {
     const podman = evidence("podman", {
       eligibleForNativeSelection: false,
     });
@@ -188,9 +201,7 @@ describe("native OCI comparison manifest", () => {
 
     expect(result.readyForArchitectureReview).toBe(false);
     expect(
-      result.gates.find(
-        (gate) => gate.name === "required candidate eligibility",
-      ),
+      result.gates.find((gate) => gate.name === "eligible candidate"),
     ).toMatchObject({ passed: false });
   });
 

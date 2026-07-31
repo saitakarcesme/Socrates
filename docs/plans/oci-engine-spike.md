@@ -54,6 +54,15 @@ reference host.
   WSL sharing; stricter production isolation requires a different host
   assumption:
   <https://docs.docker.com/desktop/features/wsl/>
+- GitHub standard Ubuntu jobs run directly on a newly provisioned Linux VM and
+  may install additional packages with `apt`; this is an acceptable disposable
+  reference-host class only when every harness preflight passes:
+  <https://docs.github.com/en/actions/concepts/runners/github-hosted-runners>
+  and
+  <https://docs.github.com/en/actions/how-tos/manage-runners/github-hosted-runners/customize-runners>
+- Docker explicitly lists AppArmor as unsupported in rootless mode. The spike
+  must measure that limitation rather than relaxing the LSM gate:
+  <https://docs.docker.com/engine/security/rootless/troubleshoot/>
 
 ## Host preflight gates
 
@@ -65,8 +74,10 @@ facts are observable:
 3. Cgroup v2 with delegated `cpu`, `memory`, and `pids` controllers.
 4. Seccomp enabled with no unconfined override.
 5. AppArmor or SELinux enabled on the native reference host.
-6. Private PID, IPC, mount, user, cgroup, and network namespaces.
-7. Engine supports a non-root user, all-capability drop,
+6. The sandbox observes an enforcing AppArmor or SELinux label rather than
+   `unconfined`.
+7. Private PID, IPC, mount, user, cgroup, and network namespaces.
+8. Engine supports a non-root user, all-capability drop,
    no-new-privileges, read-only rootfs, bounded tmpfs, and explicit resource
    limits.
 
@@ -142,13 +153,28 @@ development-host evidence.
 The comparison manifest is review-ready only when:
 
 1. Docker and Podman both produced complete evidence.
-2. Both required candidates are eligible for native selection.
+2. At least one measured candidate is eligible for native selection.
 3. Their image, fixed profile, kernel, architecture, and cgroup version match.
 4. Every requested optional candidate either produced evidence or is recorded
    as unavailable; optional failure cannot be mistaken for required success.
 
 The manifest never chooses the lowest-latency engine. Enforcement evidence and
 an explicit ADR review remain authoritative.
+
+Docker documents AppArmor as unsupported in rootless mode. The native rerun
+therefore measures Docker rather than presuming it can pass; failure of its
+sandbox LSM gate is expected to eliminate it if no supported alternative LSM
+is active. The policy is not weakened to keep every candidate eligible.
+
+## Reference-host automation
+
+The manual-only GitHub Actions workflow uses a fresh `ubuntu-24.04` VM, runs
+directly on the host, installs rootless prerequisites, stops the preinstalled
+rootful Docker daemon, and starts a rootless Docker user service. Podman runs
+rootless as the same unprivileged operator. The workflow pre-pulls the immutable
+image for both engines, executes one native comparison session, and uploads the
+session directory even when a gate fails. It has read-only repository
+permissions and does not run for pull requests or untrusted forks.
 
 ## Promotion rule
 

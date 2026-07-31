@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { runCommand } from "./process";
 import { readEngineFacts } from "./engine-adapter";
+import { readHostFacts } from "./host-facts";
 import {
   ownedContainerFilter,
   sandboxProfile,
@@ -214,6 +215,8 @@ async function runAdversarialProbes(
       'controllers="$(cat /sys/fs/cgroup/cgroup.controllers)"',
       'for required in cpu memory pids; do echo "$controllers" | grep -qw "$required"; done',
       "printf '%s\\n' \"$controllers\"",
+      'lsm="$(cat /proc/self/attr/current 2>/dev/null || true)"',
+      'printf "lsm=%s\\n" "$lsm"',
       "mkdir /tmp/mount-target",
       "if mount -t tmpfs none /tmp/mount-target 2>/dev/null; then exit 41; fi",
       "if unshare -m true 2>/dev/null; then exit 42; fi",
@@ -230,6 +233,23 @@ async function runAdversarialProbes(
     detail:
       security.result.exitCode === 0
         ? "cpu, memory, and pids controllers are visible"
+        : `probe exited ${security.result.exitCode}`,
+  });
+  gates.push({
+    name: "sandbox LSM confinement",
+    passed:
+      security.result.exitCode === 0 &&
+      security.result.stdout
+        .split(/\r?\n/)
+        .some(
+          (line) =>
+            line.startsWith("lsm=") &&
+            line !== "lsm=" &&
+            !line.toLowerCase().includes("unconfined"),
+        ),
+    detail:
+      security.result.exitCode === 0
+        ? "workload security label is present and confined"
         : `probe exited ${security.result.exitCode}`,
   });
   gates.push({
@@ -453,7 +473,10 @@ export async function runEngineSpike(input: {
   const spikeId = randomUUID();
   const recordedAt = new Date().toISOString();
   const runtime = { name: input.engine } satisfies EngineRuntime;
-  const facts = await readEngineFacts(input.engine);
+  const [facts, host] = await Promise.all([
+    readEngineFacts(input.engine),
+    readHostFacts(),
+  ]);
   const pinnedImage = /@sha256:[a-f0-9]{64}$/.test(input.image);
   const preflight: GateResult[] = [
     {
@@ -497,11 +520,23 @@ export async function runEngineSpike(input: {
         : "seccomp not reported",
     },
     {
-      name: "host LSM",
+      name: "host LSM enabled",
+      passed: host.securityModules.length > 0,
+      detail:
+        host.securityModules.length > 0
+          ? `host reports ${host.securityModules.join(", ")}`
+          : "requires AppArmor or SELinux on the native reference host",
+    },
+    {
+      name: "engine sandbox LSM",
       passed:
         securityOption(facts.securityOptions, "apparmor") ||
         securityOption(facts.securityOptions, "selinux"),
-      detail: "requires AppArmor or SELinux on the native reference host",
+      detail:
+        securityOption(facts.securityOptions, "apparmor") ||
+        securityOption(facts.securityOptions, "selinux")
+          ? "engine reports AppArmor or SELinux sandbox support"
+          : "engine does not report AppArmor or SELinux sandbox support",
     },
   ];
 
@@ -573,11 +608,12 @@ export async function runEngineSpike(input: {
     cleanup.every((gate) => gate.passed);
 
   return {
-    schemaVersion: "1",
+    schemaVersion: "2",
     spikeId,
     recordedAt,
     image: input.image,
     profile: sandboxProfile,
+    host,
     facts,
     preflight,
     adversarial,

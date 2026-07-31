@@ -1218,11 +1218,28 @@ typed arguments, startup self-checks, and cancellation ownership anew.
 Native reference-host evidence is produced as one comparison session rather
 than by manually combining independent files. Docker and Podman are required
 candidates; nerdctl is measured when available. The session manifest fails
-closed unless both required candidates pass every native preflight,
-adversarial, cancellation, and cleanup gate with the same immutable image,
-sandbox profile, kernel, architecture, and cgroup version. It may mark the
-evidence ready for architecture review, but it cannot select or rank an engine;
-the reviewed ADR amendment remains the selection authority.
+closed unless both required candidates produce complete evidence with the same
+immutable image, sandbox profile, kernel, architecture, and cgroup version and
+at least one candidate passes every native preflight, adversarial,
+cancellation, and cleanup gate. A failed candidate remains valid comparison
+evidence; requiring every candidate to be eligible would prevent the spike
+from eliminating an engine. It may mark the evidence ready for architecture
+review, but it cannot select or rank an engine; the reviewed ADR amendment
+remains the selection authority.
+
+Host LSM availability and sandbox LSM confinement are separate gates. The host
+must have AppArmor or SELinux enabled, and the workload must observe an
+enforcing, non-`unconfined` security label. Docker documents AppArmor as
+unsupported in rootless mode, so rootless Docker is expected to fail the
+sandbox LSM gate unless a different supported host LSM is proven. This is a
+selection result, not permission to weaken the policy.
+
+A disposable, dedicated Ubuntu virtual machine is an acceptable reference-host
+class when the workflow runs directly on that VM, not inside a job container,
+and the harness observes its Linux kernel, systemd cgroup v2 delegation, user
+namespaces, and host LSM directly. Desktop Linux VMs, WSL, Podman Machine, and
+shared container jobs remain development-only. Hosted-runner latency is
+contextual comparison evidence, not a production capacity commitment.
 
 ## 19. Explicit non-goals for the first commit
 

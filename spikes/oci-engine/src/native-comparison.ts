@@ -39,9 +39,9 @@ export function buildNativeComparison(input: {
     .filter((evidence): evidence is SpikeEvidence => evidence !== undefined);
   const requiredComplete =
     requiredEvidence.length === requiredNativeEngines.length;
-  const requiredEligible =
-    requiredComplete &&
-    requiredEvidence.every((evidence) => evidence.eligibleForNativeSelection);
+  const eligibleCandidate = input.outcomes.some(
+    (outcome) => outcome.evidence?.eligibleForNativeSelection === true,
+  );
   const sameImageAndProfile =
     requiredComplete &&
     requiredEvidence.every((evidence) => evidence.image === input.image) &&
@@ -63,6 +63,13 @@ export function buildNativeComparison(input: {
     sameDefinedValue(
       requiredEvidence,
       (evidence) => evidence.facts.cgroupVersion,
+    ) &&
+    requiredEvidence.every(
+      (evidence) =>
+        JSON.stringify([...evidence.host.securityModules].sort()) ===
+        JSON.stringify(
+          [...(requiredEvidence[0]?.host.securityModules ?? [])].sort(),
+        ),
     );
   const comparableLatency =
     requiredComplete &&
@@ -85,11 +92,11 @@ export function buildNativeComparison(input: {
         : "Docker or Podman evidence is missing",
     ),
     gate(
-      "required candidate eligibility",
-      requiredEligible,
-      requiredEligible
-        ? "Docker and Podman passed every native selection gate"
-        : "Docker or Podman is not eligible for native selection",
+      "eligible candidate",
+      eligibleCandidate,
+      eligibleCandidate
+        ? "at least one measured candidate passed every native selection gate"
+        : "no measured candidate is eligible for native selection",
     ),
     gate(
       "fixed input comparability",
@@ -102,7 +109,7 @@ export function buildNativeComparison(input: {
       "reference host identity",
       sameHost,
       sameHost
-        ? "required candidates report the same kernel, architecture, and cgroup version"
+        ? "required candidates report the same kernel, architecture, cgroup version, and host LSMs"
         : "required candidate host identity is missing or differs",
     ),
     gate(
