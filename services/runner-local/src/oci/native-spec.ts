@@ -132,8 +132,9 @@ export function verifyNativeSpec(
   }
   if (capabilityMismatch) {
     failures.push(
-      `capabilities.shape=${JSON.stringify(
-        caseInsensitiveValue(process, "capabilities"),
+      `capabilities.shape=${(
+        JSON.stringify(caseInsensitiveValue(process, "capabilities")) ??
+        "undefined"
       ).slice(0, 1_000)}`,
     );
   }
