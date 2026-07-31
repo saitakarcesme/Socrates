@@ -55,13 +55,17 @@ export class TaskRuntimeProgram {
     let request: RuntimeRequest | undefined;
     try {
       for await (const chunk of input) {
-        for (const message of decoder.push(chunk)) {
-          if (request) throw new Error("Duplicate runtime request.");
-          request = message;
+        const messages = decoder.push(chunk);
+        if (messages.length === 1) {
+          request = messages[0];
+          decoder.finish();
+          break;
         }
       }
-      decoder.finish();
-      if (!request) throw new Error("Runtime request is missing.");
+      if (!request) {
+        decoder.finish();
+        throw new Error("Runtime request is missing.");
+      }
     } catch {
       this.#write(sink, {
         type: "runtime.error",

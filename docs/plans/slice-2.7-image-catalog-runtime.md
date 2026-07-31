@@ -71,8 +71,16 @@ entrypoint. The outer process boundary writes exactly one request:
 ```text
 uint32be payload length
 strict UTF-8 JSON payload
-EOF
 ```
+
+The length prefix, not transport EOF, terminates the request. The guarded outer
+runner validates and encodes the complete canonical request before container
+creation, writes that exact single buffer, and never exposes the runtime stdin
+to an untrusted producer. The in-image runtime begins only after that complete
+frame has arrived; it does not wait for an engine-specific attach stream to
+close. A second frame or bytes following the first frame in the same delivered
+chunk fail closed. Later writes are outside the ABI and the guarded runner never
+performs them.
 
 The maximum request is fixed and checked before create. The canonical request
 contains:
@@ -85,8 +93,8 @@ contains:
 - command, wall-time, writable, and output budgets already capped by runner
   policy.
 
-Unknown fields, non-canonical JSON, invalid UTF-8, extra frames, trailing bytes,
-or early EOF fail before source copying or command execution.
+Unknown fields, non-canonical JSON, invalid UTF-8, an incomplete frame, or
+coalesced extra input fail before source copying or command execution.
 
 ## Runtime execution
 
@@ -161,8 +169,8 @@ Runtime stderr must remain empty.
 - tag, digest, platform, config, entrypoint, environment, volume, ABI, and
   build-identity mismatches;
 - missing local image and attempted implicit pull;
-- oversized, truncated, duplicate, non-canonical, invalid UTF-8, and
-  trailing-byte requests;
+- oversized, truncated, duplicate/coalesced, non-canonical, invalid UTF-8, and
+  same-chunk trailing-byte requests;
 - command order, cwd, argv, timeout, and environment mutations;
 - binary output, frame injection text, invalid base64, oversized frames,
   write-fragment frame amplification, sequence gaps, duplicate terminal

@@ -1585,6 +1585,14 @@ budgets. Attempt identity and image digest are compared again before input is
 written. Request data is never stored in image metadata, environment, or a host
 bind.
 
+The four-byte length prefix is the request terminator; transport EOF is not
+part of the ABI because an attached containerd stdin stream is not required to
+close when its client finishes writing. The guarded runner owns this boundary:
+it validates and encodes the entire canonical request before create, writes
+exactly one buffer, and never forwards an untrusted stream. The runtime waits
+for that one complete frame, rejects any coalesced second frame or trailing
+bytes, and begins work immediately without waiting for attach-stream closure.
+
 For every guarded container invocation, the backend maps the authorized outer
 command executable to nerdctl's explicit `--entrypoint` option and places only
 its argument array after the image content address. Image configuration therefore

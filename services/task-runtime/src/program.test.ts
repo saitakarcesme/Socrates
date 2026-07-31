@@ -119,6 +119,42 @@ describe("task runtime program", () => {
     });
   });
 
+  it("invokes the engine after one complete frame without waiting for EOF", async () => {
+    const engine = new FakeEngine();
+    const output = sink();
+    const input = request();
+    const encoded = encodeRuntimeMessage(
+      runtimeRequestSchema,
+      input,
+      maximumRuntimeRequestBytes,
+    );
+    let reads = 0;
+    const openInput: AsyncIterable<Uint8Array> = {
+      [Symbol.asyncIterator]() {
+        return {
+          async next() {
+            reads += 1;
+            if (reads === 1) return { done: false, value: encoded };
+            throw new Error(
+              "Runtime attempted to read past the framed request.",
+            );
+          },
+          async return() {
+            return { done: true, value: undefined };
+          },
+        };
+      },
+    };
+
+    await new TaskRuntimeProgram(
+      engine as Pick<TaskRuntimeEngine, "execute">,
+      buildDigest,
+    ).execute(openInput, output);
+
+    expect(reads).toBe(1);
+    expect(engine.requests).toEqual([input]);
+  });
+
   it("rejects duplicate requests without invoking the engine", async () => {
     const engine = new FakeEngine();
     const output = sink();
