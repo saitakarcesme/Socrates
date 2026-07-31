@@ -52,7 +52,7 @@ pnpm typecheck           passed
 pnpm lint                passed
 pnpm audit:phase-1       passed
 pnpm audit:phase-2       passed
-pnpm test                passed (189 tests)
+pnpm test                passed (204 tests)
 pnpm build               passed
 pnpm test:e2e            passed (Chromium, 1 journey)
 ```
@@ -61,6 +61,11 @@ Database package result on the fresh PostgreSQL instance: 44 tests passed,
 including 20 scheduler integration tests, 12 query-plan tests, and 7 migration
 tests.
 
-## Remaining Phase 2.1 work
+API application result: 53 tests passed, including 15 exhaustive runner-gateway
+mapping tests.
 
-- conflicting attempt-ID mapping at the API error boundary.
+## Phase 2.1 status
+
+Complete. The next planned work is Slice 2.2's deterministic fake-runner
+vertical slice. Public runner transport remains intentionally absent until its
+deployment authentication adapter is defined.

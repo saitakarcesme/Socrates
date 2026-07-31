@@ -1080,6 +1080,27 @@ messages but ingestion returns `unsupported_event` until Slice 2.3 implements
 aggregate byte limits, redaction enforcement, digest verification, and
 retention. Parseability is not authorization to persist unbounded evidence.
 
+### ADR-038: Runner error semantics precede the authenticated transport
+
+The API application layer owns a transport-neutral `RunnerGatewayService` that
+invokes scheduler transactions and converts every non-success scheduler result
+into the existing `CommandError` vocabulary. Attempt identity reuse, occupied
+tasks, capability mismatch, stale fences, and event conflicts are
+`resource_conflict`; lifecycle violations are `invalid_transition`; malformed
+evidence and event kinds that are not yet supported are `protocol_mismatch`.
+Sequence gaps are conflicts carrying the exact expected sequence. The
+machine-readable scheduler cause is preserved as `details.runnerReason`.
+
+Exact claim and event replays remain successful application results rather than
+errors. This lets a future authenticated HTTP or streaming adapter return the
+original acknowledgement without duplicating state.
+
+This slice does not register runner routes in Hono. Runner authentication is
+deployment-specific and remains a prerequisite; accepting caller-supplied
+runner IDs on a public route would bypass ADR-031. The application service is
+therefore tested directly and becomes the only allowed entry point for a later
+authenticated transport adapter.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

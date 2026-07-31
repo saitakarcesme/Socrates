@@ -14,11 +14,15 @@ export class CommandError extends Error {
   }
 }
 
-export function notFound(resource: string): never {
+export function notFound(
+  resource: string,
+  details?: Record<string, unknown>,
+): never {
   throw new CommandError(
     404,
     "not_found",
     `The requested ${resource} does not exist.`,
+    details,
   );
 }
 
@@ -31,14 +35,23 @@ export function versionConflict(expected: number, actual: number): never {
   );
 }
 
-export function resourceConflict(message: string): never {
-  throw new CommandError(409, "resource_conflict", message);
+export function resourceConflict(
+  message: string,
+  details?: Record<string, unknown>,
+): never {
+  throw new CommandError(409, "resource_conflict", message, details);
 }
 
-export function invalidTransition(message: string): never {
-  throw new CommandError(409, "invalid_transition", message);
+export function invalidTransition(
+  message: string,
+  details?: Record<string, unknown>,
+): never {
+  throw new CommandError(409, "invalid_transition", message, details);
 }
 
-export function protocolMismatch(message: string): never {
-  throw new CommandError(422, "protocol_mismatch", message);
+export function protocolMismatch(
+  message: string,
+  details?: Record<string, unknown>,
+): never {
+  throw new CommandError(422, "protocol_mismatch", message, details);
 }

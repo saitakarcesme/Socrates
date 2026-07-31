@@ -241,7 +241,7 @@ Implementation status: Complete on 2026-07-31.
 Exit: concurrent PostgreSQL tests prove one active fence, stale-writer
 rejection, idempotent claims, and crash recovery.
 
-Implementation status: In progress.
+Implementation status: Complete on 2026-07-31.
 
 Completed:
 
@@ -271,10 +271,11 @@ Completed:
 - lifecycle-driven attempt/task transitions with atomic terminal events
 - transactional runner lifecycle projection into the run-event ledger
 - explicit log/artifact deferral until bounded evidence storage is available
-
-Remaining:
-
-- conflicting attempt-ID handling at the API error boundary
+- transport-neutral runner application service
+- exhaustive scheduler-result to `CommandError` mapping
+- explicit attempt-ID conflict and sequence-gap application semantics
+- exact replay preservation at the application boundary
+- public runner transport withheld until deployment authentication
 
 ### Slice 2.2 — fake runner vertical slice
 
