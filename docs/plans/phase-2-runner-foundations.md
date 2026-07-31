@@ -312,6 +312,23 @@ Completed:
 - test redaction, HTML escaping, traversal, malformed media types, and quota
   exhaustion
 
+Architecture decision: ADR-040.
+
+Implementation order:
+
+1. Add attempt-level accepted-byte counters and immutable artifact metadata.
+2. Introduce the pathless artifact-store port and a local content-addressed
+   adapter with streaming digest and size verification.
+3. Add control-plane log redaction and verified-artifact admission before the
+   scheduler transaction.
+4. Admit both event kinds through the existing ordered acknowledgement
+   boundary, with quota accounting in the same transaction.
+5. Prove replay, quota, digest, traversal, inert rendering, and crash-boundary
+   behavior against real PostgreSQL and a disposable filesystem root.
+
+The slice does not add a public runner route, retention daemon, object-store
+vendor, or executable runner.
+
 Exit: untrusted outputs cannot escape their storage or rendering boundaries.
 
 ### Slice 2.4 — OCI engine spike

@@ -1123,6 +1123,52 @@ deterministic spool through the durable acknowledgement boundary. This adapter
 proves orchestration semantics only; it cannot satisfy or bypass the guarded
 OCI adapter gates.
 
+### ADR-040: Evidence admission is quota-atomic and pathless
+
+Slice 2.3 keeps log chunks in `runner_task_events`; a second log table would
+duplicate ordering and replay semantics without adding an independent
+aggregate. Each attempt stores accepted log and artifact byte counters. The
+scheduler locks that attempt, checks the frozen task budget, inserts the event,
+and advances the counter and acknowledgement cursor in one transaction.
+Exhaustion returns a typed budget result without consuming a sequence number.
+Exact replays never consume quota twice.
+
+The runner's `redacted` flag is provenance, not proof. Before persistence, the
+control plane applies a deterministic secondary redactor for high-risk token,
+authorization, and private-key shapes, marks the persisted payload as redacted,
+and recomputes its UTF-8 byte count. The post-redaction chunk must still satisfy
+the protocol limit and aggregate budget. This filter is defense in depth, not
+credential discovery; credentials remain absent by default and scoped by
+capability when a later adapter requires them. UI renderers receive log text as
+data and must escape it rather than interpreting HTML or control syntax.
+
+Artifact bytes cross a separate `ArtifactStore` port before their event is
+admitted. The port accepts bytes plus an expected SHA-256 digest and size,
+streams into a private temporary object, verifies both limits, and publishes by
+atomic rename under a digest-derived key. It returns an opaque verified-object
+capability. The scheduler application boundary consumes only a matching,
+verified capability when committing `artifact.produced`; callers cannot submit
+a host path or storage key. PostgreSQL stores immutable content metadata and an
+attempt-scoped artifact record, never the binary.
+
+Artifact content identity is the digest, while the protocol `artifactId`
+identifies its attempt-scoped metadata record. Repeated content may therefore
+deduplicate across records without merging provenance. Metadata insertion,
+artifact-byte accounting, event insertion, and cursor advancement are one
+database transaction. Upload-before-metadata can leave an unreferenced object
+after a crash, so local storage exposes enumeration and deletion only to a
+future grace-period reconciler; request paths never delete objects. Metadata
+cannot precede a verified object.
+
+The local filesystem adapter receives its root through trusted bootstrap
+configuration and derives every final and temporary path internally from a
+strict lowercase SHA-256 digest. No protocol field is joined to a filesystem
+path. Existing identical objects make upload idempotent; digest mismatch, size
+mismatch, oversize input, malformed media type, traversal-shaped identifiers,
+and quota exhaustion fail closed. Retention is recorded as an explicit class
+on metadata; deletion policy remains out of scope until a durable reconciler
+exists.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
