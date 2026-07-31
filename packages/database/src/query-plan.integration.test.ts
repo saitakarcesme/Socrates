@@ -97,6 +97,13 @@ integration("PostgreSQL read query plans", () => {
        ORDER BY lease_expires_at, id LIMIT 100`,
       "runner_task_attempts_active_lease_id_idx",
     ],
+    [
+      "task runner evidence",
+      `SELECT id, received_at FROM runner_task_events
+       WHERE task_id = '${scopeId}'
+       ORDER BY received_at, id LIMIT 101`,
+      "runner_task_events_task_received_id_idx",
+    ],
   ])("supports ordered %s reads with %s", async (_, query, indexName) => {
     await client.begin(async (transaction) => {
       await transaction`SET LOCAL enable_seqscan = off`;

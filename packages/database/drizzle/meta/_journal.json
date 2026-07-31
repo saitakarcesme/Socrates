@@ -50,6 +50,13 @@
       "when": 1785455264064,
       "tag": "0006_runner_task_cancellation",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785455715030,
+      "tag": "0007_ordered_runner_events",
+      "breakpoints": true
     }
   ]
 }

@@ -263,21 +263,18 @@ Completed:
 - non-retry-safe failure and cancellation-on-expiry classification
 - transactional lifecycle outbox messages for accepted scheduler transitions
 - real PostgreSQL cancellation-race, stale-writer, and expiry recovery proofs
+- immutable V2 event envelopes tied to attempt/task/runner/fence identity
+- normalized event-digest and attempt-sequence conflict detection
+- concurrent exact replay acknowledgement after committed evidence
+- gap, stale-fence, expired-lease, and invalid-evidence rejection
+- task-snapshot validation for source, image, command order, and measurement
+- lifecycle-driven attempt/task transitions with atomic terminal events
+- transactional runner lifecycle projection into the run-event ledger
+- explicit log/artifact deferral until bounded evidence storage is available
 
 Remaining:
 
-- acknowledged runner event persistence
 - conflicting attempt-ID handling at the API error boundary
-- task lifecycle projection into the run timeline
-
-Current sub-slice:
-
-- immutable V2 event envelopes with normalized-content conflict detection
-- exact replay acknowledgements and contiguous attempt-local cursors
-- lifecycle-driven attempt/task state transitions
-- atomic terminal event, cursor, and terminal compare-and-set
-- transactional projection into the existing run-event ledger
-- explicit rejection of log and artifact ingestion until bounded storage lands
 
 ### Slice 2.2 — fake runner vertical slice
 

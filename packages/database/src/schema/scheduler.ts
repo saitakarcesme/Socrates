@@ -179,6 +179,12 @@ export const runnerTaskAttempts = pgTable(
       table.taskId,
       table.fence,
     ),
+    uniqueIndex("runner_task_attempts_identity_unique").on(
+      table.id,
+      table.taskId,
+      table.runnerId,
+      table.fence,
+    ),
     uniqueIndex("runner_task_attempts_one_active_per_task")
       .on(table.taskId)
       .where(
@@ -210,6 +216,58 @@ export const runnerTaskAttempts = pgTable(
     check(
       "runner_task_attempts_failure_classification",
       sql`(${table.status} = 'failed') = (${table.failureClassification} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export const runnerTaskEvents = pgTable(
+  "runner_task_events",
+  {
+    id: uuid("id").primaryKey(),
+    taskId: uuid("task_id").notNull(),
+    attemptId: uuid("attempt_id").notNull(),
+    runnerId: uuid("runner_id").notNull(),
+    fence: integer("fence").notNull(),
+    sequence: integer("sequence").notNull(),
+    protocolVersion: text("protocol_version").notNull(),
+    type: text("type").notNull(),
+    payload: jsonb("payload").notNull(),
+    envelopeDigest: text("envelope_digest").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("runner_task_events_attempt_sequence_unique").on(
+      table.attemptId,
+      table.sequence,
+    ),
+    index("runner_task_events_task_received_id_idx").on(
+      table.taskId,
+      table.receivedAt,
+      table.id,
+    ),
+    foreignKey({
+      name: "runner_task_events_attempt_identity_fk",
+      columns: [table.attemptId, table.taskId, table.runnerId, table.fence],
+      foreignColumns: [
+        runnerTaskAttempts.id,
+        runnerTaskAttempts.taskId,
+        runnerTaskAttempts.runnerId,
+        runnerTaskAttempts.fence,
+      ],
+    }),
+    positiveCheck("runner_task_events_fence_positive", table.fence),
+    positiveCheck("runner_task_events_sequence_positive", table.sequence),
+    check(
+      "runner_task_events_protocol_v2",
+      sql`${table.protocolVersion} = '2'`,
+    ),
+    check("runner_task_events_type_non_empty", sql`length(${table.type}) > 0`),
+    check(
+      "runner_task_events_digest_sha256",
+      sql`${table.envelopeDigest} ~ '^[0-9a-f]{64}$'`,
     ),
   ],
 );

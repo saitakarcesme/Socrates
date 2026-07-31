@@ -170,6 +170,33 @@ export type ReconcileExpiredRunnerTasksResult = {
   reconciled: readonly ReconciledRunnerTask[];
 };
 
+export type IngestRunnerEventInput = {
+  event: JsonValue;
+};
+
+export type RunnerEventAcknowledgement = {
+  eventId: string;
+  attemptId: string;
+  acknowledgedSequence: number;
+  expectedSequence: number;
+  receivedAt: Date;
+};
+
+export type IngestRunnerEventResult =
+  | {
+      state: "accepted" | "replay";
+      acknowledgement: RunnerEventAcknowledgement;
+    }
+  | { state: "gap"; expectedSequence: number }
+  | {
+      state:
+        | "event_conflict"
+        | "invalid_evidence"
+        | "invalid_transition"
+        | "stale"
+        | "unsupported_event";
+    };
+
 export interface SchedulerRepository {
   registerRunner(input: RunnerRegistrationWrite): Promise<void>;
   createTask(input: RunnerTaskWrite): Promise<CreateRunnerTaskResult>;
@@ -186,6 +213,7 @@ export interface SchedulerRepository {
   reconcileExpiredTasks(
     input: ReconcileExpiredRunnerTasksInput,
   ): Promise<ReconcileExpiredRunnerTasksResult>;
+  ingestEvent(input: IngestRunnerEventInput): Promise<IngestRunnerEventResult>;
 }
 
 export type TransactionRepositories = {

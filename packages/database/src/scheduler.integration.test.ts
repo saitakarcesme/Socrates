@@ -7,6 +7,7 @@ import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createPersistence } from "./persistence";
+import type { RunnerEventV2 } from "@socrates/contracts";
 import type {
   ClaimRunnerTaskResult,
   Persistence,
@@ -18,8 +19,10 @@ import {
   metricDefinitions,
   outboxMessages,
   projects,
+  runEvents,
   runnerTaskAttempts,
   runnerTaskCancellations,
+  runnerTaskEvents,
   runnerTasks,
   runs,
   workspaces,
@@ -44,7 +47,7 @@ integration("PostgreSQL scheduler persistence", () => {
   const projectId = randomUUID();
   const metricDefinitionId = randomUUID();
   const runId = randomUUID();
-  const experimentIds = Array.from({ length: 16 }, () => randomUUID());
+  const experimentIds = Array.from({ length: 21 }, () => randomUUID());
   const runnerId = randomUUID();
   const secondRunnerId = randomUUID();
   const foreignRunnerId = randomUUID();
@@ -146,6 +149,41 @@ integration("PostgreSQL scheduler persistence", () => {
         egressBytes: 0,
       },
     },
+  });
+
+  const claimForEvents = async (experimentIndex: number) => {
+    const taskId = randomUUID();
+    const attemptId = randomUUID();
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.createTask(task(taskId, experimentIds[experimentIndex]!)),
+    );
+    const result = await persistence.transaction(({ scheduler }) =>
+      scheduler.claimTask({
+        runnerId,
+        taskId,
+        attemptId,
+        leaseDurationMs: 120_000,
+      }),
+    );
+    if (result.state !== "claimed") {
+      throw new Error(`Expected event test claim, received ${result.state}.`);
+    }
+    return { taskId, attemptId, fence: result.claim.fence };
+  };
+
+  const eventEnvelope = (
+    claim: Awaited<ReturnType<typeof claimForEvents>>,
+    sequence: number,
+    eventId = randomUUID(),
+  ) => ({
+    version: "2" as const,
+    eventId,
+    runnerId,
+    taskId: claim.taskId,
+    attemptId: claim.attemptId,
+    fence: claim.fence,
+    sequence,
+    occurredAt: "2026-07-31T00:00:00.000Z",
   });
 
   beforeAll(async () => {
@@ -845,5 +883,340 @@ integration("PostgreSQL scheduler persistence", () => {
         }),
       ),
     ).resolves.toEqual({ state: "request_conflict" });
+  });
+
+  it("acknowledges an ordered lifecycle and atomically projects terminal evidence", async () => {
+    const claim = await claimForEvents(16);
+    const prepared = {
+      ...eventEnvelope(claim, 1),
+      type: "workspace.prepared" as const,
+      payload: {
+        sourceDigest:
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        imageDigest:
+          "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      },
+    };
+    const preparedResults = await Promise.all([
+      persistence.transaction(({ scheduler }) =>
+        scheduler.ingestEvent({ event: prepared }),
+      ),
+      persistence.transaction(({ scheduler }) =>
+        scheduler.ingestEvent({ event: prepared }),
+      ),
+    ]);
+    expect(preparedResults.map(({ state }) => state).sort()).toEqual([
+      "accepted",
+      "replay",
+    ]);
+    for (const result of preparedResults) {
+      expect(result).toMatchObject({
+        acknowledgement: {
+          eventId: prepared.eventId,
+          acknowledgedSequence: 1,
+          expectedSequence: 2,
+        },
+      });
+    }
+
+    const lifecycleEvents: RunnerEventV2[] = [
+      {
+        ...eventEnvelope(claim, 2),
+        type: "action.started" as const,
+        payload: { commandIndex: 0 },
+      },
+      {
+        ...eventEnvelope(claim, 3),
+        type: "action.completed" as const,
+        payload: { commandIndex: 0, exitCode: 0, durationMs: 1200 },
+      },
+      {
+        ...eventEnvelope(claim, 4),
+        type: "measurement.recorded" as const,
+        payload: {
+          metricDefinitionId,
+          amount: "99",
+          unit: "ms",
+          sampleCount: 1,
+        },
+      },
+      {
+        ...eventEnvelope(claim, 5),
+        type: "task.succeeded" as const,
+        payload: { exitCode: 0 as const, durationMs: 1500 },
+      },
+    ];
+    for (const event of lifecycleEvents) {
+      await expect(
+        persistence.transaction(({ scheduler }) =>
+          scheduler.ingestEvent({ event }),
+        ),
+      ).resolves.toMatchObject({
+        state: "accepted",
+        acknowledgement: {
+          eventId: event.eventId,
+          acknowledgedSequence: event.sequence,
+          expectedSequence: event.sequence + 1,
+        },
+      });
+    }
+
+    const terminalEvent = lifecycleEvents[3]!;
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.ingestEvent({ event: terminalEvent }),
+      ),
+    ).resolves.toMatchObject({
+      state: "replay",
+      acknowledgement: {
+        eventId: terminalEvent.eventId,
+        acknowledgedSequence: 5,
+      },
+    });
+
+    const storedEvents = await database
+      .select({
+        type: runnerTaskEvents.type,
+        sequence: runnerTaskEvents.sequence,
+      })
+      .from(runnerTaskEvents)
+      .where(eq(runnerTaskEvents.attemptId, claim.attemptId))
+      .orderBy(runnerTaskEvents.sequence);
+    expect(storedEvents).toEqual([
+      { type: "workspace.prepared", sequence: 1 },
+      { type: "action.started", sequence: 2 },
+      { type: "action.completed", sequence: 3 },
+      { type: "measurement.recorded", sequence: 4 },
+      { type: "task.succeeded", sequence: 5 },
+    ]);
+
+    const [attempt] = await database
+      .select({
+        status: runnerTaskAttempts.status,
+        sequence: runnerTaskAttempts.lastEventSequence,
+        completedAt: runnerTaskAttempts.completedAt,
+      })
+      .from(runnerTaskAttempts)
+      .where(eq(runnerTaskAttempts.id, claim.attemptId));
+    const [storedTask] = await database
+      .select({
+        status: runnerTasks.status,
+        terminalAt: runnerTasks.terminalAt,
+      })
+      .from(runnerTasks)
+      .where(eq(runnerTasks.id, claim.taskId));
+    expect(attempt).toMatchObject({ status: "succeeded", sequence: 5 });
+    expect(attempt?.completedAt).toBeInstanceOf(Date);
+    expect(storedTask?.status).toBe("succeeded");
+    expect(storedTask?.terminalAt).toBeInstanceOf(Date);
+
+    const projected = await database
+      .select({ type: runEvents.type })
+      .from(runEvents)
+      .where(eq(runEvents.runId, runId));
+    expect(
+      projected.filter(({ type }) => type.startsWith("runner.")),
+    ).toHaveLength(5);
+  });
+
+  it("rejects gaps and conflicting identities without advancing the cursor", async () => {
+    const claim = await claimForEvents(17);
+    const payload = {
+      sourceDigest:
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      imageDigest:
+        "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    };
+    const firstEvent = {
+      ...eventEnvelope(claim, 1),
+      type: "workspace.prepared" as const,
+      payload,
+    };
+
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.ingestEvent({
+          event: {
+            ...eventEnvelope(claim, 2),
+            type: "workspace.prepared",
+            payload,
+          },
+        }),
+      ),
+    ).resolves.toEqual({ state: "gap", expectedSequence: 1 });
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.ingestEvent({ event: firstEvent }),
+    );
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.ingestEvent({
+          event: {
+            ...firstEvent,
+            payload: {
+              ...payload,
+              sourceDigest:
+                "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            },
+          },
+        }),
+      ),
+    ).resolves.toEqual({ state: "event_conflict" });
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.ingestEvent({
+          event: {
+            ...firstEvent,
+            eventId: randomUUID(),
+          },
+        }),
+      ),
+    ).resolves.toEqual({ state: "event_conflict" });
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.ingestEvent({
+          event: {
+            ...eventEnvelope(claim, 2),
+            type: "action.completed",
+            payload: { commandIndex: 0, exitCode: 0, durationMs: 1 },
+          },
+        }),
+      ),
+    ).resolves.toEqual({ state: "invalid_evidence" });
+
+    const [attempt] = await database
+      .select({ sequence: runnerTaskAttempts.lastEventSequence })
+      .from(runnerTaskAttempts)
+      .where(eq(runnerTaskAttempts.id, claim.attemptId));
+    expect(attempt?.sequence).toBe(1);
+  });
+
+  it("validates evidence against the immutable task snapshot and defers unbounded events", async () => {
+    const claim = await claimForEvents(18);
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.ingestEvent({
+          event: {
+            ...eventEnvelope(claim, 1),
+            type: "workspace.prepared",
+            payload: {
+              sourceDigest:
+                "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              imageDigest:
+                "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            },
+          },
+        }),
+      ),
+    ).resolves.toEqual({ state: "invalid_evidence" });
+
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.ingestEvent({
+        event: {
+          ...eventEnvelope(claim, 1),
+          type: "workspace.prepared",
+          payload: {
+            sourceDigest:
+              "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            imageDigest:
+              "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          },
+        },
+      }),
+    );
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.ingestEvent({
+          event: {
+            ...eventEnvelope(claim, 2),
+            type: "log.appended",
+            payload: {
+              stream: "stdout",
+              text: "bounded later",
+              utf8Bytes: 13,
+              redacted: true,
+            },
+          },
+        }),
+      ),
+    ).resolves.toEqual({ state: "unsupported_event" });
+
+    const [attempt] = await database
+      .select({ sequence: runnerTaskAttempts.lastEventSequence })
+      .from(runnerTaskAttempts)
+      .where(eq(runnerTaskAttempts.id, claim.attemptId));
+    expect(attempt?.sequence).toBe(1);
+  });
+
+  it("rejects new evidence after the database lease expires", async () => {
+    const claim = await claimForEvents(19);
+    await database
+      .update(runnerTaskAttempts)
+      .set({ leaseExpiresAt: new Date(0) })
+      .where(eq(runnerTaskAttempts.id, claim.attemptId));
+
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.ingestEvent({
+          event: {
+            ...eventEnvelope(claim, 1),
+            type: "task.failed",
+            payload: {
+              classification: "infrastructure",
+              message: "lease expired",
+            },
+          },
+        }),
+      ),
+    ).resolves.toEqual({ state: "stale" });
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.reconcileExpiredTasks({ limit: 100 }),
+    );
+  });
+
+  it("commits cancellation evidence and terminal state atomically", async () => {
+    const claim = await claimForEvents(20);
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.requestCancellation({
+        requestId: randomUUID(),
+        workspaceId,
+        taskId: claim.taskId,
+      }),
+    );
+    const cancelled = {
+      ...eventEnvelope(claim, 1),
+      type: "task.cancelled" as const,
+      payload: { forced: true, durationMs: 200 },
+    };
+
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.ingestEvent({ event: cancelled }),
+      ),
+    ).resolves.toMatchObject({
+      state: "accepted",
+      acknowledgement: { acknowledgedSequence: 1 },
+    });
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.ingestEvent({ event: cancelled }),
+      ),
+    ).resolves.toMatchObject({
+      state: "replay",
+      acknowledgement: { acknowledgedSequence: 1 },
+    });
+
+    const [attempt] = await database
+      .select({
+        status: runnerTaskAttempts.status,
+        sequence: runnerTaskAttempts.lastEventSequence,
+      })
+      .from(runnerTaskAttempts)
+      .where(eq(runnerTaskAttempts.id, claim.attemptId));
+    const [storedTask] = await database
+      .select({ status: runnerTasks.status })
+      .from(runnerTasks)
+      .where(eq(runnerTasks.id, claim.taskId));
+    expect(attempt).toEqual({ status: "cancelled", sequence: 1 });
+    expect(storedTask?.status).toBe("cancelled");
   });
 });

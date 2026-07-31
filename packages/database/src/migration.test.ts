@@ -20,6 +20,7 @@ import {
   runnerRegistrations,
   runnerTaskAttempts,
   runnerTaskCancellations,
+  runnerTaskEvents,
   runnerTasks,
   schemaMetadata,
   workspaces,
@@ -129,6 +130,7 @@ describe("Phase 2 scheduler migration", () => {
         runnerTasks,
         runnerTaskAttempts,
         runnerTaskCancellations,
+        runnerTaskEvents,
         outboxMessages,
       ].map((table) => getTableConfig(table).name),
     ).toEqual([
@@ -136,6 +138,7 @@ describe("Phase 2 scheduler migration", () => {
       "runner_tasks",
       "runner_task_attempts",
       "runner_task_cancellations",
+      "runner_task_events",
       "outbox_messages",
     ]);
   });
@@ -181,5 +184,28 @@ describe("Phase 2 scheduler migration", () => {
     );
     expect(migration).toContain(`"runner_task_cancellations_resulting_status"`);
     expect(migration).toContain(`SET "version" = 3`);
+  });
+
+  it("adds ordered fenced runner evidence before advancing compatibility", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0007_ordered_runner_events.sql", import.meta.url),
+      "utf8",
+    );
+
+    for (const evidence of [
+      `CREATE TABLE "runner_task_events"`,
+      `CREATE UNIQUE INDEX "runner_task_events_attempt_sequence_unique"`,
+      `CREATE UNIQUE INDEX "runner_task_attempts_identity_unique"`,
+      `CONSTRAINT "runner_task_events_attempt_identity_fk"`,
+      `CREATE INDEX "runner_task_events_task_received_id_idx"`,
+      `SET "version" = 4`,
+    ]) {
+      expect(migration).toContain(evidence);
+    }
+    expect(
+      migration.indexOf(`"runner_task_attempts_identity_unique"`),
+    ).toBeLessThan(
+      migration.indexOf(`"runner_task_events_attempt_identity_fk"`),
+    );
   });
 });

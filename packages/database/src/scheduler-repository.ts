@@ -1,10 +1,14 @@
-import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
+import { createHash } from "node:crypto";
+
+import { and, asc, count, eq, inArray, max, sql } from "drizzle-orm";
 import {
   experimentTaskV2Schema,
+  runnerEventV2Schema,
   runnerRegistrationV1Schema,
 } from "@socrates/contracts";
 import { runnerSatisfiesCapabilities } from "@socrates/domain";
 
+import type { RunnerEventV2 } from "@socrates/contracts";
 import type { DatabaseTransaction } from "./database-types";
 import type { JsonValue } from "./json";
 import type {
@@ -15,6 +19,8 @@ import type {
   CreateRunnerTaskResult,
   HeartbeatRunnerTaskInput,
   HeartbeatRunnerTaskResult,
+  IngestRunnerEventInput,
+  IngestRunnerEventResult,
   ReconcileExpiredRunnerTasksInput,
   ReconcileExpiredRunnerTasksResult,
   RequestRunnerTaskCancellationInput,
@@ -36,6 +42,10 @@ const maximumLeaseDurationMs = 15 * 60 * 1_000;
 const maximumReconciliationBatchSize = 100;
 const maximumFailureClassificationLength = 120;
 const terminalTaskStatuses = ["succeeded", "failed", "cancelled"] as const;
+type PersistedRunnerAttemptStatus =
+  (typeof schema.runnerAttemptStatus.enumValues)[number];
+type PersistedRunnerTaskStatus =
+  (typeof schema.runnerTaskStatus.enumValues)[number];
 
 function assertLeaseDuration(value: number): void {
   if (
@@ -95,6 +105,29 @@ function cancellationStatus(
   throw new Error(`Invalid persisted cancellation status: ${value}.`);
 }
 
+function normalizedEventDigest(event: RunnerEventV2): string {
+  return createHash("sha256").update(JSON.stringify(event)).digest("hex");
+}
+
+function isActiveAttemptStatus(
+  value: string,
+): value is (typeof activeAttemptStatuses)[number] {
+  return activeAttemptStatuses.some((status) => status === value);
+}
+
+function persistedCommandIndex(payload: unknown): number | null {
+  if (
+    typeof payload !== "object" ||
+    payload === null ||
+    !("commandIndex" in payload) ||
+    typeof payload.commandIndex !== "number" ||
+    !Number.isSafeInteger(payload.commandIndex)
+  ) {
+    return null;
+  }
+  return payload.commandIndex;
+}
+
 export class PostgresSchedulerRepository implements SchedulerRepository {
   constructor(private readonly transaction: DatabaseTransaction) {}
 
@@ -107,6 +140,39 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
       taskId,
       topic,
       payload,
+    });
+  }
+
+  private async appendProjectedRunnerEvent(
+    runId: string,
+    event: RunnerEventV2,
+  ): Promise<void> {
+    const [run] = await this.transaction
+      .select({ id: schema.runs.id })
+      .from(schema.runs)
+      .where(eq(schema.runs.id, runId))
+      .for("update");
+    if (!run) throw new Error(`Runner event run ${runId} does not exist.`);
+
+    const [cursor] = await this.transaction
+      .select({ value: max(schema.runEvents.sequence) })
+      .from(schema.runEvents)
+      .where(eq(schema.runEvents.runId, runId));
+
+    await this.transaction.insert(schema.runEvents).values({
+      runId,
+      sequence: (cursor?.value ?? 0) + 1,
+      type: `runner.${event.type}`,
+      schemaVersion: "2",
+      payload: {
+        eventId: event.eventId,
+        taskId: event.taskId,
+        attemptId: event.attemptId,
+        fence: event.fence,
+        sequence: event.sequence,
+        payload: event.payload,
+      },
+      occurredAt: new Date(event.occurredAt),
     });
   }
 
@@ -699,5 +765,315 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
     }
 
     return { reconciled };
+  }
+
+  async ingestEvent(
+    input: IngestRunnerEventInput,
+  ): Promise<IngestRunnerEventResult> {
+    const event = runnerEventV2Schema.parse(input.event);
+    const digest = normalizedEventDigest(event);
+
+    await this.transaction.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${event.eventId}, 0))`,
+    );
+
+    const [existingEvent] = await this.transaction
+      .select({
+        eventId: schema.runnerTaskEvents.id,
+        attemptId: schema.runnerTaskEvents.attemptId,
+        sequence: schema.runnerTaskEvents.sequence,
+        digest: schema.runnerTaskEvents.envelopeDigest,
+        receivedAt: schema.runnerTaskEvents.receivedAt,
+      })
+      .from(schema.runnerTaskEvents)
+      .where(eq(schema.runnerTaskEvents.id, event.eventId));
+    if (existingEvent) {
+      if (existingEvent.digest !== digest) {
+        return { state: "event_conflict" };
+      }
+      return {
+        state: "replay",
+        acknowledgement: {
+          eventId: existingEvent.eventId,
+          attemptId: existingEvent.attemptId,
+          acknowledgedSequence: existingEvent.sequence,
+          expectedSequence: existingEvent.sequence + 1,
+          receivedAt: existingEvent.receivedAt,
+        },
+      };
+    }
+
+    if (event.type === "log.appended" || event.type === "artifact.produced") {
+      return { state: "unsupported_event" };
+    }
+
+    const [current] = await this.transaction
+      .select({
+        runId: schema.runnerTasks.runId,
+        taskStatus: schema.runnerTasks.status,
+        currentFence: schema.runnerTasks.currentFence,
+        taskPayload: schema.runnerTasks.payload,
+        attemptStatus: schema.runnerTaskAttempts.status,
+        runnerId: schema.runnerTaskAttempts.runnerId,
+        taskId: schema.runnerTaskAttempts.taskId,
+        fence: schema.runnerTaskAttempts.fence,
+        lastEventSequence: schema.runnerTaskAttempts.lastEventSequence,
+        leaseActive: sql<boolean>`${schema.runnerTaskAttempts.leaseExpiresAt} > CURRENT_TIMESTAMP`,
+      })
+      .from(schema.runnerTaskAttempts)
+      .innerJoin(
+        schema.runnerTasks,
+        eq(schema.runnerTasks.id, schema.runnerTaskAttempts.taskId),
+      )
+      .where(eq(schema.runnerTaskAttempts.id, event.attemptId))
+      .for("update", {
+        of: [schema.runnerTaskAttempts, schema.runnerTasks],
+      });
+
+    if (
+      !current ||
+      current.runnerId !== event.runnerId ||
+      current.taskId !== event.taskId ||
+      current.fence !== event.fence ||
+      current.currentFence !== event.fence ||
+      !current.leaseActive ||
+      !isActiveAttemptStatus(current.attemptStatus) ||
+      !["leased", "running", "cancellation_requested"].includes(
+        current.taskStatus,
+      )
+    ) {
+      return { state: "stale" };
+    }
+
+    const expectedSequence = current.lastEventSequence + 1;
+    const [occupiedSequence] = await this.transaction
+      .select({ id: schema.runnerTaskEvents.id })
+      .from(schema.runnerTaskEvents)
+      .where(
+        and(
+          eq(schema.runnerTaskEvents.attemptId, event.attemptId),
+          eq(schema.runnerTaskEvents.sequence, event.sequence),
+        ),
+      );
+    if (occupiedSequence) return { state: "event_conflict" };
+    if (event.sequence > expectedSequence) {
+      return { state: "gap", expectedSequence };
+    }
+    if (event.sequence < expectedSequence) return { state: "stale" };
+
+    const taskSnapshot = experimentTaskV2Schema.parse(current.taskPayload);
+    const [previousEvent] =
+      current.lastEventSequence === 0
+        ? []
+        : await this.transaction
+            .select({
+              type: schema.runnerTaskEvents.type,
+              payload: schema.runnerTaskEvents.payload,
+            })
+            .from(schema.runnerTaskEvents)
+            .where(
+              and(
+                eq(schema.runnerTaskEvents.attemptId, event.attemptId),
+                eq(schema.runnerTaskEvents.sequence, current.lastEventSequence),
+              ),
+            );
+    let nextAttemptStatus: PersistedRunnerAttemptStatus = current.attemptStatus;
+    let nextTaskStatus: PersistedRunnerTaskStatus = current.taskStatus;
+
+    switch (event.type) {
+      case "workspace.prepared":
+        if (
+          previousEvent ||
+          event.payload.sourceDigest !== taskSnapshot.source.digest ||
+          event.payload.imageDigest !== taskSnapshot.environment.imageDigest
+        ) {
+          return { state: "invalid_evidence" };
+        }
+        if (
+          current.attemptStatus !== "claimed" ||
+          current.taskStatus !== "leased"
+        ) {
+          return { state: "invalid_transition" };
+        }
+        nextAttemptStatus = "preparing";
+        break;
+      case "action.started":
+        if (
+          event.payload.commandIndex >= taskSnapshot.action.steps.length ||
+          (event.payload.commandIndex === 0
+            ? previousEvent?.type !== "workspace.prepared"
+            : previousEvent?.type !== "action.completed" ||
+              persistedCommandIndex(previousEvent.payload) !==
+                event.payload.commandIndex - 1)
+        ) {
+          return { state: "invalid_evidence" };
+        }
+        if (
+          !["preparing", "executing"].includes(current.attemptStatus) ||
+          !["leased", "running"].includes(current.taskStatus)
+        ) {
+          return { state: "invalid_transition" };
+        }
+        nextAttemptStatus = "executing";
+        nextTaskStatus = "running";
+        break;
+      case "action.completed":
+        if (
+          event.payload.commandIndex >= taskSnapshot.action.steps.length ||
+          previousEvent?.type !== "action.started" ||
+          persistedCommandIndex(previousEvent.payload) !==
+            event.payload.commandIndex
+        ) {
+          return { state: "invalid_evidence" };
+        }
+        if (
+          current.attemptStatus !== "executing" ||
+          current.taskStatus !== "running"
+        ) {
+          return { state: "invalid_transition" };
+        }
+        break;
+      case "measurement.recorded":
+        if (
+          event.payload.metricDefinitionId !==
+            taskSnapshot.measurement.metricDefinitionId ||
+          event.payload.unit !== taskSnapshot.measurement.unit ||
+          previousEvent?.type !== "action.completed" ||
+          persistedCommandIndex(previousEvent.payload) !==
+            taskSnapshot.action.steps.length - 1
+        ) {
+          return { state: "invalid_evidence" };
+        }
+        if (
+          current.attemptStatus !== "executing" ||
+          current.taskStatus !== "running"
+        ) {
+          return { state: "invalid_transition" };
+        }
+        nextAttemptStatus = "measuring";
+        break;
+      case "task.succeeded":
+        if (
+          current.attemptStatus !== "measuring" ||
+          !["running", "cancellation_requested"].includes(current.taskStatus)
+        ) {
+          return { state: "invalid_transition" };
+        }
+        nextAttemptStatus = "succeeded";
+        nextTaskStatus = "succeeded";
+        break;
+      case "task.failed":
+        nextAttemptStatus = "failed";
+        nextTaskStatus = "failed";
+        break;
+      case "task.cancelled":
+        if (current.taskStatus !== "cancellation_requested") {
+          return { state: "invalid_transition" };
+        }
+        nextAttemptStatus = "cancelled";
+        nextTaskStatus = "cancelled";
+        break;
+    }
+
+    const [storedEvent] = await this.transaction
+      .insert(schema.runnerTaskEvents)
+      .values({
+        id: event.eventId,
+        taskId: event.taskId,
+        attemptId: event.attemptId,
+        runnerId: event.runnerId,
+        fence: event.fence,
+        sequence: event.sequence,
+        protocolVersion: event.version,
+        type: event.type,
+        payload: event.payload,
+        envelopeDigest: digest,
+        occurredAt: new Date(event.occurredAt),
+      })
+      .returning({ receivedAt: schema.runnerTaskEvents.receivedAt });
+    if (!storedEvent)
+      throw new Error("Runner event insert returned no record.");
+
+    const terminal = ["succeeded", "failed", "cancelled"].includes(
+      nextTaskStatus,
+    );
+    const [updatedAttempt] = await this.transaction
+      .update(schema.runnerTaskAttempts)
+      .set({
+        status: nextAttemptStatus,
+        lastEventSequence: event.sequence,
+        startedAt:
+          event.type === "action.started"
+            ? sql`COALESCE(${schema.runnerTaskAttempts.startedAt}, CURRENT_TIMESTAMP)`
+            : undefined,
+        completedAt: terminal ? sql`CURRENT_TIMESTAMP` : undefined,
+        failureClassification:
+          event.type === "task.failed" ? event.payload.classification : null,
+      })
+      .where(
+        and(
+          eq(schema.runnerTaskAttempts.id, event.attemptId),
+          eq(schema.runnerTaskAttempts.taskId, event.taskId),
+          eq(schema.runnerTaskAttempts.runnerId, event.runnerId),
+          eq(schema.runnerTaskAttempts.fence, event.fence),
+          eq(
+            schema.runnerTaskAttempts.lastEventSequence,
+            current.lastEventSequence,
+          ),
+          eq(schema.runnerTaskAttempts.status, current.attemptStatus),
+        ),
+      )
+      .returning({ id: schema.runnerTaskAttempts.id });
+    if (!updatedAttempt) {
+      throw new Error("Locked runner attempt event cursor could not advance.");
+    }
+
+    if (nextTaskStatus !== current.taskStatus) {
+      const [updatedTask] = await this.transaction
+        .update(schema.runnerTasks)
+        .set({
+          status: nextTaskStatus,
+          terminalAt: terminal ? sql`CURRENT_TIMESTAMP` : undefined,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(
+          and(
+            eq(schema.runnerTasks.id, event.taskId),
+            eq(schema.runnerTasks.currentFence, event.fence),
+            eq(schema.runnerTasks.status, current.taskStatus),
+          ),
+        )
+        .returning({ id: schema.runnerTasks.id });
+      if (!updatedTask) {
+        throw new Error("Locked runner task lifecycle could not advance.");
+      }
+    }
+
+    if (terminal) {
+      await this.appendTaskOutbox(
+        event.taskId,
+        `runner.task.${nextTaskStatus}`,
+        {
+          version: "1",
+          taskId: event.taskId,
+          attemptId: event.attemptId,
+          fence: event.fence,
+          status: nextTaskStatus,
+          eventId: event.eventId,
+        },
+      );
+    }
+    await this.appendProjectedRunnerEvent(current.runId, event);
+
+    return {
+      state: "accepted",
+      acknowledgement: {
+        eventId: event.eventId,
+        attemptId: event.attemptId,
+        acknowledgedSequence: event.sequence,
+        expectedSequence: event.sequence + 1,
+        receivedAt: storedEvent.receivedAt,
+      },
+    };
   }
 }
