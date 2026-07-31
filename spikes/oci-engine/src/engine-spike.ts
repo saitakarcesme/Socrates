@@ -19,6 +19,13 @@ import type {
 } from "./types";
 
 export type ContainerInspection = {
+  NativeSpec?: {
+    process?: {
+      apparmorProfile?: string;
+      capabilities?: Record<string, string[]>;
+      noNewPrivileges?: boolean;
+    };
+  };
   State?: {
     ExitCode?: number;
     OOMKilled?: boolean;
@@ -32,7 +39,7 @@ export type ContainerInspection = {
     CpuQuota?: number;
     Devices?: unknown[];
     IpcMode?: string;
-    LogConfig?: { Type?: string };
+    LogConfig?: { Type?: string; driver?: string };
     Memory?: number;
     MemorySwap?: number;
     NanoCpus?: number;
@@ -71,13 +78,32 @@ async function inspectContainer(
   runtime: EngineRuntime,
   name: string,
 ): Promise<ContainerInspection> {
-  const result = await runCommand(runtime.name, [
+  const compatibleResult = await runCommand(runtime.name, [
     "inspect",
     "--format",
     "{{json .}}",
     name,
   ]);
-  return parseJson<ContainerInspection>(result, `inspect ${name}`);
+  const compatible = parseJson<ContainerInspection>(
+    compatibleResult,
+    `inspect ${name}`,
+  );
+  if (runtime.name !== "nerdctl") return compatible;
+
+  const nativeResult = await runCommand(runtime.name, [
+    "inspect",
+    "--mode",
+    "native",
+    name,
+  ]);
+  const native = parseJson<Array<{ Spec?: ContainerInspection["NativeSpec"] }>>(
+    nativeResult,
+    `native inspect ${name}`,
+  )[0];
+  if (!native?.Spec) {
+    throw new Error(`native inspect ${name} did not include an OCI spec.`);
+  }
+  return { ...compatible, NativeSpec: native.Spec };
 }
 
 async function ownedContainerIds(
@@ -156,6 +182,11 @@ export function evaluateFixedProfile(
   inspection: ContainerInspection,
 ): GateResult {
   const host = inspection.HostConfig;
+  const nativeProcess = inspection.NativeSpec?.process;
+  const nativeCapabilities = nativeProcess?.capabilities;
+  const nativeCapabilitiesEmpty =
+    nativeCapabilities !== undefined &&
+    Object.values(nativeCapabilities).every((values) => values.length === 0);
   const checks = [
     ["network namespace", host?.NetworkMode === "none"],
     ["read-only rootfs", host?.ReadonlyRootfs === true],
@@ -164,7 +195,10 @@ export function evaluateFixedProfile(
     ["swap limit", host?.MemorySwap === sandboxProfile.memoryBytes],
     ["PID limit", host?.PidsLimit === sandboxProfile.maximumPids],
     ["CPU limit", (host?.NanoCpus ?? 0) > 0 || (host?.CpuQuota ?? 0) > 0],
-    ["capability drop", host?.CapDrop?.includes("ALL") === true],
+    [
+      "capability drop",
+      host?.CapDrop?.includes("ALL") === true || nativeCapabilitiesEmpty,
+    ],
     [
       "cgroup namespace",
       host?.CgroupnsMode === "private" || host?.CgroupMode === "private",
@@ -172,7 +206,10 @@ export function evaluateFixedProfile(
     ["IPC namespace", host?.IpcMode === "private"],
     ["PID namespace", ["", "private"].includes(host?.PidMode ?? "")],
     ["device isolation", (host?.Devices?.length ?? 0) === 0],
-    ["daemon log storage", host?.LogConfig?.Type === "none"],
+    [
+      "daemon log storage",
+      host?.LogConfig?.Type === "none" || host?.LogConfig?.driver === "",
+    ],
     [
       "workspace tmpfs",
       host?.Tmpfs?.["/workspace"]?.includes(
@@ -196,7 +233,7 @@ export function evaluateFixedProfile(
       "no-new-privileges",
       host?.SecurityOpt?.some((option) =>
         option.toLowerCase().includes("no-new-privileges"),
-      ) === true,
+      ) === true || nativeProcess?.noNewPrivileges === true,
     ],
   ] as const;
   const failed = checks.filter(([, passed]) => !passed).map(([name]) => name);

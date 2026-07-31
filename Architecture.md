@@ -1267,6 +1267,14 @@ permits creation of the user namespace; it does not replace the separately
 loaded `socrates-sandbox` workload policy or grant the runner policy-management
 authority.
 
+For nerdctl, Docker-compatible inspect output is not authoritative for controls
+it cannot represent faithfully. The spike reads the containerd-native OCI spec
+as a second view and uses it for effective capability sets,
+`noNewPrivileges`, the AppArmor profile, namespaces, mounts, and resource
+limits. A missing native field fails closed. Docker-compatible output remains
+useful for lifecycle state and normalized cross-engine reporting; sent command
+arguments alone never count as enforcement evidence.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

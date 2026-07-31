@@ -66,4 +66,26 @@ describe("engine inspection normalization", () => {
     expect(result).toMatchObject({ passed: false });
     expect(result.detail).toContain("PID namespace");
   });
+
+  it("uses nerdctl's native OCI process fields when compatibility fields omit them", () => {
+    expect(
+      evaluateFixedProfile({
+        HostConfig: {
+          ...commonHostConfig,
+          CapDrop: ["CAP_CHOWN", "CAP_SETUID"],
+          CgroupnsMode: "private",
+          LogConfig: { driver: "" },
+          PidMode: "",
+          SecurityOpt: [],
+        },
+        NativeSpec: {
+          process: {
+            apparmorProfile: "socrates-sandbox",
+            capabilities: {},
+            noNewPrivileges: true,
+          },
+        },
+      }),
+    ).toMatchObject({ passed: true });
+  });
 });

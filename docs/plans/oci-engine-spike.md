@@ -194,6 +194,12 @@ bundled `/usr/local/bin/rootlesskit`. The policy only enables RootlessKit to
 create its user namespace; workload confinement remains the independent
 `socrates-sandbox` profile and enforcement probe.
 
+nerdctl's Docker-compatible inspect view omits or expands some requested
+security settings. The harness therefore also reads `inspect --mode native`
+and verifies the generated OCI spec. Effective empty capability sets,
+`noNewPrivileges`, AppArmor identity, namespaces, mounts, and resource limits
+must be present in that runtime-facing spec; command arguments are not proof.
+
 ## Promotion rule
 
 The harness and its command builders are disposable. Slice 2.5 begins with a
