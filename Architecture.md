@@ -1275,6 +1275,28 @@ limits. A missing native field fails closed. Docker-compatible output remains
 useful for lifecycle state and normalized cross-engine reporting; sent command
 arguments alone never count as enforcement evidence.
 
+#### ADR-041 decision amendment: select rootless containerd through nerdctl
+
+The reviewed native session
+`2026-07-31T03-45-02-824Z-8be04f01` selects rootless containerd through
+nerdctl v2.3.1 as the Slice 2.5 OCI backend. It passed all eight preflight,
+nine adversarial, hard-cancellation, nine cleanup, and thirty cached
+run-and-remove measurements. Its workload ran under
+`socrates-sandbox (enforce)`, and the profile-specific write probe was denied.
+
+Rootless Docker 29.7.0 is rejected on this host class because its workload
+remained `rootlesskit (unconfined)` and Docker does not report an engine LSM.
+Rootless Podman 4.9.3 is rejected because its workload remained
+`crun (unconfined)`; its compatibility inspect also did not prove the complete
+capability drop. Lower Podman latency cannot override failed enforcement.
+
+This decision selects the backend and provisioning contract, not the spike
+implementation. Slice 2.5 must introduce a new typed adapter, re-run startup
+self-checks, require the pinned engine family and preloaded profiles, inspect
+the native OCI spec, and fail closed before accepting work. No Docker or Podman
+fallback is permitted. The immutable decision evidence lives under
+`spikes/oci-engine/evidence/native/2026-07-31T03-45-02-824Z-8be04f01`.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

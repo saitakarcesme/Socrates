@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1",
+  "sessionId": "2026-07-31T03-45-02-824Z-8be04f01",
+  "recordedAt": "2026-07-31T03:45:02.824Z",
+  "image": "node@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32",
+  "requiredEngines": ["docker", "podman"],
+  "optionalEngines": ["nerdctl"],
+  "results": [
+    {
+      "engine": "docker",
+      "status": "complete",
+      "evidenceFile": "docker.json",
+      "eligibleForNativeSelection": false,
+      "availability": "available",
+      "latency": {
+        "samples": 30,
+        "medianMs": 181.03,
+        "p95Ms": 192.37,
+        "maximumMs": 198.49
+      }
+    },
+    {
+      "engine": "podman",
+      "status": "complete",
+      "evidenceFile": "podman.json",
+      "eligibleForNativeSelection": false,
+      "availability": "available",
+      "latency": {
+        "samples": 30,
+        "medianMs": 128.73,
+        "p95Ms": 141.26,
+        "maximumMs": 141.61
+      }
+    },
+    {
+      "engine": "nerdctl",
+      "status": "complete",
+      "evidenceFile": "nerdctl.json",
+      "eligibleForNativeSelection": true,
+      "availability": "available",
+      "latency": {
+        "samples": 30,
+        "medianMs": 185.91,
+        "p95Ms": 196.37,
+        "maximumMs": 199.99
+      }
+    }
+  ],
+  "gates": [
+    {
+      "name": "required candidate evidence",
+      "passed": true,
+      "detail": "Docker and Podman produced complete evidence"
+    },
+    {
+      "name": "eligible candidate",
+      "passed": true,
+      "detail": "at least one measured candidate passed every native selection gate"
+    },
+    {
+      "name": "fixed input comparability",
+      "passed": true,
+      "detail": "required candidates used the same image and sandbox profile"
+    },
+    {
+      "name": "reference host identity",
+      "passed": true,
+      "detail": "required candidates report the same kernel, architecture, cgroup version, and host LSMs"
+    },
+    {
+      "name": "latency sample comparability",
+      "passed": true,
+      "detail": "required candidates report equal non-empty latency sample counts"
+    },
+    {
+      "name": "optional candidate disposition",
+      "passed": true,
+      "detail": "every optional candidate produced evidence or an unavailable fact record"
+    }
+  ],
+  "readyForArchitectureReview": true
+}

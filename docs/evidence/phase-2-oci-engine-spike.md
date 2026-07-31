@@ -1,6 +1,6 @@
 # Phase 2 OCI engine spike evidence
 
-Status: Development-host evidence complete; native selection pending
+Status: Native comparison complete; rootless containerd selected
 
 Date: 2026-07-31
 
@@ -83,32 +83,42 @@ capacity estimates.
 
 ## Candidate comparison
 
-| Candidate           | Current evidence | Selection status                                    |
-| ------------------- | ---------------- | --------------------------------------------------- |
-| Docker Desktop/WSL  | 8/8 gates pass   | ineligible: not native Linux, rootless, or host LSM |
-| rootless Docker     | not run          | pending native Linux reference host                 |
-| rootless Podman     | unavailable      | pending installation on reference host              |
-| rootless containerd | unavailable      | pending installation on reference host              |
+The final native session ran on a fresh Ubuntu 24.04 GitHub-hosted VM with
+kernel `6.17.0-1020-azure`, systemd cgroup v2, rootless engines, and enforcing
+AppArmor. All candidates used the same immutable image and fixed profile.
+
+| Candidate                         | Security result                                                    | 30-sample latency (median / p95) | Decision   |
+| --------------------------------- | ------------------------------------------------------------------ | -------------------------------- | ---------- |
+| Docker Desktop/WSL development    | development gates pass; native/rootless/host-LSM preflight fails   | 244.21 / 297.81 ms               | ineligible |
+| Docker 29.7.0 rootless            | workload `rootlesskit (unconfined)`; sandbox LSM gate fails        | 181.03 / 192.37 ms               | rejected   |
+| Podman 4.9.3 rootless             | workload `crun (unconfined)`; LSM and inspect proof gates fail     | 128.73 / 141.26 ms               | rejected   |
+| containerd/nerdctl 2.3.1 rootless | 8/8 preflight, 9/9 adversarial, cancellation, and 9/9 cleanup pass | 185.91 / 196.37 ms               | selected   |
+
+The comparison manifest passed all six comparability/review gates. nerdctl's
+maximum cached run-and-remove measurement was `199.99 ms`; hard cancellation
+completed in `1064.58 ms`.
 
 ## Decision
 
-No engine is selected. Promoting Docker Desktop evidence would violate ADR-041
-and conceal missing rootless/LSM guarantees. Slice 2.5 remains gated on a
-native Linux rerun with at least Docker and Podman; nerdctl remains a candidate
-if its dependencies are provisioned on that host. The same typed executor now
-drives all three candidates; Docker-compatible and Podman-native fact and
-inspect fields have fixture coverage.
+ADR-041 selects rootless containerd through nerdctl v2.3.1 for Slice 2.5.
+Selection is based on enforcement, not speed: the selected candidate applied
+the preloaded `socrates-sandbox` AppArmor profile, reported the exact enforcing
+label, denied the profile-specific write probe, and exposed the requested
+controls in its native OCI spec.
 
-The native rerun is now one immutable comparison session. Its manifest requires
-complete Docker and Podman evidence from the same kernel, architecture, and
-cgroup version with identical image and profile, plus at least one eligible
-candidate. It also records nerdctl as measured or unavailable and fails closed
-if that disposition cannot be produced. A passing manifest is review input,
-not an automatic engine choice. Host LSM availability and the workload's
-non-`unconfined` LSM label are evaluated independently.
+Docker and Podman are not fallbacks. Both completed measurement, cancellation,
+and cleanup, but neither confined the workload with the required LSM on the
+reference host. The future adapter must be implemented anew around nerdctl,
+must repeat startup self-checks, and must fail closed if its pinned engine
+family, rootless state, cgroup delegation, seccomp, AppArmor profile, or native
+OCI inspection is absent.
 
 Machine-readable evidence:
 
 - `spikes/oci-engine/evidence/docker-current-host.json`
 - `spikes/oci-engine/evidence/podman-current-host.json`
 - `spikes/oci-engine/evidence/nerdctl-current-host.json`
+- `spikes/oci-engine/evidence/native/2026-07-31T03-45-02-824Z-8be04f01/comparison.json`
+- `spikes/oci-engine/evidence/native/2026-07-31T03-45-02-824Z-8be04f01/docker.json`
+- `spikes/oci-engine/evidence/native/2026-07-31T03-45-02-824Z-8be04f01/podman.json`
+- `spikes/oci-engine/evidence/native/2026-07-31T03-45-02-824Z-8be04f01/nerdctl.json`

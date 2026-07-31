@@ -210,8 +210,12 @@ new plan and typed runner adapter after the engine decision is reviewed.
 The Docker Desktop development run passed all eight adversarial enforcement
 gates, hard cancellation, label-scoped cleanup, and 30 latency samples. It
 failed the native Linux, rootless, and host-LSM preflight gates exactly as
-expected. The typed executor and fact normalization now cover Docker, Podman,
-and nerdctl, but the latter two are not installed on this host. No engine is
-selected and Slice 2.5 remains gated. The native session command and
-fail-closed comparison manifest are implemented; see
+expected.
+
+The final native session then measured Docker, Podman, and nerdctl on one
+Ubuntu 24.04 reference VM with 30 samples each. Its six comparison gates
+passed. Rootless containerd through nerdctl v2.3.1 passed every enforcement,
+cancellation, and cleanup gate and is selected by ADR-041. Docker and Podman
+were rejected because their workloads remained unconfined by the required
+LSM. Slice 2.5 is unblocked and must begin with a new adapter plan; see
 `docs/evidence/phase-2-oci-engine-spike.md`.

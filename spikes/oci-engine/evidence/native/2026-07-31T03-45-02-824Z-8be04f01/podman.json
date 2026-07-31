@@ -1,0 +1,183 @@
+{
+  "schemaVersion": "2",
+  "spikeId": "636d5117-6795-4000-9203-8f5b53823a56",
+  "recordedAt": "2026-07-31T03:45:16.502Z",
+  "image": "node@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32",
+  "profile": {
+    "memoryBytes": 67108864,
+    "cpuCount": 0.5,
+    "maximumPids": 32,
+    "workspaceBytes": 1048576,
+    "temporaryBytes": 262144,
+    "sharedMemoryBytes": 65536,
+    "network": "none",
+    "rootFilesystem": "read-only"
+  },
+  "host": { "securityModules": ["apparmor"] },
+  "facts": {
+    "engine": "podman",
+    "available": true,
+    "clientVersion": "4.9.3",
+    "serverVersion": "4.9.3",
+    "operatingSystem": "linux",
+    "architecture": "amd64",
+    "kernelVersion": "6.17.0-1020-azure",
+    "cgroupVersion": "2",
+    "cgroupDriver": "systemd",
+    "storageDriver": "overlay",
+    "securityOptions": ["name=seccomp", "name=rootless"],
+    "nativeLinux": true,
+    "rootless": true,
+    "desktopOrVm": false
+  },
+  "preflight": [
+    {
+      "name": "engine available",
+      "passed": true,
+      "detail": "podman client and engine responded"
+    },
+    {
+      "name": "image pinned by digest",
+      "passed": true,
+      "detail": "immutable digest supplied"
+    },
+    {
+      "name": "native Linux host",
+      "passed": true,
+      "detail": "native Linux engine observed"
+    },
+    {
+      "name": "rootless engine",
+      "passed": true,
+      "detail": "rootless security option reported"
+    },
+    {
+      "name": "cgroup v2",
+      "passed": true,
+      "detail": "reported cgroup version 2"
+    },
+    {
+      "name": "seccomp",
+      "passed": true,
+      "detail": "seccomp security option reported"
+    },
+    {
+      "name": "host LSM enabled",
+      "passed": true,
+      "detail": "host reports apparmor"
+    },
+    {
+      "name": "engine sandbox LSM",
+      "passed": false,
+      "detail": "engine does not report AppArmor or SELinux sandbox support"
+    }
+  ],
+  "adversarial": [
+    {
+      "name": "sandbox LSM confinement",
+      "passed": false,
+      "detail": "expected socrates-sandbox (enforce) with denied write; observed crun (unconfined), exit=43"
+    },
+    {
+      "name": "delegated cgroup controllers",
+      "passed": true,
+      "detail": "cpu, memory, and pids controllers are visible"
+    },
+    {
+      "name": "host mount and privilege denial",
+      "passed": true,
+      "detail": "non-root identity, empty effective capabilities, absent sockets, mount denial, and namespace denial observed"
+    },
+    {
+      "name": "fixed sandbox profile",
+      "passed": false,
+      "detail": "inspect mismatch: capability drop"
+    },
+    {
+      "name": "network denial",
+      "passed": true,
+      "detail": "direct-IP HTTP and DNS probes both failed"
+    },
+    {
+      "name": "host secret absence",
+      "passed": true,
+      "detail": "host sentinel and standard credential files were absent"
+    },
+    {
+      "name": "workspace writable-byte limit",
+      "passed": true,
+      "detail": "workspace tmpfs returned ENOSPC within its declared bound"
+    },
+    {
+      "name": "PID limit",
+      "passed": true,
+      "detail": "bounded child fan-out encountered cgroup rejection below the requested cap"
+    },
+    { "name": "memory limit", "passed": true, "detail": "exit=137 oom=false" }
+  ],
+  "cancellation": [
+    {
+      "name": "hard cancellation",
+      "passed": true,
+      "detail": "TERM-resistant workload stopped in 1094.67 ms",
+      "durationMs": 1094.67
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 0 owned container(s)"
+    }
+  ],
+  "latency": {
+    "runAndRemove": {
+      "samples": 30,
+      "medianMs": 128.73,
+      "p95Ms": 141.26,
+      "maximumMs": 141.61
+    }
+  },
+  "eligibleForNativeSelection": false,
+  "limitations": []
+}
