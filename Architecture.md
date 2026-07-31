@@ -1656,6 +1656,57 @@ evidence is committed at
 admits ADR-044 and closes Slice 2.7; lifecycle event translation remains Slice
 2.8.
 
+### ADR-045: Runtime evidence becomes validated event drafts before durability
+
+Slice 2.8 introduces a pure lifecycle adapter between the admitted runtime
+result and the durable runner event spool. It does not create a production
+`Runner`, claim work, send acknowledgements, or assign event envelopes. The
+adapter accepts one already-validated `RunnerExecutionV1`, the admitted image
+and source identities, and one closed runtime frame sequence. It returns a
+bounded ordered list of internal event drafts whose payloads are validated
+against the corresponding `RunnerEventV2` payload schemas.
+
+The adapter emits `workspace.prepared` first. Action-phase start and exit frames
+become `action.started` and, when an exit code exists, `action.completed`.
+Signal-only exits proceed directly to a terminal failure because V2 does not
+invent a portable numeric exit code. Action stdout and stderr become inert
+`log.appended` drafts. Measurement stderr may also become a log; measurement
+stdout is not logged because the runtime already repeats those exact bounded
+bytes through `measurement.result` frames. This avoids duplicate evidence and
+quota consumption.
+
+Command-output bytes are accumulated only within the existing runtime output
+budget, decoded as a continuous UTF-8 stream so code points split across frames
+remain intact, and passed through a deterministic local secret redactor before
+event chunking. Invalid byte sequences become replacement characters and mark
+the draft redacted. Chunks are split by Unicode code point so both the 16,384
+character and 65,536 UTF-8 byte contract limits hold. The control plane retains
+its independent secondary redactor; runner provenance is never treated as
+proof.
+
+The complete measurement result is decoded with fatal UTF-8, parsed as strict
+JSON with exactly `schema` and `value`, requires schema `metric-value.v1`, and
+validates `value` as the canonical decimal contract. Metric definition and unit
+come from the frozen task rather than runtime bytes, and ABI v1 records one
+sample per measurement command. A valid successful terminal frame requires
+exactly one measurement draft followed by `task.succeeded`.
+
+Failure mapping is closed and based on structured runtime codes, never message
+text: invalid request, source-copy, and internal failures are infrastructure;
+action command failures are invalid action; measurement failures are
+evaluation; and command timeout is a wall-time budget failure. A malformed
+measurement or contradiction between runtime status and frames is a local
+protocol error and cannot produce a success event. Slice 2.8 adds adversarial
+tests for every mapping before any code may enable execution.
+
+The adapter deliberately does not assign `eventId`, sequence, or `occurredAt`.
+Those values must be allocated together with durable bytes by the Slice 2.9
+spool; assigning wall-clock timestamps before persistence would make restart
+replay change the normalized event digest. The spool will turn drafts into full
+V2 envelopes atomically and discard them only after the control plane
+acknowledges their exact IDs. `LocalRunnerNotEnabledError` therefore remains in
+force through Slice 2.8.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

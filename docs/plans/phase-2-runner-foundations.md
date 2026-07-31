@@ -405,7 +405,7 @@ mounted read-only without any task or caller string becoming a host path.
 
 ### Slice 2.7 — admitted image catalog and task-runtime ABI
 
-Status: In progress.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-044.
 
@@ -425,6 +425,27 @@ Detailed plan: `docs/plans/slice-2.7-image-catalog-runtime.md`.
 
 Exit: one catalog-admitted image can consume a source capability and execute a
 fixed ABI request without raw task commands becoming container-engine argv.
+
+Native admission: GitHub Actions run `30641068455`; immutable evidence at
+`services/runner-local/evidence/native/30641068455-runtime.json`.
+
+### Slice 2.8 — runtime lifecycle event adapter
+
+Status: In progress.
+
+Architecture decision: ADR-045.
+
+Detailed plan: `docs/plans/slice-2.8-runtime-lifecycle-adapter.md`.
+
+- translate a closed runtime frame sequence into bounded V2 event drafts
+- validate strict measurement JSON against the frozen task metric
+- decode, redact, and chunk logs without duplicating measurement stdout
+- map structured runtime failures to closed runner failure classifications
+- keep event IDs, sequence, timestamps, persistence, and acknowledgement in the
+  later durable-spool slice
+
+Exit: successful and failed runtime results deterministically produce only
+contract-valid, quota-bounded event drafts, with no production runner enabled.
 
 ## Acceptance gates
 
