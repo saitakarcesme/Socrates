@@ -6,3 +6,8 @@ export type {
   RuntimeProcessRequest,
   RuntimeProcessResult,
 } from "./process";
+export { RuntimeWorkspaceError, RuntimeWorkspacePreparer } from "./workspace";
+export type {
+  RuntimeWorkspaceLimits,
+  RuntimeWorkspaceResult,
+} from "./workspace";
