@@ -3,6 +3,7 @@ import {
   assertDatabaseCompatibility,
   createPersistence,
 } from "@socrates/database";
+import { OpaqueRunnerAuthenticator } from "@socrates/runner-auth";
 
 import { createApp, developmentWorkspaceId } from "./app";
 
@@ -14,10 +15,17 @@ if (connectionString) {
 const persistence = connectionString
   ? createPersistence({ connectionString })
   : null;
+const runnerTransportEnabled =
+  process.env.RUNNER_TRANSPORT_ENABLED?.trim().toLowerCase() === "true";
+const runnerAuthenticator =
+  persistence && runnerTransportEnabled
+    ? new OpaqueRunnerAuthenticator(persistence.runnerCredentials)
+    : null;
 const app = createApp({
   manualResearchEnabled:
     process.env.MANUAL_RESEARCH_ENABLED?.trim().toLowerCase() === "true",
   ...(persistence ? { persistence } : {}),
+  ...(runnerAuthenticator ? { runnerAuthenticator } : {}),
   workspaceId: process.env.WORKSPACE_ID ?? developmentWorkspaceId,
 });
 

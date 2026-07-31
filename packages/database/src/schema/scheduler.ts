@@ -75,6 +75,47 @@ export const runnerRegistrations = pgTable(
   ],
 );
 
+export const runnerRegistrationTokens = pgTable(
+  "runner_registration_tokens",
+  {
+    id: uuid("id").primaryKey(),
+    runnerId: uuid("runner_id")
+      .notNull()
+      .references(() => runnerRegistrations.id),
+    secretDigest: text("secret_digest").notNull(),
+    label: text("label").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("runner_registration_tokens_secret_digest_unique").on(
+      table.secretDigest,
+    ),
+    index("runner_registration_tokens_runner_active_expiry_idx")
+      .on(table.runnerId, table.expiresAt)
+      .where(sql`${table.revokedAt} IS NULL`),
+    check(
+      "runner_registration_tokens_secret_digest_sha256",
+      sql`${table.secretDigest} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      "runner_registration_tokens_label_length",
+      sql`length(${table.label}) BETWEEN 1 AND 80 AND ${table.label} = btrim(${table.label})`,
+    ),
+    check(
+      "runner_registration_tokens_expiry_after_creation",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+    check(
+      "runner_registration_tokens_revocation_after_creation",
+      sql`${table.revokedAt} IS NULL OR ${table.revokedAt} >= ${table.createdAt}`,
+    ),
+  ],
+);
+
 export const runnerTasks = pgTable(
   "runner_tasks",
   {

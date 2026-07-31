@@ -54,7 +54,7 @@ bodies, strict schemas, and bounded bytes.
 ```text
 POST /v1/runner/tasks/:taskId/claims
   request:  { version: "1", attemptId, leaseDurationMs }
-  response: { version: "1", claim: RunnerAttemptLeaseV1 }
+  response: { version: "1", execution: RunnerExecutionV1 }
 
 POST /v1/runner/tasks/:taskId/attempts/:attemptId/heartbeat
   request:  { version: "1", fence, leaseDurationMs }

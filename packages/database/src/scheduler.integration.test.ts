@@ -30,6 +30,7 @@ import {
   runnerTaskCancellations,
   runnerTaskEvents,
   runnerTasks,
+  runnerRegistrationTokens,
   runs,
   workspaces,
 } from "./schema/index";
@@ -272,6 +273,45 @@ integration("PostgreSQL scheduler persistence", () => {
     await client?.end();
   });
 
+  it("provisions only hashed credentials and evaluates revocation with database time", async () => {
+    const tokenId = randomUUID();
+    const secretDigest = "a".repeat(64);
+    const input = {
+      tokenId,
+      runnerId,
+      secretDigest,
+      label: "scheduler integration",
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+
+    await expect(
+      persistence.runnerCredentials.provision(input),
+    ).resolves.toEqual({ state: "created" });
+    await expect(
+      persistence.runnerCredentials.provision(input),
+    ).resolves.toEqual({ state: "token_conflict" });
+    await expect(
+      persistence.runnerCredentials.findCandidate(tokenId),
+    ).resolves.toEqual({
+      tokenId,
+      runnerId,
+      workspaceId,
+      secretDigest,
+      usable: true,
+    });
+
+    await database
+      .update(runnerRegistrationTokens)
+      .set({ revokedAt: new Date() })
+      .where(eq(runnerRegistrationTokens.id, tokenId));
+    await expect(
+      persistence.runnerCredentials.findCandidate(tokenId),
+    ).resolves.toMatchObject({ tokenId, usable: false });
+    await expect(
+      persistence.runnerCredentials.findCandidate(randomUUID()),
+    ).resolves.toBeNull();
+  });
+
   it("creates the immutable task and outbox message atomically", async () => {
     const taskId = randomUUID();
     await expect(
@@ -446,7 +486,25 @@ integration("PostgreSQL scheduler persistence", () => {
           leaseDurationMs: 60_000,
         }),
       ),
-    ).resolves.toMatchObject({ state: "renewed" });
+    ).resolves.toMatchObject({ state: "renewed", directive: "continue" });
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.requestCancellation({
+        requestId: randomUUID(),
+        workspaceId,
+        taskId,
+      }),
+    );
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.heartbeat({
+          runnerId: secondRunnerId,
+          taskId,
+          attemptId,
+          fence,
+          leaseDurationMs: 60_000,
+        }),
+      ),
+    ).resolves.toMatchObject({ state: "renewed", directive: "cancel" });
     await expect(
       persistence.transaction(({ scheduler }) =>
         scheduler.heartbeat({

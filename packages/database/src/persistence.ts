@@ -5,6 +5,7 @@ import postgres from "postgres";
 import { PostgresCommandRepository } from "./command-repository";
 import type { DatabaseTransaction } from "./database-types";
 import { PostgresReadRepository } from "./read-repository";
+import { PostgresRunnerCredentialRepository } from "./runner-credential-repository";
 import { PostgresSchedulerRepository } from "./scheduler-repository";
 import type {
   AppendRunEventInput,
@@ -169,6 +170,7 @@ export function createPersistence(options: PersistenceOptions): Persistence {
 
   return {
     reads: new PostgresReadRepository(database),
+    runnerCredentials: new PostgresRunnerCredentialRepository(database),
     transaction: (work) =>
       database.transaction((transaction) =>
         work(createRepositories(transaction)),

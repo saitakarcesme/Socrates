@@ -19,6 +19,7 @@ import {
   runEvents,
   runs,
   runnerRegistrations,
+  runnerRegistrationTokens,
   runnerTaskAttempts,
   runnerTaskArtifacts,
   runnerTaskCancellations,
@@ -129,6 +130,7 @@ describe("Phase 2 scheduler migration", () => {
     expect(
       [
         runnerRegistrations,
+        runnerRegistrationTokens,
         runnerTasks,
         runnerTaskAttempts,
         runnerTaskCancellations,
@@ -139,6 +141,7 @@ describe("Phase 2 scheduler migration", () => {
       ].map((table) => getTableConfig(table).name),
     ).toEqual([
       "runner_registrations",
+      "runner_registration_tokens",
       "runner_tasks",
       "runner_task_attempts",
       "runner_task_cancellations",
@@ -235,5 +238,22 @@ describe("Phase 2 scheduler migration", () => {
     expect(migration.indexOf(`CREATE TABLE "artifact_objects"`)).toBeLessThan(
       migration.indexOf(`"runner_task_artifacts_digest_artifact_objects`),
     );
+  });
+
+  it("adds revocable runner credentials before advancing compatibility", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0009_runner_transport_auth.sql", import.meta.url),
+      "utf8",
+    );
+
+    for (const evidence of [
+      `CREATE TABLE "runner_registration_tokens"`,
+      `CONSTRAINT "runner_registration_tokens_secret_digest_sha256"`,
+      `CREATE UNIQUE INDEX "runner_registration_tokens_secret_digest_unique"`,
+      `CREATE INDEX "runner_registration_tokens_runner_active_expiry_idx"`,
+      `SET "version" = 6`,
+    ]) {
+      expect(migration).toContain(evidence);
+    }
   });
 });

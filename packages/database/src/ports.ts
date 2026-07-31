@@ -66,6 +66,32 @@ export type RunnerRegistrationWrite = {
   maximumConcurrentTasks: number;
 };
 
+export type RunnerCredentialCandidate = {
+  tokenId: string;
+  runnerId: string;
+  workspaceId: string;
+  secretDigest: string;
+  usable: boolean;
+};
+
+export type ProvisionRunnerCredentialInput = {
+  tokenId: string;
+  runnerId: string;
+  secretDigest: string;
+  label: string;
+  expiresAt: Date;
+};
+
+export type ProvisionRunnerCredentialResult =
+  { state: "created" } | { state: "runner_not_found" | "token_conflict" };
+
+export interface RunnerCredentialRepository {
+  findCandidate(tokenId: string): Promise<RunnerCredentialCandidate | null>;
+  provision(
+    input: ProvisionRunnerCredentialInput,
+  ): Promise<ProvisionRunnerCredentialResult>;
+}
+
 export type RunnerTaskWrite = {
   id: string;
   workspaceId: string;
@@ -118,7 +144,12 @@ export type HeartbeatRunnerTaskInput = {
 };
 
 export type HeartbeatRunnerTaskResult =
-  { state: "renewed"; leaseExpiresAt: Date } | { state: "stale" };
+  | {
+      state: "renewed";
+      leaseExpiresAt: Date;
+      directive: "continue" | "cancel";
+    }
+  | { state: "stale" };
 
 export type RequestRunnerTaskCancellationInput = {
   requestId: string;
@@ -235,6 +266,7 @@ export type TransactionRepositories = {
 
 export interface Persistence {
   readonly reads: ReadRepository;
+  readonly runnerCredentials: RunnerCredentialRepository;
   transaction<T>(
     work: (repositories: TransactionRepositories) => Promise<T>,
   ): Promise<T>;

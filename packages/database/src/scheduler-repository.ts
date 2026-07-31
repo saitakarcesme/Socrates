@@ -465,9 +465,32 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
         leaseExpiresAt: schema.runnerTaskAttempts.leaseExpiresAt,
       });
 
-    return renewed
-      ? { state: "renewed", leaseExpiresAt: renewed.leaseExpiresAt }
-      : { state: "stale" };
+    if (!renewed) return { state: "stale" };
+
+    await this.transaction
+      .update(schema.runnerRegistrations)
+      .set({
+        lastHeartbeatAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(eq(schema.runnerRegistrations.id, input.runnerId));
+
+    const [task] = await this.transaction
+      .select({ status: schema.runnerTasks.status })
+      .from(schema.runnerTasks)
+      .where(eq(schema.runnerTasks.id, input.taskId));
+    if (!task) {
+      throw new Error(
+        "Renewed runner task disappeared inside the transaction.",
+      );
+    }
+
+    return {
+      state: "renewed",
+      leaseExpiresAt: renewed.leaseExpiresAt,
+      directive:
+        task.status === "cancellation_requested" ? "cancel" : "continue",
+    };
   }
 
   async requestCancellation(

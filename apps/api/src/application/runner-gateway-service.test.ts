@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type {
   ClaimRunnerTaskResult,
+  HeartbeatRunnerTaskResult,
   IngestRunnerEventResult,
   Persistence,
   SchedulerRepository,
@@ -22,6 +23,7 @@ const claimInput = {
 function serviceReturning(options: {
   claim?: ClaimRunnerTaskResult;
   event?: IngestRunnerEventResult;
+  heartbeat?: HeartbeatRunnerTaskResult;
 }): RunnerGatewayService {
   const scheduler = {
     claimTask: async () => {
@@ -31,6 +33,10 @@ function serviceReturning(options: {
     ingestEvent: async () => {
       if (!options.event) throw new Error("Unexpected event.");
       return options.event;
+    },
+    heartbeat: async () => {
+      if (!options.heartbeat) throw new Error("Unexpected heartbeat.");
+      return options.heartbeat;
     },
   } as unknown as SchedulerRepository;
   const persistence: Pick<Persistence, "transaction"> = {
@@ -111,6 +117,35 @@ describe("RunnerGatewayService", () => {
         event: { state: "replay", acknowledgement },
       }).ingestEvent({ event: {} }),
     ).resolves.toEqual({ replay: true, acknowledgement });
+  });
+
+  it("preserves the database-clocked lease and cancellation directive", async () => {
+    const leaseExpiresAt = new Date("2026-07-31T00:01:00.000Z");
+    await expect(
+      serviceReturning({
+        heartbeat: {
+          state: "renewed",
+          leaseExpiresAt,
+          directive: "cancel",
+        },
+      }).heartbeat({
+        ...claimInput,
+        fence: 3,
+      }),
+    ).resolves.toEqual({ leaseExpiresAt, directive: "cancel" });
+  });
+
+  it("maps a stale heartbeat to a fenced resource conflict", async () => {
+    await expect(
+      serviceReturning({ heartbeat: { state: "stale" } }).heartbeat({
+        ...claimInput,
+        fence: 3,
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "resource_conflict",
+      details: { runnerReason: "stale" },
+    });
   });
 
   it("preserves the expected cursor for a sequence gap", async () => {

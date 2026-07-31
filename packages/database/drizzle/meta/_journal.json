@@ -64,6 +64,13 @@
       "when": 1785457545956,
       "tag": "0008_bounded_runner_evidence",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785514358201,
+      "tag": "0009_runner_transport_auth",
+      "breakpoints": true
     }
   ]
 }

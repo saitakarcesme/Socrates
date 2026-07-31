@@ -7,6 +7,7 @@
     "build": "node build.mjs && node smoke.mjs",
     "dev": "tsx watch src/server.ts",
     "lint": "eslint src",
+    "runner:token:provision": "tsx src/provision-runner-token.ts",
     "start": "node dist/server.js",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -17,6 +18,7 @@
     "@socrates/contracts": "workspace:*",
     "@socrates/database": "workspace:*",
     "@socrates/domain": "workspace:*",
+    "@socrates/runner-auth": "workspace:*",
     "hono": "^4.12.32"
   },
   "devDependencies": {

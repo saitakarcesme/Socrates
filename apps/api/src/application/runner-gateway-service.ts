@@ -1,6 +1,7 @@
 import type {
   ClaimRunnerTaskInput,
   ClaimedRunnerTask,
+  HeartbeatRunnerTaskInput,
   IngestRunnerEventInput,
   Persistence,
   RunnerEventAcknowledgement,
@@ -120,5 +121,25 @@ export class RunnerGatewayService {
           "The runner event lease or fence is stale.",
         );
     }
+  }
+
+  async heartbeat(input: HeartbeatRunnerTaskInput): Promise<{
+    leaseExpiresAt: Date;
+    directive: "continue" | "cancel";
+  }> {
+    const result = await this.persistence.transaction(({ scheduler }) =>
+      scheduler.heartbeat(input),
+    );
+    if (result.state === "renewed") {
+      return {
+        leaseExpiresAt: result.leaseExpiresAt,
+        directive: result.directive,
+      };
+    }
+
+    return runnerConflict(
+      result.state,
+      "The runner task lease or fence is stale.",
+    );
   }
 }

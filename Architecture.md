@@ -1881,6 +1881,20 @@ a valid credential cannot revive a draining or offline runner. Token creation
 is an operator-only utility, not a public API route, and reveals the raw secret
 exactly once.
 
+Credential lookup is a dedicated persistence port beside workspace reads, not
+part of `TransactionRepositories`. Authentication happens before a runner
+command transaction and must not enlarge the scheduler's domain transaction
+surface. The port may return a fixed-size digest and usability bit only to the
+authenticator; provisioning owns its own short database transaction and
+operator utility.
+
+Opaque-token parsing, generation, hashing, constant-time verification, and the
+authenticator port live in execution-neutral `@socrates/runner-auth`. That
+package depends only on shared contracts and an injected credential lookup; it
+cannot import Hono, PostgreSQL, the API application, or runner execution code.
+This keeps the one-time provisioning utility and request authenticator on one
+cryptographic implementation without making database code own HTTP identity.
+
 Runner routes are versioned JSON under `/v1/runner`:
 
 - `POST /tasks/:taskId/claims` accepts a client-generated attempt UUID and a

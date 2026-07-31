@@ -8,6 +8,7 @@ import {
   MetricProtocolError,
   RunTransitionError,
 } from "@socrates/domain";
+import type { RunnerAuthenticator } from "@socrates/runner-auth";
 import { Hono } from "hono";
 import { requestId } from "hono/request-id";
 
@@ -21,6 +22,8 @@ import { IdempotentCommandExecutor } from "./application/idempotency";
 import { createCommandRoutes } from "./modules/commands/routes";
 import { createReadRoutes } from "./modules/reads/routes";
 import { RunEventNotifier } from "./realtime/run-event-notifier";
+import { RunnerGatewayService } from "./application/runner-gateway-service";
+import { createRunnerRoutes } from "./modules/runner/routes";
 
 export const developmentWorkspaceId = "019c1170-8b7a-7a60-b7f8-f35c85d75000";
 
@@ -28,6 +31,7 @@ export type AppOptions = {
   manualResearchEnabled?: boolean;
   persistence?: Persistence;
   reads?: ReadRepository;
+  runnerAuthenticator?: RunnerAuthenticator;
   workspaceId?: string;
 };
 
@@ -61,6 +65,10 @@ export function createApp(options: AppOptions = {}) {
   const experimentCommands = commandExecutor
     ? new ExperimentCommandService(commandExecutor)
     : null;
+  const runnerGateway =
+    options.persistence && options.runnerAuthenticator
+      ? new RunnerGatewayService(options.persistence)
+      : null;
 
   app.use("*", requestId());
 
@@ -79,7 +87,7 @@ export function createApp(options: AppOptions = {}) {
         api: "ok",
         database: reads ? "ok" : "not_configured",
         manualResearch: options.manualResearchEnabled ? "enabled" : "disabled",
-        runnerGateway: "not_configured",
+        runnerGateway: runnerGateway ? "enabled" : "not_configured",
       },
     };
 
@@ -92,6 +100,13 @@ export function createApp(options: AppOptions = {}) {
       reads,
       runEventNotifier,
       workspaceId: options.workspaceId ?? developmentWorkspaceId,
+    }),
+  );
+  app.route(
+    "/v1/runner",
+    createRunnerRoutes({
+      authenticator: options.runnerAuthenticator ?? null,
+      gateway: runnerGateway,
     }),
   );
   app.route(
