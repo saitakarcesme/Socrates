@@ -501,6 +501,26 @@ real PostgreSQL credential/claim/heartbeat/cancellation/event replay, all
 runner-local transport and spool tests, the browser journey, and production
 builds. `LocalRunnerNotEnabledError` remains the production entry point.
 
+### Slice 2.11 — durable work journal
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-048.
+
+Detailed plan: `docs/plans/slice-2.11-durable-work-journal.md`.
+
+- commit delivery/task/attempt identity before the first claim request
+- replay ambiguous claims with the exact durable attempt UUID
+- persist the complete validated execution snapshot before handoff
+- extract only execution-neutral private-filesystem durability primitives from
+  the existing spool
+- keep discovery, timers, heartbeat coordination, execution, and cleanup out of
+  scope
+
+Exit: injected crashes and restart tests prove that delivery creates at most
+one visible attempt identity and a claim response is never handed off before
+its immutable execution snapshot is durable.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

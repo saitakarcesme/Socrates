@@ -1984,6 +1984,78 @@ Phase 1 and Phase 2 dependency audits, production builds, and the low-severity
 dependency audit passed with no known vulnerabilities. This admits ADR-047 and
 closes Slice 2.10. `LocalRunnerNotEnabledError` remains unchanged.
 
+### ADR-048: Task delivery identity is durable before the first claim
+
+Slice 2.11 closes the runner restart window between receiving a task delivery
+and durably learning its fenced execution snapshot. A new private work journal
+admits a versioned delivery containing a delivery UUID and task UUID, allocates
+one attempt UUID, and commits those three identities before any claim request.
+Every reconciliation of that delivery uses the same task and attempt IDs. A
+network failure or crash before the claim response therefore cannot create a
+second logical attempt.
+
+The journal does not discover work. A future `TaskSource` may derive delivery
+IDs from PostgreSQL outbox messages, a broker, polling, or a cloud queue, but it
+must hand one validated delivery to this boundary. The source may acknowledge
+its own delivery only after the journal admission is durable. Slice 2.11 uses
+an injected source in tests and does not read, publish, or mutate
+`outbox_messages`; choosing dispatcher concurrency, capability routing, and
+redelivery policy remains a separate architecture decision.
+
+Each delivery becomes a hashed directory beneath a dedicated private journal
+root. An immutable canonical manifest binds format version, delivery ID, task
+ID, generated attempt ID, and admission timestamp. A later immutable claim
+record binds that manifest to the complete validated `RunnerExecutionV1`, its
+canonical digest, and the journal commit timestamp. The execution must repeat
+the manifest task/attempt identities; its runner identity comes only from the
+authenticated claim response. A committed claim record is the sole execution
+snapshot returned downstream.
+
+Admission and claim publication reuse execution-neutral private-filesystem
+primitives extracted from the event spool: exclusive temporary creation,
+file sync, create-if-absent hard-link publication, temporary unlink, directory
+sync, private modes, owner checks, symlink rejection, and canonical byte
+comparison. Spool-specific manifests, segments, acknowledgement logic, and
+event semantics remain in `spool`. The extraction must first preserve every
+existing spool fault-injection and native Linux gate; shared durability code is
+not permission to couple journal and event state.
+
+The journal permits one owning process per configured root, serializes all
+operations within that process, hashes protocol identities before forming
+paths, and enforces maximum item count, record bytes, and root bytes. Unknown
+files, noncanonical JSON, version drift, identity mismatch, checksum mismatch,
+hard-link count drift, invalid permissions, and incompatible duplicate
+delivery IDs fail closed. Re-admitting the same delivery/task returns the
+original attempt ID. Reusing a delivery ID for another task is an identity
+conflict and never overwrites the manifest.
+
+`ExactClaimReconciler` reads the durable manifest and invokes the Slice 2.10
+client with that exact task and attempt identity. It makes one HTTP attempt per
+call. A valid response is checked against the manifest and committed before it
+is returned. A crash before claim-record publication repeats the same
+idempotent control-plane claim; a crash after publication returns the stored
+execution without network access. Transport errors and authoritative conflicts
+leave the item pending. Slice 2.11 never guesses that a conflict is terminal,
+never allocates a replacement attempt, and never mutates the server lease.
+
+If downtime exceeds the lease and exact replay can no longer succeed, the
+pending manifest remains diagnostic truth. A later lease/outbox reconciler may
+observe the control-plane outcome and admit a genuinely new delivery only
+after scheduler policy permits it. This slice does not add a status endpoint,
+lease timer, retry loop, backoff, heartbeat, cancellation controller, executor,
+or garbage collector merely to hide that unresolved state.
+
+The journal stores no bearer credential, authorization header, base URL,
+source path, sandbox environment, log, or artifact. Diagnostics expose only
+delivery/task/attempt IDs, a closed `pending_claim` or `claimed` state, and
+bounded timestamps. Claim records are retained until a future coordinator can
+prove source acknowledgement, terminal spool acknowledgement, and sandbox
+cleanup; age alone never deletes unresolved work.
+
+`LocalRunnerNotEnabledError` remains the production entry-point behavior after
+Slice 2.11. The slice proves exact restart reconciliation but does not start an
+executable runner.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
