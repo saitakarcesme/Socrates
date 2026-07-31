@@ -1939,6 +1939,13 @@ identity: the same claim attempt UUID, heartbeat fence, or exact spooled event.
 This prevents hidden retries from extending leases or changing evidence
 identity outside coordinator policy.
 
+Each operation accepts only HTTP 200 with an `application/json` media type and
+its exact success schema. Redirect following is disabled so credentials cannot
+cross an origin through a control-plane response. Non-success responses may
+contribute only a validated API code and request ID to a typed transport error;
+raw response bytes, details, URLs containing credentials, and authorization
+headers are never retained.
+
 The event sender reads the first pending spool envelope, submits only that
 envelope, validates the exact acknowledgement, then delegates advancement to
 the spool. It never pipelines attempt sequences and never treats an HTTP 2xx
