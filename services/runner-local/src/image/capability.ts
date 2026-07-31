@@ -3,6 +3,7 @@ import type { SandboxCommand } from "../oci/profile";
 export type AdmittedSandboxImage = Readonly<{
   reference: string;
   digest: string;
+  configurationDigest: string;
   architecture: "amd64" | "arm64";
   runtime: SandboxCommand;
   profileProbe: SandboxCommand;
@@ -11,6 +12,7 @@ export type AdmittedSandboxImage = Readonly<{
 export type InspectedSandboxImage = Readonly<{
   reference: string;
   digest: string;
+  configurationDigest: string;
   architecture: "amd64" | "arm64";
   profileProbe: SandboxCommand;
 }>;
@@ -41,6 +43,7 @@ export function assertAdmittedImage(
   if (
     !admittedImages.has(image) ||
     !digestPattern.test(image.digest) ||
+    !digestPattern.test(image.configurationDigest) ||
     image.reference !== image.digest
   ) {
     throw new TypeError("Image was not admitted by the trusted catalog.");
@@ -52,6 +55,7 @@ export function assertAdmittedImage(
 export function issueAdmittedSandboxImage(input: {
   reference: string;
   digest: string;
+  configurationDigest: string;
   architecture: "amd64" | "arm64";
   runtime: SandboxCommand;
   profileProbe: SandboxCommand;
@@ -59,6 +63,7 @@ export function issueAdmittedSandboxImage(input: {
   const image: AdmittedSandboxImage = Object.freeze({
     reference: input.reference,
     digest: input.digest,
+    configurationDigest: input.configurationDigest,
     architecture: input.architecture,
     runtime: Object.freeze({
       executable: input.runtime.executable,
@@ -80,6 +85,7 @@ export function assertInspectedImage(
   if (
     !inspectedImages.has(image) ||
     !digestPattern.test(image.digest) ||
+    !digestPattern.test(image.configurationDigest) ||
     image.reference !== image.digest
   ) {
     throw new TypeError("Image was not issued from verified local inspection.");
@@ -90,12 +96,14 @@ export function assertInspectedImage(
 export function issueInspectedSandboxImage(input: {
   reference: string;
   digest: string;
+  configurationDigest: string;
   architecture: "amd64" | "arm64";
   profileProbe: SandboxCommand;
 }): InspectedSandboxImage {
   const image: InspectedSandboxImage = Object.freeze({
     reference: input.reference,
     digest: input.digest,
+    configurationDigest: input.configurationDigest,
     architecture: input.architecture,
     profileProbe: Object.freeze({
       executable: input.profileProbe.executable,

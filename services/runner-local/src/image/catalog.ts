@@ -269,6 +269,7 @@ export class SandboxImageCatalog {
         image: issueInspectedSandboxImage({
           reference: image.reference,
           digest: image.manifestDigest,
+          configurationDigest: image.configurationDigest,
           architecture: image.architecture,
           profileProbe: image.profileProbe,
         }),
@@ -296,6 +297,7 @@ export class SandboxImageCatalog {
     return issueAdmittedSandboxImage({
       reference: image.reference,
       digest: image.manifestDigest,
+      configurationDigest: image.configurationDigest,
       architecture: image.architecture,
       runtime: image.runtime,
       profileProbe: image.profileProbe,

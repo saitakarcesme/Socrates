@@ -211,6 +211,7 @@ describe("trusted sandbox image catalog", () => {
     const forged = {
       reference,
       digest: manifestDigest,
+      configurationDigest,
       architecture: "amd64" as const,
       runtime: declaration().runtime,
       profileProbe: declaration().profileProbe,

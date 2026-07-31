@@ -148,6 +148,7 @@ function inspectOwnership(
     !observedImages.some(
       (observedImage) =>
         observedImage === image.digest ||
+        observedImage === image.configurationDigest ||
         observedImage === image.reference ||
         observedImage.endsWith(`@${image.digest}`),
     )

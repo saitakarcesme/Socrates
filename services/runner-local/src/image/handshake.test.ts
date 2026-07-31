@@ -23,6 +23,7 @@ const buildDigest = `sha256:${"b".repeat(64)}`;
 const image = issueInspectedSandboxImage({
   reference: manifestDigest,
   digest: manifestDigest,
+  configurationDigest: `sha256:${"b".repeat(64)}`,
   architecture: "amd64",
   profileProbe: { executable: "/bin/probe", arguments: [] },
 });

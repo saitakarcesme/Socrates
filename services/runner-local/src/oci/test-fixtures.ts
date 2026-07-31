@@ -25,6 +25,7 @@ export const fixtureProfile: SandboxResourceProfile = {
 export const fixtureImage: AdmittedSandboxImage = createAdmittedImageForTesting(
   "node@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32",
   "amd64",
+  `sha256:${"b".repeat(64)}`,
 );
 
 export const fixtureReadiness: SandboxReadiness = {
@@ -130,7 +131,7 @@ export function fixtureCompatibleInspection(deploymentId: string): string {
     Name: ownership.containerName,
     Image: `sha256:${"b".repeat(64)}`,
     Config: {
-      Image: fixtureImage.reference,
+      Image: "docker.io/library/node:admission-candidate",
       Labels: ownership.labels,
     },
   });

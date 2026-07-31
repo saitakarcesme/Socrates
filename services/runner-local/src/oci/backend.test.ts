@@ -243,6 +243,7 @@ describe("nerdctl sandbox backend", () => {
     const inspected = issueInspectedSandboxImage({
       reference: fixtureImage.reference,
       digest: fixtureImage.digest,
+      configurationDigest: fixtureImage.configurationDigest,
       architecture: fixtureImage.architecture,
       profileProbe: fixtureImage.profileProbe,
     });
@@ -274,6 +275,7 @@ describe("nerdctl sandbox backend", () => {
     const forged = {
       reference: fixtureImage.reference,
       digest: fixtureImage.digest,
+      configurationDigest: fixtureImage.configurationDigest,
       architecture: fixtureImage.architecture,
       profileProbe: fixtureImage.profileProbe,
     };

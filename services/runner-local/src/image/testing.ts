@@ -6,11 +6,13 @@ import type { AdmittedSandboxImage } from "./capability";
 export function createAdmittedImageForTesting(
   reference: string,
   architecture: "amd64" | "arm64",
+  configurationDigest?: string,
 ): AdmittedSandboxImage {
   const digest = reference.slice(reference.lastIndexOf("@") + 1);
   return issueAdmittedSandboxImage({
     reference: digest,
     digest,
+    configurationDigest: configurationDigest ?? digest,
     architecture,
     runtime: {
       executable: "/usr/local/bin/node",
