@@ -1,6 +1,6 @@
 # Slice 2.23 durable execution-start barrier
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -82,3 +82,13 @@ use database-clocked lease state to resolve it without re-execution.
 5. Journal corruption and capacity violations fail closed.
 6. Execution, lease reconciliation, evidence delivery, and runner enablement
    remain disabled.
+
+## Validation
+
+Implementation commit `cb9bae3` and cross-platform fixture-mode correction
+`1a652ec` passed local formatting, type, lint, dependency-boundary, targeted
+43-test journal, full workspace-test, and production-build gates. GitHub
+Actions run `30663648242` passed 306 runner-local tests, PostgreSQL/API/runner
+integrations, the Linux native work-journal v4 durability probe, the Chromium
+journey, and all production builds. The native evidence verified `0600`, one
+hard link, restart-stable `startedAt`, and completed-state precedence.

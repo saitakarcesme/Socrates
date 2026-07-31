@@ -792,7 +792,7 @@ durability probes, Chromium, and production builds.
 
 ### Slice 2.23 — durable execution-start barrier
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-060.
 
@@ -810,6 +810,11 @@ Detailed plan: `docs/plans/slice-2.23-durable-execution-start.md`.
 Exit: durability fault injection and recovery tests prove a crash on either
 side of the start barrier can never make an already-started attempt executable
 again.
+
+Evidence: implementation commit `cb9bae3`, cross-platform fixture correction
+`1a652ec`; GitHub Actions run `30663648242` passed 306 runner-local tests, all
+PostgreSQL/API/runner integrations, the Linux native work-journal v4 probe,
+Chromium, and production builds.
 
 ## Acceptance gates
 

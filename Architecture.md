@@ -2742,6 +2742,20 @@ start record remains legal and takes precedence in the public state. The
 record does not enable execution, add a runner loop, contact the control plane,
 generate terminal evidence, or garbage-collect journal items.
 
+Validation amendment, 2026-07-31: implementation commit `cb9bae3` plus the
+cross-platform fixture-mode correction `1a652ec` passed local formatting,
+TypeScript, ESLint, Phase 1/2 dependency-boundary audits, 306 runner-local
+tests, all workspace tests, and production builds. GitHub Actions run
+`30663648242` passed PostgreSQL migrations and integrations, API and runner
+integrations, the Linux native work-journal v4 probe, the Chromium product
+journey, and all production builds. The native probe proved private `0600`
+publication, a single hard link, retained start time across restart, and
+completion precedence. Fault-injection tests covered all six publication
+boundaries; recovery tests proved that durable started work returns
+`indeterminate` without a claim or acquisition request. This admits ADR-060
+and closes Slice 2.23; lease reconciliation, session scheduling, sandbox
+execution, evidence generation, and runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
