@@ -2859,6 +2859,52 @@ native durability probes, the Chromium product journey, and all production
 builds. This admits ADR-062 and closes Slice 2.25; session composition,
 execution, persistence, and production runner enablement remain disabled.
 
+### ADR-063: Lease cadence is fail-stop and never local authority
+
+A future attempt session cannot safely call the one-step `LeaseSupervisor`
+from an ordinary interval. Overlapping requests can reorder directives, a
+timer callback can outlive its attempt, and treating a locally calculated
+deadline as lease truth could let a sandbox continue after the control plane
+has fenced it. Conversely, retrying an ambiguous heartbeat inside the cadence
+would hide the interval during which authority was unknown.
+
+One `LeaseAuthorityMonitor` therefore owns the sequential heartbeat cadence
+for exactly one frozen execution. It sends the first heartbeat immediately,
+then waits through an injected abort-aware scheduler only after a successful
+`renewed` result. Configuration fixes a positive safe-integer heartbeat period
+at no more than one third of the requested lease duration. This ratio creates
+retry opportunity for the control plane and observability, but it does not
+prove authority: only each authenticated heartbeat response does. The monitor
+never compares `Date.now()` with `leasedUntil` or `leaseExpiresAt`, and it never
+overlaps heartbeat calls.
+
+The monitor has a distinct attempt-revocation port. `stale` revokes local
+execution and returns a closed stale result. Any transport, protocol,
+authentication, server, timeout, cancellation-application, or scheduler
+failure first invokes the same revocation port and then rejects with bounded
+monitor-owned classification while retaining the original error only as an
+in-memory cause. Revocation aborts attempt work before it tries to stop the
+owned sandbox. Its local reason and configured stop grace are operational
+policy only; they cannot authorize a `task.cancelled` event. If revocation also
+fails, both causes remain available in memory and the monitor still fails
+closed.
+
+An authenticated `cancel` result continues through ADR-053 and ADR-054: the
+supervisor applies the immutable server directive, and the monitor returns its
+closed cancelled result without invoking a competing local revocation policy.
+An explicit caller stop is accepted only as lifecycle coordination after the
+caller no longer needs lease authority; it aborts a scheduled wait, performs
+no heartbeat, no revocation, and returns `stopped`. An already in-flight
+heartbeat is allowed to settle before stop completes so its outcome cannot be
+silently discarded. The future attempt session must request stop only after
+terminal acknowledgement and durable work completion.
+
+The monitor owns no acquisition, preparation, runtime execution, event
+mapping, spool write, acknowledgement, completion, retry, backoff, wall clock,
+or process loop. This slice adds the local revocation seam to the existing
+identity-bound cancellation scope and tests it with an injected deterministic
+scheduler, but does not compose or enable a production runner session.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

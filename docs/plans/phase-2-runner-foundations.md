@@ -867,6 +867,29 @@ runner-local tests passed locally with all repository quality gates. GitHub
 Actions run `30666098009` passed every integration suite, both Linux native
 durability probes, Chromium, and production builds.
 
+### Slice 2.26 — fail-stop lease authority monitor
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-063.
+
+Detailed plan: `docs/plans/slice-2.26-lease-authority-monitor.md`.
+
+- send an exact first heartbeat immediately, then use one non-overlapping
+  deterministic cadence;
+- treat only authenticated renewal as current authority and never compare
+  local wall time with lease timestamps;
+- revoke local attempt work on stale or uncertain authority without inventing
+  terminal evidence;
+- preserve authenticated cancellation as a separate server-authorized path;
+- make explicit owner stop wait for an in-flight heartbeat outcome;
+- keep acquisition, attempt-session composition, execution, events,
+  persistence, and runner enablement out of scope.
+
+Exit: deterministic timer and race tests prove heartbeat calls cannot overlap,
+normal stop cannot discard a response, and every stale or uncertain outcome
+fails local execution closed without producing lifecycle evidence.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
