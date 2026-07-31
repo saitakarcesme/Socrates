@@ -10,7 +10,7 @@ import { pack } from "tar-stream";
 import { SourceSnapshotMaterializer } from "../source/materializer";
 import { NerdctlSandboxBackend } from "./backend";
 import { NodeProcessExecutor } from "./process";
-import { unsafeCreateAdmittedImageForTesting } from "./profile";
+import { createAdmittedImageForTesting } from "../image/testing";
 import {
   NerdctlReadinessVerifier,
   NodeHostReadinessInspector,
@@ -82,10 +82,7 @@ const backend = new NerdctlSandboxBackend(processes, readinessVerifier, {
   runnerId,
   executionTimeoutMs: 15_000,
 });
-const image = unsafeCreateAdmittedImageForTesting(
-  imageReference,
-  architecture(),
-);
+const image = createAdmittedImageForTesting(imageReference, architecture());
 const sourceStateRoot = await mkdtemp(
   join(tmpdir(), "socrates-native-source-"),
 );

@@ -1,9 +1,13 @@
+import { assertAdmittedImage } from "../image/capability";
 import type { SandboxOwnership } from "./identity";
 import {
   resolveMaterializedSourceSnapshot,
   type MaterializedSourceSnapshot,
 } from "../source/capability";
 import type { SandboxAttemptIdentity } from "./identity";
+import type { AdmittedSandboxImage } from "../image/capability";
+
+export type { AdmittedSandboxImage } from "../image/capability";
 
 export const sandboxAppArmorProfile = "socrates-sandbox";
 
@@ -21,21 +25,6 @@ export type SandboxCommand = Readonly<{
   arguments: readonly string[];
 }>;
 
-const admittedSandboxImageBrand: unique symbol = Symbol(
-  "socrates.admittedSandboxImage",
-);
-
-export type AdmittedSandboxImage = Readonly<{
-  reference: string;
-  digest: string;
-  architecture: "amd64" | "arm64";
-  profileProbe: SandboxCommand;
-  [admittedSandboxImageBrand]: true;
-}>;
-
-const digestPattern = /^sha256:[a-f0-9]{64}$/;
-const imageReferencePattern =
-  /^[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[a-f0-9]{64}$/;
 const absoluteExecutablePattern =
   /^\/(?:[^/\0.][^/\0]*|\.(?!\.?\/)[^/\0]+)(?:\/[^/\0]+)*$/;
 
@@ -58,51 +47,6 @@ export function validateSandboxProfile(profile: SandboxResourceProfile): void {
   if (!Number.isFinite(profile.cpuCount) || profile.cpuCount <= 0) {
     throw new RangeError("cpuCount must be a positive finite number.");
   }
-}
-
-export function assertAdmittedImage(
-  image: AdmittedSandboxImage,
-): asserts image is AdmittedSandboxImage {
-  if (
-    image[admittedSandboxImageBrand] !== true ||
-    !digestPattern.test(image.digest) ||
-    !imageReferencePattern.test(image.reference) ||
-    !image.reference.endsWith(`@${image.digest}`)
-  ) {
-    throw new TypeError("Admitted image must be a digest-pinned reference.");
-  }
-  commandArguments(image.profileProbe);
-}
-
-export function unsafeCreateAdmittedImageForTesting(
-  reference: string,
-  architecture: "amd64" | "arm64",
-): AdmittedSandboxImage {
-  const digest = reference.slice(reference.lastIndexOf("@") + 1);
-  const image: AdmittedSandboxImage = {
-    reference,
-    digest,
-    architecture,
-    profileProbe: Object.freeze({
-      executable: "/usr/local/bin/node",
-      arguments: Object.freeze([
-        "-e",
-        [
-          "const fs=require('node:fs')",
-          "const label=fs.readFileSync('/proc/self/attr/current','utf8').trim()",
-          "const uidMap=fs.readFileSync('/proc/self/uid_map','utf8').trim()",
-          "const status=fs.readFileSync('/proc/self/status','utf8')",
-          "const capabilities=Object.fromEntries(status.split('\\n').filter(line=>/^Cap(?:Inh|Prm|Eff|Bnd|Amb):/.test(line)).map(line=>{const [name,value]=line.split(':');return [name,value.trim()]}))",
-          "let denied=false",
-          "try{fs.writeFileSync('/tmp/socrates-lsm-probe','probe')}catch(error){denied=error?.code==='EACCES'}",
-          "process.stdout.write(JSON.stringify({label,denied,uidMap,capabilities}))",
-        ].join(";"),
-      ]),
-    }),
-    [admittedSandboxImageBrand]: true,
-  };
-  assertAdmittedImage(image);
-  return Object.freeze(image);
 }
 
 function commandArguments(command: SandboxCommand): readonly string[] {

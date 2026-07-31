@@ -1,5 +1,5 @@
 import { createSandboxOwnership } from "./identity";
-import { unsafeCreateAdmittedImageForTesting } from "./profile";
+import { createAdmittedImageForTesting } from "../image/testing";
 
 import type { SandboxAttemptIdentity } from "./identity";
 import type { ProcessResult } from "./process";
@@ -22,11 +22,10 @@ export const fixtureProfile: SandboxResourceProfile = {
   sharedMemoryBytes: 64 * 1_024,
 };
 
-export const fixtureImage: AdmittedSandboxImage =
-  unsafeCreateAdmittedImageForTesting(
-    "node@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32",
-    "amd64",
-  );
+export const fixtureImage: AdmittedSandboxImage = createAdmittedImageForTesting(
+  "node@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32",
+  "amd64",
+);
 
 export const fixtureReadiness: SandboxReadiness = {
   checkedAt: "2026-07-31T00:00:00.000Z",
