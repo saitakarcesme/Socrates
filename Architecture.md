@@ -2943,10 +2943,14 @@ work while the conservative start record remains correct.
 The request envelope is released on every post-materialization path, including
 pre-barrier cancellation, barrier failure, synchronous backend failure, and
 normal completion. A failed or indeterminate barrier never invokes the
-backend. Once `cross()` resolves, any later failure is post-start even if the
-backend proves that no container became active; restart logic must continue to
-treat the attempt as indeterminate until ADR-061 retirement or acknowledged
-terminal completion.
+backend. Release failure becomes one stable runner-owned
+`request_release_failed` error. When execution also failed, an in-memory
+aggregate retains both causes without copying either into product evidence, so
+cleanup uncertainty cannot erase whether the start barrier was crossed. Once
+`cross()` resolves, any later failure is post-start even if the backend proves
+that no container became active; restart logic must continue to treat the
+attempt as indeterminate until ADR-061 retirement or acknowledged terminal
+completion.
 
 `DurableExecutionStartBarrier` binds one validated execution and delivery ID
 to `LocalWorkJournal.commitExecutionStart`. Its first `cross()` call owns one

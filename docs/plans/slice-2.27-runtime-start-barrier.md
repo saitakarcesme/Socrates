@@ -22,6 +22,11 @@ inside runtime execution without composing or enabling an attempt session.
 6. Release the request envelope on every outcome.
 7. Validate runtime output only after the backend settles.
 
+Request release failure has one stable `request_release_failed`
+classification. If another operation already failed, retain both causes only
+in an in-memory aggregate; never let cleanup erase the primary boundary and
+never copy either cause into lifecycle evidence.
+
 ## Durable capability
 
 Add one `DurableExecutionStartBarrier` that binds delivery ID and validated
