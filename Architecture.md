@@ -2981,6 +2981,51 @@ product journey, and all production builds. This admits ADR-064 and closes
 Slice 2.27; admission, session composition, evidence production, and runner
 enablement remain disabled.
 
+### ADR-065: Durable terminal evidence recovers before attempt retirement
+
+An `execution_started` journal item may already have a complete terminal event
+batch in the local spool when the runner restarts. ADR-061 currently sends such
+work directly to exact lease reconciliation. If the control plane committed an
+event but its acknowledgement was lost, reconciliation can report the attempt
+retired and the local journal can publish retirement while its byte-identical
+terminal evidence remains recoverable. Server outcome must not replace durable
+local evidence merely because delivery was interrupted.
+
+`TerminalEvidenceRecoveryCoordinator` therefore inspects only an existing
+exact-attempt spool before an `execution_started` item can be reconciled. A new
+non-creating `inspectExisting` operation returns `null` when the attempt has no
+spool directory; admission probing must not allocate a manifest, consume
+capacity, or change filesystem state. An empty existing manifest is equivalent
+to no evidence. Any partial, non-terminal, identity-conflicting, or corrupt
+state fails closed.
+
+For a committed terminal batch, recovery freezes its initial pending-event
+count and invokes the existing sequential sender exactly that many times. Each
+step must acknowledge one event; premature `idle`, count drift, malformed
+acknowledgement, transport ambiguity, rejection, or spool failure aborts the
+operation. It does not reconcile the lease in the same admission call. A later
+call retries the same durable bytes, allowing the server to return its replay
+acknowledgement without allocating a new event ID or sequence.
+
+After the bounded drain, the existing completion coordinator must observe the
+exact terminal acknowledgement and durably commit local work completion. A
+`not_ready` result after the proven drain is an invariant failure. Already
+fully acknowledged terminal evidence skips sending and proceeds directly to
+completion. Recovery returns one frozen `completed` result containing the
+durable work state; it never appends drafts or creates evidence.
+
+`WorkAdmissionCoordinator` consults this recovery port only for
+`execution_started` work and does so before exact retirement reconciliation.
+Successful completion is returned as a distinct admission result and ends the
+call; acquiring another delivery requires a later call. Absent evidence falls
+through to ADR-061 reconciliation. Claimed pre-start cancellation evidence is
+not addressed by this slice and remains a future session/recovery decision.
+
+This slice adds no executor, heartbeat, timer, event mapping, fresh spool
+append, garbage collection, polling loop, or runner enablement. It establishes
+the restart ordering needed before a single-attempt session can safely publish
+terminal evidence.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
