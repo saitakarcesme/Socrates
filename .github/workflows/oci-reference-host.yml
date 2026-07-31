@@ -62,12 +62,27 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install --yes \
+            ca-certificates \
+            curl \
             dbus-user-session \
-            docker-ce-rootless-extras \
             fuse-overlayfs \
             podman \
             slirp4netns \
             uidmap
+          if ! command -v dockerd-rootless-setuptool.sh >/dev/null; then
+            sudo install -m 0755 -d /etc/apt/keyrings
+            sudo curl --fail --silent --show-error --location \
+              https://download.docker.com/linux/ubuntu/gpg \
+              --output /etc/apt/keyrings/docker.asc
+            sudo chmod a+r /etc/apt/keyrings/docker.asc
+            architecture="$(dpkg --print-architecture)"
+            . /etc/os-release
+            codename="${UBUNTU_CODENAME:-$VERSION_CODENAME}"
+            echo "deb [arch=${architecture} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${codename} stable" |
+              sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+            sudo apt-get update
+            sudo apt-get install --yes docker-ce-rootless-extras
+          fi
           if ! grep -q "^${USER}:" /etc/subuid; then
             sudo usermod --add-subuids 100000-165535 "$USER"
           fi
