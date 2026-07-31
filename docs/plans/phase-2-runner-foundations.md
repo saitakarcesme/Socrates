@@ -358,6 +358,8 @@ Detailed plan: `docs/plans/oci-engine-spike.md`.
 - prove hard cancellation and orphan cleanup
 - run adversarial mount, network, privilege, fork-bomb, disk-fill, and secret
   leakage tests
+- produce one same-host comparison session that fails closed unless Docker and
+  Podman both satisfy the reviewed evidence contract
 - write the engine-selection ADR
 
 Exit: a reviewed spike selects the backend. Spike code is not promoted by

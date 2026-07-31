@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { parseEngineFacts, unavailableEngineFacts } from "./engine-adapter";
+import {
+  engineFactArguments,
+  parseEngineFacts,
+  unavailableEngineFacts,
+} from "./engine-adapter";
 
 describe("OCI engine fact adapters", () => {
   it("classifies Docker Desktop evidence as non-native and non-rootless", () => {
@@ -26,6 +30,7 @@ describe("OCI engine fact adapters", () => {
     ).toMatchObject({
       engine: "docker",
       clientVersion: "29.3.1",
+      architecture: "amd64",
       cgroupVersion: "2",
       nativeLinux: false,
       rootless: false,
@@ -109,5 +114,18 @@ describe("OCI engine fact adapters", () => {
       rootless: false,
       desktopOrVm: false,
     });
+  });
+
+  it("uses each engine's documented JSON format form", () => {
+    expect(engineFactArguments("podman", "info")).toEqual([
+      "info",
+      "--format",
+      "json",
+    ]);
+    expect(engineFactArguments("nerdctl", "version")).toEqual([
+      "version",
+      "--format",
+      "{{json .}}",
+    ]);
   });
 });

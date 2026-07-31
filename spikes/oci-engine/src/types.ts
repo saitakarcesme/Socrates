@@ -69,3 +69,32 @@ export type SpikeEvidence = {
   eligibleForNativeSelection: boolean;
   limitations: readonly string[];
 };
+
+export type NativeEngineOutcome = {
+  engine: EngineName;
+  evidenceFile?: string;
+  evidence?: SpikeEvidence;
+  failureCode?: "execution-error";
+};
+
+export type NativeComparisonResult = {
+  engine: EngineName;
+  status: "complete" | "failed";
+  evidenceFile?: string;
+  eligibleForNativeSelection: boolean;
+  availability: "available" | "unavailable" | "unknown";
+  latency?: LatencySummary;
+  failureCode?: "execution-error";
+};
+
+export type NativeComparisonManifest = {
+  schemaVersion: "1";
+  sessionId: string;
+  recordedAt: string;
+  image: string;
+  requiredEngines: readonly EngineName[];
+  optionalEngines: readonly EngineName[];
+  results: readonly NativeComparisonResult[];
+  gates: readonly GateResult[];
+  readyForArchitectureReview: boolean;
+};

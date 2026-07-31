@@ -126,9 +126,29 @@ stress the host outside the candidate's declared cgroup.
 - engine-neutral TypeScript spike harness outside production workspaces
 - machine-readable JSON evidence with command output redacted
 - human-readable comparison and limitations
-- native Linux rerun instructions
+- native Linux rerun command that writes an immutable session directory and a
+  fail-closed comparison manifest
 - ADR amendment selecting one engine or explicitly recording that selection is
   blocked pending native-host evidence
+
+## Native comparison session
+
+The reference host runs Docker and Podman sequentially in one harness process.
+nerdctl is included when it is available. Each engine receives the same
+digest-pinned image, fixed profile, warm-up count, and latency sample count.
+Evidence is written under a unique session directory rather than replacing
+development-host evidence.
+
+The comparison manifest is review-ready only when:
+
+1. Docker and Podman both produced complete evidence.
+2. Both required candidates are eligible for native selection.
+3. Their image, fixed profile, kernel, architecture, and cgroup version match.
+4. Every requested optional candidate either produced evidence or is recorded
+   as unavailable; optional failure cannot be mistaken for required success.
+
+The manifest never chooses the lowest-latency engine. Enforcement evidence and
+an explicit ADR review remain authoritative.
 
 ## Promotion rule
 
@@ -142,5 +162,6 @@ gates, hard cancellation, label-scoped cleanup, and 30 latency samples. It
 failed the native Linux, rootless, and host-LSM preflight gates exactly as
 expected. The typed executor and fact normalization now cover Docker, Podman,
 and nerdctl, but the latter two are not installed on this host. No engine is
-selected and Slice 2.5 remains gated; see
+selected and Slice 2.5 remains gated. The native session command and
+fail-closed comparison manifest are implemented; see
 `docs/evidence/phase-2-oci-engine-spike.md`.

@@ -24,6 +24,13 @@ function stringArray(value: unknown): string[] {
     : [];
 }
 
+function architecture(value: unknown): string | undefined {
+  const reported = string(value)?.toLowerCase();
+  if (reported === "x86_64" || reported === "x64") return "amd64";
+  if (reported === "aarch64") return "arm64";
+  return reported;
+}
+
 function parseJson(result: CommandResult, description: string): unknown {
   if (result.exitCode !== 0) {
     throw new Error(`${description} failed with exit code ${result.exitCode}.`);
@@ -73,7 +80,7 @@ function dockerCompatibleFacts(
       string(info["ServerVersion"]) ??
       string(version["Version"]),
     operatingSystem,
-    architecture: string(info["Architecture"]),
+    architecture: architecture(info["Architecture"]),
     kernelVersion,
     cgroupVersion: string(info["CgroupVersion"])?.replace(/^v/, ""),
     cgroupDriver: string(info["CgroupDriver"]),
@@ -120,7 +127,7 @@ function podmanFacts(rawInfo: unknown, rawVersion: unknown): EngineFacts {
       string(embeddedVersion["Version"]) ??
       string(embeddedVersion["version"]),
     operatingSystem,
-    architecture: string(host["arch"]),
+    architecture: architecture(host["arch"]),
     kernelVersion,
     cgroupVersion: string(host["cgroupVersion"])?.replace(/^v/, ""),
     cgroupDriver: string(host["cgroupManager"]),
@@ -153,14 +160,23 @@ export function unavailableEngineFacts(engine: EngineName): EngineFacts {
   };
 }
 
+export function engineFactArguments(
+  engine: EngineName,
+  command: "info" | "version",
+): readonly string[] {
+  return engine === "podman"
+    ? [command, "--format", "json"]
+    : [command, "--format", "{{json .}}"];
+}
+
 export async function readEngineFacts(
   engine: EngineName,
 ): Promise<EngineFacts> {
   if (!(await commandExists(engine))) return unavailableEngineFacts(engine);
 
   const [infoResult, versionResult] = await Promise.all([
-    runCommand(engine, ["info", "--format", "{{json .}}"]),
-    runCommand(engine, ["version", "--format", "{{json .}}"]),
+    runCommand(engine, engineFactArguments(engine, "info")),
+    runCommand(engine, engineFactArguments(engine, "version")),
   ]);
   if (infoResult.exitCode !== 0 || versionResult.exitCode !== 0) {
     return unavailableEngineFacts(engine);

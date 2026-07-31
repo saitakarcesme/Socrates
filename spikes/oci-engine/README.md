@@ -44,3 +44,24 @@ before the engine decision can close.
 Evidence is written to `spikes/oci-engine/evidence/<engine>-current-host.json`.
 It contains selected version and enforcement facts, not raw environment or
 command output.
+
+## Native reference-host rerun
+
+Use a disposable native Linux host with cgroup v2, systemd delegation, AppArmor
+or SELinux, and rootless Docker and Podman configured for the same unprivileged
+operator. Pre-pull the exact digest for every installed candidate because the
+profile disables implicit pulls:
+
+```text
+docker pull <name@sha256:digest>
+podman pull <name@sha256:digest>
+nerdctl pull <name@sha256:digest> # only when nerdctl is installed
+
+pnpm spike:oci:native -- --image <name@sha256:digest> --latency-samples 30
+```
+
+The command runs Docker, Podman, and nerdctl sequentially and writes an
+immutable directory under `spikes/oci-engine/evidence/native/`. Exit code `0`
+means the comparison is ready for architecture review. Exit code `2` means
+evidence was still written but at least one fail-closed comparison gate did not
+pass. The comparison does not select or rank an engine.

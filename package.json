@@ -14,6 +14,7 @@
     "lint": "turbo lint",
     "spike:oci": "tsx spikes/oci-engine/src/cli.ts",
     "spike:oci:lint": "eslint spikes/oci-engine/src",
+    "spike:oci:native": "tsx spikes/oci-engine/src/native-rerun.ts",
     "spike:oci:test": "vitest run spikes/oci-engine",
     "spike:oci:typecheck": "tsc -p spikes/oci-engine/tsconfig.json",
     "typecheck": "turbo typecheck",

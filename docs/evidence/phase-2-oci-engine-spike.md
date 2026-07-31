@@ -99,6 +99,13 @@ if its dependencies are provisioned on that host. The same typed executor now
 drives all three candidates; Docker-compatible and Podman-native fact and
 inspect fields have fixture coverage.
 
+The native rerun is now one immutable comparison session. Its manifest requires
+eligible Docker and Podman evidence from the same kernel, architecture, and
+cgroup version with identical image, profile, and latency sample counts. It
+also records nerdctl as measured or unavailable and fails closed if that
+disposition cannot be produced. A passing manifest is review input, not an
+automatic engine choice.
+
 Machine-readable evidence:
 
 - `spikes/oci-engine/evidence/docker-current-host.json`

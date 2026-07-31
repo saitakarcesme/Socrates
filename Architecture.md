@@ -1215,6 +1215,15 @@ production package, and requires an explicit engine target. It cannot be
 promoted into Slice 2.5 by copying commands; the guarded adapter must encode
 typed arguments, startup self-checks, and cancellation ownership anew.
 
+Native reference-host evidence is produced as one comparison session rather
+than by manually combining independent files. Docker and Podman are required
+candidates; nerdctl is measured when available. The session manifest fails
+closed unless both required candidates pass every native preflight,
+adversarial, cancellation, and cleanup gate with the same immutable image,
+sandbox profile, kernel, architecture, and cgroup version. It may mark the
+evidence ready for architecture review, but it cannot select or rank an engine;
+the reviewed ADR amendment remains the selection authority.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
