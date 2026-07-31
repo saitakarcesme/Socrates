@@ -145,10 +145,11 @@ export function parseSandboxImageInspection(input: {
   const compatible = parseJson(input.dockerCompatible, "docker-compatible");
   const native = parseJson(input.native, "native");
   const configuration = object(compatible["Config"], "Config");
-  const target = object(native["Target"], "Target");
-  const reference = string(native["Name"], "Name");
-  const manifestDigest = digest(target["digest"], "Target.digest");
-  const mediaType = string(target["mediaType"], "Target.mediaType");
+  const image = object(native["Image"], "Image");
+  const target = object(image["Target"], "Image.Target");
+  const reference = string(image["Name"], "Image.Name");
+  const manifestDigest = digest(target["digest"], "Image.Target.digest");
+  const mediaType = string(target["mediaType"], "Image.Target.mediaType");
   if (!acceptedManifestMediaTypes.has(mediaType)) {
     throw new SandboxImageInspectionError(
       "invalid_output",
