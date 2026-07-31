@@ -1666,14 +1666,22 @@ and source identities, and one closed runtime frame sequence. It returns a
 bounded ordered list of internal event drafts whose payloads are validated
 against the corresponding `RunnerEventV2` payload schemas.
 
-The adapter emits `workspace.prepared` first. Action-phase start and exit frames
-become `action.started` and, when an exit code exists, `action.completed`.
+The adapter emits `workspace.prepared` immediately before the first command
+draft, which proves the runtime completed source copying; a pre-command source
+or request failure cannot claim a prepared workspace. Action-phase start and
+exit frames become `action.started` and, when an exit code exists,
+`action.completed`.
 Signal-only exits proceed directly to a terminal failure because V2 does not
 invent a portable numeric exit code. Action stdout and stderr become inert
 `log.appended` drafts. Measurement stderr may also become a log; measurement
 stdout is not logged because the runtime already repeats those exact bounded
 bytes through `measurement.result` frames. This avoids duplicate evidence and
 quota consumption.
+
+Runtime command durations are already non-negative integers. The outer sandbox
+duration may retain sub-millisecond precision, so terminal event duration uses
+the ceiling in milliseconds; evidence accounting never understates elapsed
+time to satisfy an integer transport field.
 
 Command-output bytes are accumulated only within the existing runtime output
 budget, decoded as a continuous UTF-8 stream so code points split across frames
@@ -1683,6 +1691,13 @@ the draft redacted. Chunks are split by Unicode code point so both the 16,384
 character and 65,536 UTF-8 byte contract limits hold. The control plane retains
 its independent secondary redactor; runner provenance is never treated as
 proof.
+
+The deterministic credential patterns live in an execution-neutral
+`@socrates/evidence-policy` package used by both the local adapter and database
+ingestion. Centralizing only the pure text policy prevents runner and control
+plane rules from drifting without creating a dependency from the control plane
+to runner code. Each boundary still invokes the policy independently and
+recomputes its own UTF-8 accounting.
 
 The complete measurement result is decoded with fatal UTF-8, parsed as strict
 JSON with exactly `schema` and `value`, requires schema `metric-value.v1`, and
@@ -1694,7 +1709,10 @@ exactly one measurement draft followed by `task.succeeded`.
 Failure mapping is closed and based on structured runtime codes, never message
 text: invalid request, source-copy, and internal failures are infrastructure;
 action command failures are invalid action; measurement failures are
-evaluation; and command timeout is a wall-time budget failure. A malformed
+evaluation; command timeout is a wall-time budget failure; and the structured
+`output_budget_exceeded` code is a log-byte budget failure regardless of
+command phase. Runtime message text is never parsed to recover missing
+structure. A malformed
 measurement or contradiction between runtime status and frames is a local
 protocol error and cannot produce a success event. Slice 2.8 adds adversarial
 tests for every mapping before any code may enable execution.
@@ -1706,6 +1724,16 @@ replay change the normalized event digest. The spool will turn drafts into full
 V2 envelopes atomically and discard them only after the control plane
 acknowledges their exact IDs. `LocalRunnerNotEnabledError` therefore remains in
 force through Slice 2.8.
+
+Validation amendment, 2026-07-31: the pure adapter is admitted. The repository
+quality gates passed across all 13 workspaces: formatting, TypeScript,
+ESLint, unit/property/adversarial tests, Phase 1 and Phase 2 dependency audits,
+production builds, and a low-severity dependency audit with no known
+vulnerabilities. The runner-local suite passed 124 tests with three explicitly
+environment-gated integration tests skipped; task-runtime passed 20 tests with
+one platform-gated test skipped; the new shared evidence policy passed its two
+tests. `LocalRunnerNotEnabledError` remains unchanged. This closes Slice 2.8;
+durable envelope allocation, replay, and acknowledgement remain Slice 2.9.
 
 ## 19. Explicit non-goals for the first commit
 

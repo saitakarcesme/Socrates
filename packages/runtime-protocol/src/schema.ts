@@ -153,6 +153,7 @@ const runtimeErrorFrameSchema = z
       "source_copy_failed",
       "command_failed",
       "command_timeout",
+      "output_budget_exceeded",
       "measurement_failed",
       "internal_error",
     ]),

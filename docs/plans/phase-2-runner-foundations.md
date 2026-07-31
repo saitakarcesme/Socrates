@@ -431,7 +431,7 @@ Native admission: GitHub Actions run `30641068455`; immutable evidence at
 
 ### Slice 2.8 — runtime lifecycle event adapter
 
-Status: In progress.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-045.
 
@@ -446,6 +446,11 @@ Detailed plan: `docs/plans/slice-2.8-runtime-lifecycle-adapter.md`.
 
 Exit: successful and failed runtime results deterministically produce only
 contract-valid, quota-bounded event drafts, with no production runner enabled.
+
+Validation: all repository format, typecheck, lint, test, dependency-boundary,
+build, and low-severity audit gates passed. Runner-local passed 124 tests; the
+new lifecycle suites cover draft validation, Unicode-safe log handling, strict
+measurement evidence, closed failure mapping, and terminal contradictions.
 
 ## Acceptance gates
 

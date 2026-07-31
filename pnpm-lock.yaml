@@ -150,6 +150,9 @@ importers:
       "@socrates/domain":
         specifier: workspace:*
         version: link:../domain
+      "@socrates/evidence-policy":
+        specifier: workspace:*
+        version: link:../evidence-policy
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(postgres@3.4.9)
@@ -189,6 +192,12 @@ importers:
         specifier: ^4.9.0
         version: 4.9.0
 
+  packages/evidence-policy:
+    devDependencies:
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)
+
   packages/runtime-protocol:
     dependencies:
       "@socrates/contracts":
@@ -222,6 +231,9 @@ importers:
       "@socrates/contracts":
         specifier: workspace:*
         version: link:../../packages/contracts
+      "@socrates/evidence-policy":
+        specifier: workspace:*
+        version: link:../../packages/evidence-policy
       "@socrates/runtime-protocol":
         specifier: workspace:*
         version: link:../../packages/runtime-protocol

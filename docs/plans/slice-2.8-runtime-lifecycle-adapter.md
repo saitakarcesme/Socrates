@@ -1,6 +1,6 @@
 # Slice 2.8 runtime lifecycle event adapter plan
 
-Status: Approved for implementation
+Status: Complete
 
 Date: 2026-07-31
 
@@ -24,9 +24,14 @@ The module may depend on contracts and runtime-protocol types. It cannot depend
 on the database, API, transport, filesystem, OCI engine, or wall clock. Event
 envelopes belong to the durable spool in Slice 2.9.
 
+Move the existing pure credential-pattern policy into the execution-neutral
+`@socrates/evidence-policy` package. Both database ingestion and the local
+adapter call it independently; neither trusts the other's `redacted` flag.
+
 ## Mapping
 
-1. Emit `workspace.prepared` from admitted source and image identities.
+1. Emit `workspace.prepared` from admitted source and image identities only
+   when the first command-start frame proves runtime source preparation passed.
 2. Map action `command.started` frames to `action.started`.
 3. Decode, redact, and contract-chunk action stdout/stderr into `log.appended`.
 4. Map numeric action exits to `action.completed`; do not synthesize an exit
@@ -39,6 +44,10 @@ envelopes belong to the durable spool in Slice 2.9.
    and `sampleCount: 1`.
 7. Emit exactly one terminal `task.succeeded` or `task.failed` draft.
 
+Numeric command durations pass through unchanged. The outer sandbox duration is
+rounded up to the next millisecond for integer terminal-event fields so elapsed
+time is never understated.
+
 ## Failure policy
 
 | Runtime condition                          | Event classification   | Budget dimension |
@@ -48,6 +57,7 @@ envelopes belong to the durable spool in Slice 2.9.
 | action `command_failed`                    | `invalid_action`       | none             |
 | `measurement_failed`                       | `evaluation`           | none             |
 | `command_timeout`                          | `budget`               | `wall_time`      |
+| `output_budget_exceeded`                   | `budget`               | `log_bytes`      |
 | `internal_error`                           | `infrastructure`       | none             |
 | malformed measurement/result contradiction | adapter protocol error | no event list    |
 
@@ -101,3 +111,16 @@ for classification or copied into durable events.
 5. The adapter has no clock, persistence, engine, transport, or host-path input.
 6. `LocalRunnerNotEnabledError` remains the production behavior.
 7. Full workspace quality and dependency-boundary gates pass.
+
+## Validation
+
+Completed on 2026-07-31.
+
+- all 13 workspaces passed formatting, typecheck, lint, test, and build gates;
+- Phase 1 and Phase 2 dependency-boundary audits passed;
+- the dependency audit reported no known vulnerabilities at low severity;
+- runner-local passed 124 tests with three environment-gated integration tests
+  skipped;
+- task-runtime passed 20 tests with one platform-gated test skipped;
+- the shared evidence policy passed two tests;
+- production runner enablement remains explicitly out of scope.

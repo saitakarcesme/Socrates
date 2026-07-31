@@ -253,7 +253,11 @@ export class TaskRuntimeEngine {
     ) {
       this.#fail(
         sink,
-        phase === "measurement" ? "measurement_failed" : "command_failed",
+        result.outputLimitExceeded
+          ? "output_budget_exceeded"
+          : phase === "measurement"
+            ? "measurement_failed"
+            : "command_failed",
         result.outputLimitExceeded
           ? "Runtime command exceeded its output budget."
           : "Runtime command failed.",

@@ -323,7 +323,7 @@ describe("task runtime engine", () => {
     expectValidSequence(sink.frames, 1);
     expect(sink.frames.at(-2)).toEqual({
       type: "runtime.error",
-      code: "command_failed",
+      code: "output_budget_exceeded",
       message: "Runtime command exceeded its output budget.",
     });
   });

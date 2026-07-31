@@ -23,3 +23,4 @@ export * from "./image/index";
 export * from "./runtime/index";
 export * from "./source/index";
 export * from "./request/index";
+export * from "./lifecycle/index";

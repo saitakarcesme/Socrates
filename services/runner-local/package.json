@@ -14,6 +14,7 @@
   "dependencies": {
     "@socrates/artifact-store": "workspace:*",
     "@socrates/contracts": "workspace:*",
+    "@socrates/evidence-policy": "workspace:*",
     "@socrates/runtime-protocol": "workspace:*",
     "tar-stream": "3.2.0"
   },
