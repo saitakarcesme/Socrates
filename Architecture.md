@@ -1735,6 +1735,86 @@ one platform-gated test skipped; the new shared evidence policy passed its two
 tests. `LocalRunnerNotEnabledError` remains unchanged. This closes Slice 2.8;
 durable envelope allocation, replay, and acknowledgement remain Slice 2.9.
 
+### ADR-046: The local event spool commits closed batches before delivery
+
+Slice 2.9 introduces a private, file-backed event spool inside
+`services/runner-local`. The spool is the first owner of complete
+`RunnerEventV2` envelopes. It accepts an admitted `RunnerExecutionV1` identity
+and one closed lifecycle-draft batch, allocates the positive attempt-local
+sequences, UUID event IDs, and one immutable RFC 3339 occurrence timestamp,
+validates every completed envelope, then durably commits the whole batch before
+returning it to a sender. It has no control-plane client and does not enable the
+production runner.
+
+The acknowledgement wire shape becomes a versioned contract in
+`@socrates/contracts`, not a runner import from `@socrates/database`. Version 1
+contains the event ID, attempt ID, acknowledged sequence, expected next
+sequence, and an RFC 3339 control-plane receive timestamp. The database may use
+`Date` internally, but the API transport must explicitly serialize that value;
+the spool accepts only the validated wire contract.
+
+The first implementation uses only stable Node filesystem primitives rather
+than a native SQLite dependency. This keeps the local runner artifact portable
+and auditable, while making the durability protocol explicit. Node documents
+that promise-based filesystem mutations are not synchronized, so every attempt
+is serialized by the spool and the deployment contract permits only one runner
+process to own a configured spool root. Multi-process ownership requires a
+future store adapter with an operating-system lock or transactional database;
+it is not inferred from an in-memory mutex.
+
+The configured root is trusted bootstrap state, is dedicated to Socrates, and
+is private to the runner account. Attempt paths are derived only from a SHA-256
+digest of the validated runner, task, attempt, and fence identity. Protocol
+values are never joined directly into host paths. Directories use mode `0700`
+and records use `0600` on the native Linux host. Symlinks, unexpected file
+types, unknown files, incompatible versions, non-canonical JSON, broken
+checksums, duplicate or gapped segments, invalid envelopes, and identity
+mismatches make that attempt unreadable; recovery never guesses or silently
+truncates evidence.
+
+Each attempt has an immutable manifest, immutable segment files, a mutable
+acknowledgement record, and an internal temporary directory. The manifest binds
+the complete canonical execution digest to the attempt key. A segment contains
+one or more contiguous full envelopes, its inclusive sequence range, and a
+SHA-256 checksum over its canonical contents. A closed lifecycle result is one
+segment, so a crash exposes either the complete event batch or no batch; it
+cannot leave a durable prefix that would require unsafe experiment re-execution
+to reconstruct the missing suffix.
+
+Commit writes canonical bytes to a same-directory exclusive temporary file,
+synchronizes the file, atomically renames it to the range-derived final name,
+and synchronizes the parent directory before reporting success. Existing final
+names are compared byte-for-byte and never overwritten. Temporary files left
+before rename are ignored and removed only after their internally generated
+name and containing attempt have been validated. Segment size, event count,
+attempt count, and total spool bytes are bounded by trusted configuration;
+capacity exhaustion fails before execution can treat evidence as durable.
+
+The acknowledgement record stores the exact event ID, attempt ID, acknowledged
+sequence, expected sequence, and control-plane receive time. It advances only
+for the next pending event and only when every field agrees with the persisted
+envelope and the control-plane acknowledgement contract. It is replaced with
+the same write, sync, rename, directory-sync protocol. A crash before that
+replacement merely replays an already committed event, which the control plane
+acknowledges idempotently. A crash after it cannot resurrect an older event.
+Duplicate acknowledgements are accepted only when they match the durable
+record exactly; regression, jumps, or conflicting IDs fail closed.
+
+Pending iteration always starts after the durable acknowledgement cursor and
+returns immutable envelopes in strict sequence. A fully acknowledged segment
+may be unlinked only after the acknowledgement record is durable and the
+segment directory is synchronized. The attempt manifest and acknowledgement
+tombstone remain; attempt retention and garbage collection are a later
+reconciler concern. Terminal events prohibit later segment appends.
+
+The spool never treats delivery as persistence, never acknowledges on HTTP
+request completion alone, and never derives identity from timestamps. Fault
+injection covers every write, sync, rename, acknowledgement, cleanup, and
+restart boundary. Native Linux validation must additionally prove permission
+modes and directory synchronization. `LocalRunnerNotEnabledError` remains in
+force through Slice 2.9; transport, heartbeat coordination, cancellation
+delivery, and the executable runner service are later slices.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

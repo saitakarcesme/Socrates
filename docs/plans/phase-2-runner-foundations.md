@@ -452,6 +452,27 @@ build, and low-severity audit gates passed. Runner-local passed 124 tests; the
 new lifecycle suites cover draft validation, Unicode-safe log handling, strict
 measurement evidence, closed failure mapping, and terminal contradictions.
 
+### Slice 2.9 — durable local event spool
+
+Status: Approved for implementation.
+
+Architecture decision: ADR-046.
+
+Detailed plan: `docs/plans/slice-2.9-durable-event-spool.md`.
+
+- bind each attempt spool to the canonical frozen execution identity
+- allocate complete V2 envelopes only inside an atomically committed segment
+- recover and replay pending events after the durable acknowledgement cursor
+- validate exact acknowledgements before monotonically advancing the cursor
+- fail closed on corruption, gaps, identity drift, capacity exhaustion, or
+  concurrent mutation
+- keep transport, task claiming, heartbeats, cancellation polling, and runner
+  enablement outside the spool
+
+Exit: restart and injected-crash tests prove that a closed lifecycle batch is
+either absent or wholly durable, and that acknowledged evidence is never lost
+or regenerated with different envelope identity.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
