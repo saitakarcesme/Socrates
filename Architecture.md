@@ -2077,6 +2077,72 @@ complete manifest, or one complete claim and never a replacement durable
 attempt. This evidence admits ADR-048 and closes Slice 2.11 while production
 execution remains disabled.
 
+### ADR-049: Task discovery uses fenced control-plane offers, not the outbox
+
+Slice 2.12 connects authenticated runners to the proven work journal without
+turning `outbox_messages` into a runner queue. The existing outbox records
+domain publication intent and has no runner owner, reservation identity, or
+claim fence. Directly polling it could expose one task to multiple runners,
+causing each runner to durably allocate a different attempt before the
+scheduler chooses a winner. `published_at` also cannot honestly mean both
+external event publication and runner admission.
+
+The control plane therefore owns a dedicated `runner_task_deliveries` table.
+An authenticated acquire operation selects at most one queued, protocol-2,
+workspace-local, capability-compatible task, locks candidate rows with
+`FOR UPDATE SKIP LOCKED`, and inserts an immutable delivery UUID bound to the
+task and authenticated runner. PostgreSQL documents `SKIP LOCKED` as an
+inconsistent general-purpose view that is appropriate for avoiding contention
+among consumers of a queue-like table; Socrates uses it only inside this
+bounded reservation transaction, with deterministic `created_at, id` ordering
+([PostgreSQL SELECT](https://www.postgresql.org/docs/18/sql-select.html)).
+
+The delivery state is closed: `offered` or `claimed` in this slice. One partial
+unique constraint permits at most one non-revoked delivery per task, while a
+runner/delivery identity constraint makes acquire replay stable. Slice 2.12
+does not implement revocation or expiry; an unresolved offer remains visible
+to the same runner and unavailable to other runners. Reassignment requires a
+later reconciler that can fence the old delivery before creating a new one.
+Age alone is never proof that a runner did not durably journal an offer.
+
+The authenticated API exposes one bounded, non-long-polling acquire request.
+It returns either `200` with `RunnerTaskDeliveryV1` or `204` with no body. The
+principal supplies runner/workspace identity; request JSON cannot choose a
+runner, workspace, task, capability set, ordering cursor, or batch size. One
+request performs one database transaction and no hidden retry. A later broker
+or cloud queue may implement the same `TaskSource` contract without changing
+the journal.
+
+There is no separate delivery acknowledgement endpoint. After acquire, the
+runner first calls `LocalWorkJournal.admit`. The exact claim request is then
+scoped by delivery UUID and carries the journal's durable attempt UUID. In one
+control-plane transaction the repository locks the delivery, verifies its
+runner/task identity and `offered` state, invokes the existing scheduler claim
+with that exact attempt, and marks the delivery `claimed` only when the lease
+is created. Exact replay must return the same task, runner, attempt, and fence.
+This avoids an intermediate “acknowledged but unclaimed” state and makes the
+claim itself the durable source acknowledgement.
+
+The legacy task-ID claim route remains available only as the already-tested
+Slice 2.10 primitive while production execution is disabled; the new
+journaled source path must use delivery-scoped claims. Enabling any production
+runner later requires removing or explicitly policy-gating the bypass so every
+discovered claim proves a delivery reservation.
+
+Candidate scanning is bounded and fail-closed. The repository locks the active
+runner registration, checks current capacity, loads a small deterministic
+candidate window, and applies the same exact capability predicate used by
+claim. Invalid JSON capability projections are skipped and reported through
+diagnostics, never treated as permissive. Empty capacity or no compatible task
+returns `none`; it does not expose why foreign or incompatible tasks exist.
+
+`HttpTaskSource` and its journal adapter remain execution-plane libraries.
+They store no credential, URL, or response body in the journal, perform one
+network attempt, validate the exact delivery contract, durably admit before
+handoff, and return immutable identity/state only. They add no polling timer,
+backoff, heartbeat, execution, outbox mutation, cleanup, or process entry
+point. `LocalRunnerNotEnabledError` remains unchanged after Slice 2.12.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

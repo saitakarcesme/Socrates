@@ -526,6 +526,25 @@ passed native journal/spool durability, real PostgreSQL integration, browser,
 and build gates and uploaded both native evidence artifacts. Runner-local
 passed 178 local tests, including 19 work-journal tests.
 
+### Slice 2.12 — fenced task offers
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-049.
+
+Detailed plan: `docs/plans/slice-2.12-fenced-task-offers.md`.
+
+- reserve one compatible queued task to one authenticated runner;
+- replay one immutable delivery ID before any local attempt is allocated;
+- require that delivery ID when the durable journal attempt is claimed;
+- keep the integration outbox semantically independent from runner discovery;
+- keep polling timers, expiry/reassignment, execution, and cleanup out of
+  scope.
+
+Exit: PostgreSQL concurrency tests prove one active offer per task, runner
+restart re-acquires the same offer, and no delivery becomes claimed without
+the exact journal attempt and scheduler lease committing together.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
