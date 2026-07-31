@@ -186,6 +186,7 @@ jobs:
             --platform linux/amd64 \
             --format '{{json .}}' \
             "$source_ref")"
+          jq . <<<"$native"
           manifest_digest="$(jq -er '.target.digest' <<<"$native")"
           [[ "$manifest_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
           runtime_image="socrates/task-runtime-native@${manifest_digest}"
