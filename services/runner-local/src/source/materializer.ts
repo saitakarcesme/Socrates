@@ -65,8 +65,15 @@ type SnapshotManifest = Readonly<{
   digest: string;
 }>;
 
+type SourceRootManifest = Readonly<{
+  schemaVersion: 1;
+  deployment: string;
+  runnerId: string;
+}>;
+
 const publishedNamePattern = /^source-[0-9a-f]{32}$/u;
 const stagingNamePattern = /^staging-[0-9a-f]{32}$/u;
+const sourceRootManifestName = ".socrates-source-root.json";
 
 export class SourceSnapshotError extends Error {
   constructor(
@@ -127,6 +134,7 @@ export class SourceSnapshotMaterializer {
   readonly #runnerId: string;
   readonly #limits: SourceSnapshotLimits;
   readonly #attempts = new Map<string, MaterializedSourceSnapshot | symbol>();
+  #rootReady = false;
 
   constructor(
     private readonly artifacts: ArtifactStore,
@@ -220,8 +228,8 @@ export class SourceSnapshotMaterializer {
       if (this.#attempts.get(attemptKey) === reservation) {
         this.#attempts.delete(attemptKey);
       }
-      await rm(stagingRoot, { recursive: true, force: true });
-      await rm(publishedRoot, { recursive: true, force: true });
+      await this.#removeOwnedDirectory(stagingRoot);
+      await this.#removeOwnedDirectory(publishedRoot);
       if (error instanceof SourceSnapshotError) throw error;
       throw new SourceSnapshotError(
         "archive_invalid",
@@ -248,7 +256,7 @@ export class SourceSnapshotMaterializer {
         "Materialized source has an invalid owned directory.",
       );
     }
-    await rm(publishedRoot, { recursive: true, force: true });
+    await this.#removeOwnedDirectory(publishedRoot);
     completeMaterializedSourceSnapshotRelease(capability);
     if (this.#attempts.get(capability.attemptKey) === capability) {
       this.#attempts.delete(capability.attemptKey);
@@ -262,7 +270,7 @@ export class SourceSnapshotMaterializer {
       if (!entry.isDirectory()) continue;
       const candidate = join(this.#root, entry.name);
       if (stagingNamePattern.test(entry.name)) {
-        await rm(candidate, { recursive: true, force: true });
+        await this.#removeOwnedDirectory(candidate);
         removed += 1;
         continue;
       }
@@ -277,7 +285,7 @@ export class SourceSnapshotMaterializer {
         manifest.fence > 0 &&
         /^sha256:[a-f0-9]{64}$/u.test(manifest.digest)
       ) {
-        await rm(candidate, { recursive: true, force: true });
+        await this.#removeOwnedDirectory(candidate);
         removed += 1;
       }
     }
@@ -461,6 +469,7 @@ export class SourceSnapshotMaterializer {
   }
 
   async #ensureRoot(): Promise<void> {
+    if (this.#rootReady) return;
     await mkdir(this.#root, { recursive: true, mode: 0o700 });
     const metadata = await lstat(this.#root);
     if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
@@ -470,6 +479,59 @@ export class SourceSnapshotMaterializer {
       );
     }
     await chmod(this.#root, 0o700);
+    const expected: SourceRootManifest = {
+      schemaVersion: 1,
+      deployment: manifestDigest(this.#deploymentId),
+      runnerId: this.#runnerId,
+    };
+    const markerPath = join(this.#root, sourceRootManifestName);
+    let marker = await this.#readRootManifest(markerPath);
+    if (!marker) {
+      const existing = await readdir(this.#root);
+      if (existing.length > 0) {
+        throw new SourceSnapshotError(
+          "filesystem",
+          "Source root is not an empty or owned directory.",
+        );
+      }
+      try {
+        const handle = await open(
+          markerPath,
+          constants.O_WRONLY |
+            constants.O_CREAT |
+            constants.O_EXCL |
+            constants.O_NOFOLLOW,
+          0o600,
+        );
+        try {
+          await handle.writeFile(JSON.stringify(expected), "utf8");
+          await handle.sync();
+        } finally {
+          await handle.close();
+        }
+        marker = expected;
+      } catch (error) {
+        if (!(
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "EEXIST"
+        )) {
+          throw error;
+        }
+        marker = await this.#readRootManifest(markerPath);
+      }
+    }
+    if (
+      marker?.schemaVersion !== expected.schemaVersion ||
+      marker.deployment !== expected.deployment ||
+      marker.runnerId !== expected.runnerId
+    ) {
+      throw new SourceSnapshotError(
+        "filesystem",
+        "Source root ownership marker does not match this runner.",
+      );
+    }
+    this.#rootReady = true;
   }
 
   async #ensureParents(
@@ -545,5 +607,58 @@ export class SourceSnapshotMaterializer {
     } catch {
       return undefined;
     }
+  }
+
+  async #readRootManifest(
+    path: string,
+  ): Promise<SourceRootManifest | undefined> {
+    try {
+      const handle = await open(
+        path,
+        constants.O_RDONLY | constants.O_NOFOLLOW,
+      );
+      try {
+        const metadata = await handle.stat();
+        if (!metadata.isFile() || metadata.size > 1_024) return undefined;
+        const parsed = JSON.parse(await handle.readFile("utf8")) as unknown;
+        return typeof parsed === "object" && parsed !== null
+          ? (parsed as SourceRootManifest)
+          : undefined;
+      } finally {
+        await handle.close();
+      }
+    } catch {
+      return undefined;
+    }
+  }
+
+  async #removeOwnedDirectory(path: string): Promise<void> {
+    assertDescendant(this.#root, path);
+    try {
+      const metadata = await lstat(path);
+      if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
+        await rm(path, { force: true });
+        return;
+      }
+      await this.#makeDirectoriesWritable(path);
+      await rm(path, { recursive: true, force: true });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "ENOENT"
+      ) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  async #makeDirectoriesWritable(path: string): Promise<void> {
+    for (const entry of await readdir(path, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+      await this.#makeDirectoriesWritable(join(path, entry.name));
+    }
+    await chmod(path, 0o700);
   }
 }

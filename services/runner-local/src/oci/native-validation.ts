@@ -164,6 +164,9 @@ try {
   const sourceDirectoriesAfterRelease = await readdir(
     join(sourceStateRoot, "materialized"),
   );
+  const unreleasedSourceState = sourceDirectoriesAfterRelease.filter(
+    (name) => name !== ".socrates-source-root.json",
+  );
 
   const cancellationAttempt = identity(runnerId, randomUUID(), randomUUID());
   const running = backend.execute({
@@ -209,7 +212,7 @@ try {
       sourceDigestAndSizeVerified: true,
       opaqueAttemptCapability: true,
       recursiveReadOnlySourceBind: sourceProof.readOnly === true,
-      sourceReleased: sourceDirectoriesAfterRelease.length === 0,
+      sourceReleased: unreleasedSourceState.length === 0,
       createBeforeNativeInspect: true,
       nativeSpecVerifiedBeforeStart: true,
       boundedExecution: true,

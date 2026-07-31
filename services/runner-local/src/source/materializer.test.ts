@@ -1,6 +1,13 @@
 import { LocalContentAddressedArtifactStore } from "@socrates/artifact-store/local";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pack, type Headers } from "tar-stream";
@@ -230,7 +237,9 @@ describe("SourceSnapshotMaterializer", () => {
     await expect(
       materializer.materialize({ artifact, identity }),
     ).rejects.toBeInstanceOf(SourceSnapshotError);
-    await expect(readdir(sourceRoot)).resolves.toEqual([]);
+    await expect(readdir(sourceRoot)).resolves.toEqual([
+      ".socrates-source-root.json",
+    ]);
   });
 
   it("enforces expanded byte limits before writing an entry", async () => {
@@ -249,7 +258,9 @@ describe("SourceSnapshotMaterializer", () => {
     ).rejects.toMatchObject<Partial<SourceSnapshotError>>({
       code: "archive_limit",
     });
-    await expect(readdir(sourceRoot)).resolves.toEqual([]);
+    await expect(readdir(sourceRoot)).resolves.toEqual([
+      ".socrates-source-root.json",
+    ]);
   });
 
   it("requires a complete POSIX terminator", async () => {
@@ -268,7 +279,9 @@ describe("SourceSnapshotMaterializer", () => {
     ).rejects.toMatchObject<Partial<SourceSnapshotError>>({
       code: "archive_invalid",
     });
-    await expect(readdir(sourceRoot)).resolves.toEqual([]);
+    await expect(readdir(sourceRoot)).resolves.toEqual([
+      ".socrates-source-root.json",
+    ]);
   });
 
   it("reserves one materialization per fenced attempt until release", async () => {
@@ -301,5 +314,20 @@ describe("SourceSnapshotMaterializer", () => {
       code: "identity_mismatch",
     });
     await expect(readdir(sourceRoot)).rejects.toThrow();
+  });
+
+  it("refuses a populated root without an ownership marker", async () => {
+    const { artifact, materializer, sourceRoot } = await fixture([]);
+    await mkdir(sourceRoot);
+    await writeFile(join(sourceRoot, "foreign.txt"), "keep");
+
+    await expect(
+      materializer.materialize({ artifact, identity }),
+    ).rejects.toMatchObject<Partial<SourceSnapshotError>>({
+      code: "filesystem",
+    });
+    await expect(
+      readFile(join(sourceRoot, "foreign.txt"), "utf8"),
+    ).resolves.toBe("keep");
   });
 });
