@@ -52,8 +52,8 @@ function compatible(overrides: Record<string, unknown> = {}): ProcessResult {
 function native(overrides: Record<string, unknown> = {}): ProcessResult {
   return successfulResult(
     JSON.stringify({
-      name: reference,
-      target: {
+      Name: reference,
+      Target: {
         mediaType: "application/vnd.oci.image.manifest.v1+json",
         digest: manifestDigest,
         size: 1_024,
@@ -110,14 +110,14 @@ describe("sandbox image inspection", () => {
     [
       "reference",
       compatible(),
-      native({ name: `registry.example/other@${manifestDigest}` }),
+      native({ Name: `registry.example/other@${manifestDigest}` }),
       "target",
     ],
     [
       "media type",
       compatible(),
       native({
-        target: {
+        Target: {
           mediaType: "application/vnd.oci.image.index.v1+json",
           digest: manifestDigest,
         },

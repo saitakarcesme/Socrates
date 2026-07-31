@@ -187,9 +187,9 @@ jobs:
             --format '{{json .}}' \
             "$source_ref")"
           jq . <<<"$native"
-          manifest_digest="$(jq -er '.target.digest' <<<"$native")"
+          manifest_digest="$(jq -er '.Target.digest' <<<"$native")"
           [[ "$manifest_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
-          runtime_image="socrates/task-runtime-native@${manifest_digest}"
+          runtime_image="docker.io/socrates/task-runtime-native@${manifest_digest}"
           nerdctl tag "$source_ref" "$runtime_image"
           nerdctl image inspect --platform linux/amd64 "$runtime_image" >/dev/null
           echo "RUNTIME_IMAGE=${runtime_image}" >> "$GITHUB_ENV"
