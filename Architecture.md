@@ -1259,6 +1259,14 @@ tooling is version- and SHA-256-pinned; an unavailable or non-conforming
 containerd candidate remains recorded evidence rather than an implicit
 fallback.
 
+Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor. Because
+the pinned nerdctl distribution installs RootlessKit under `/usr/local/bin`,
+trusted provisioning loads the upstream-recommended path-specific RootlessKit
+bootstrap policy before starting rootless containerd. That narrow host policy
+permits creation of the user namespace; it does not replace the separately
+loaded `socrates-sandbox` workload policy or grant the runner policy-management
+authority.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

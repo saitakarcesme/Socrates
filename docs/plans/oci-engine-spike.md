@@ -188,6 +188,12 @@ for applying an existing AppArmor profile to rootless containers, so this
 candidate is measured after Docker and Podman both proved unable to apply the
 preloaded profile on the Ubuntu reference host.
 
+For Ubuntu 24.04's restricted unprivileged user namespaces, trusted
+provisioning loads the upstream-recommended path-specific policy for the
+bundled `/usr/local/bin/rootlesskit`. The policy only enables RootlessKit to
+create its user namespace; workload confinement remains the independent
+`socrates-sandbox` profile and enforcement probe.
+
 ## Promotion rule
 
 The harness and its command builders are disposable. Slice 2.5 begins with a
