@@ -2428,6 +2428,18 @@ durable journal and server cancellation row; a later session coordinator must
 create a fresh scope around recovered execution before performing work.
 Production execution remains disabled.
 
+Validation amendment, 2026-07-31: implementation commit `c35bf7b` passed
+local formatting, TypeScript, ESLint, 219 runner-local tests, all workspace
+tests, Phase 1/2 boundary audits, and production builds. GitHub Actions run
+`30656584157` passed every PostgreSQL, authenticated API, and runner
+integration, both Linux native durability probes, the Chromium journey, and
+all builds. Deterministic scope tests proved abort-before-backend ordering,
+pre-start cancellation, exact identity and grace forwarding, independent
+identity mismatch rejection, immutable policy, concurrent deduplication, and
+replayed backend uncertainty. This admits ADR-054 and closes Slice 2.17;
+session scheduling, execution, event generation, and production enablement
+remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

@@ -1,6 +1,6 @@
 # Slice 2.17 identity-bound sandbox cancellation scope plan
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -70,3 +70,11 @@ conflicting calls fail without a new side effect.
 6. Backend uncertainty is never hidden by a local retry or success result.
 7. No session loop, execution, event, or production enablement lands.
 8. Full repository, native durability, browser, build, and CI gates pass.
+
+## Evidence
+
+Implementation commit `c35bf7b`; GitHub Actions run `30656584157` passed 219
+runner-local tests, all PostgreSQL/API/runner integrations, native spool and
+journal durability, the Chromium product journey, and production builds.
+Local format, type, lint, boundary audit, workspace test, and build gates also
+passed.

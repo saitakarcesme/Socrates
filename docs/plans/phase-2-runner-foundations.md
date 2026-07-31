@@ -646,7 +646,7 @@ integrations, native durability probes, Chromium, and production builds.
 
 ### Slice 2.17 — identity-bound sandbox cancellation scope
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-054.
 
@@ -662,6 +662,10 @@ Detailed plan: `docs/plans/slice-2.17-sandbox-cancellation-scope.md`.
 Exit: deterministic race tests prove a cancel command cannot miss future
 execution, target another fence, replace its first policy, or invoke backend
 cancellation more than once.
+
+Evidence: implementation commit `c35bf7b`; GitHub Actions run `30656584157`
+passed 219 runner-local tests, all PostgreSQL/API/runner integrations, native
+durability probes, Chromium, and production builds.
 
 ## Acceptance gates
 
