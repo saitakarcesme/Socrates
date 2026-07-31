@@ -306,6 +306,8 @@ Completed:
 
 ### Slice 2.3 — artifact and log boundary
 
+Status: Complete.
+
 - implement content-addressed local artifact storage behind a port
 - verify digest and size before metadata commit
 - enforce chunk, task, and retention limits
@@ -328,6 +330,18 @@ Implementation order:
 
 The slice does not add a public runner route, retention daemon, object-store
 vendor, or executable runner.
+
+Completed:
+
+- content-addressed, pathless local artifact storage with exact digest and size
+  verification
+- immutable artifact object/provenance metadata and schema compatibility
+  version `5`
+- attempt-level log and artifact byte counters
+- deterministic secondary log redaction and inert-text preservation
+- quota-atomic ordered ingestion for log and artifact events
+- exact replay, traversal, malformed media type, digest mismatch, and quota
+  exhaustion proofs
 
 Exit: untrusted outputs cannot escape their storage or rendering boundaries.
 

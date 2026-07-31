@@ -303,7 +303,7 @@ export const artifactObjects = pgTable(
     nonNegativeCheck("artifact_objects_size_non_negative", table.sizeBytes),
     check(
       "artifact_objects_digest_sha256",
-      sql`${table.digest} ~ '^[0-9a-f]{64}$'`,
+      sql`${table.digest} ~ '^sha256:[0-9a-f]{64}$'`,
     ),
   ],
 );

@@ -4,7 +4,7 @@ CREATE TABLE "artifact_objects" (
 	"size_bytes" bigint NOT NULL,
 	"first_verified_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "artifact_objects_size_non_negative" CHECK ("artifact_objects"."size_bytes" >= 0),
-	CONSTRAINT "artifact_objects_digest_sha256" CHECK ("artifact_objects"."digest" ~ '^[0-9a-f]{64}$')
+	CONSTRAINT "artifact_objects_digest_sha256" CHECK ("artifact_objects"."digest" ~ '^sha256:[0-9a-f]{64}$')
 );
 --> statement-breakpoint
 CREATE TABLE "runner_task_artifacts" (

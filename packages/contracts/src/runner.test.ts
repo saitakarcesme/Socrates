@@ -253,4 +253,45 @@ describe("runner terminal events", () => {
       }).success,
     ).toBe(true);
   });
+
+  it("rejects parameterized, mixed-case, and traversal-shaped media types", () => {
+    const fixture = runnerEventV2Schema.parse(readFixture("event-v2.json"));
+    const event = {
+      version: fixture.version,
+      eventId: fixture.eventId,
+      runnerId: fixture.runnerId,
+      taskId: fixture.taskId,
+      attemptId: fixture.attemptId,
+      fence: fixture.fence,
+      sequence: fixture.sequence,
+      occurredAt: fixture.occurredAt,
+      type: "artifact.produced",
+      payload: {
+        artifactId: fixture.attemptId,
+        digest:
+          "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        sizeBytes: 12,
+        role: "diagnostic",
+      },
+    };
+
+    expect(
+      runnerEventV2Schema.safeParse({
+        ...event,
+        payload: { ...event.payload, mediaType: "application/json" },
+      }).success,
+    ).toBe(true);
+    for (const mediaType of [
+      "application/json; charset=utf-8",
+      "Application/JSON",
+      "../../text/plain",
+    ]) {
+      expect(
+        runnerEventV2Schema.safeParse({
+          ...event,
+          payload: { ...event.payload, mediaType },
+        }).success,
+      ).toBe(false);
+    }
+  });
 });

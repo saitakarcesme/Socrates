@@ -1,6 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { experimentTaskV2Schema } from "@socrates/contracts";
+import { LocalContentAddressedArtifactStore } from "@socrates/artifact-store/local";
+import { experimentTaskV2Schema, type RunnerBudget } from "@socrates/contracts";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -16,11 +20,13 @@ import type {
 } from "./ports";
 import {
   experiments,
+  artifactObjects,
   metricDefinitions,
   outboxMessages,
   projects,
   runEvents,
   runnerTaskAttempts,
+  runnerTaskArtifacts,
   runnerTaskCancellations,
   runnerTaskEvents,
   runnerTasks,
@@ -41,13 +47,21 @@ const capabilities = [
   { kind: "network.egress", mode: "disabled" },
 ] as const;
 
+function contentDigest(content: Uint8Array): string {
+  return `sha256:${createHash("sha256").update(content).digest("hex")}`;
+}
+
+async function* binaryChunks(content: Uint8Array) {
+  yield content;
+}
+
 integration("PostgreSQL scheduler persistence", () => {
   const workspaceId = randomUUID();
   const otherWorkspaceId = randomUUID();
   const projectId = randomUUID();
   const metricDefinitionId = randomUUID();
   const runId = randomUUID();
-  const experimentIds = Array.from({ length: 21 }, () => randomUUID());
+  const experimentIds = Array.from({ length: 24 }, () => randomUUID());
   const runnerId = randomUUID();
   const secondRunnerId = randomUUID();
   const foreignRunnerId = randomUUID();
@@ -76,6 +90,7 @@ integration("PostgreSQL scheduler persistence", () => {
     id: string,
     experimentId: string,
     retrySafe = true,
+    budgetOverrides: Partial<RunnerBudget> = {},
   ): RunnerTaskWrite => ({
     id,
     workspaceId,
@@ -147,15 +162,21 @@ integration("PostgreSQL scheduler persistence", () => {
         artifactBytes: 104_857_600,
         commandCount: 2,
         egressBytes: 0,
+        ...budgetOverrides,
       },
     },
   });
 
-  const claimForEvents = async (experimentIndex: number) => {
+  const claimForEvents = async (
+    experimentIndex: number,
+    budgetOverrides: Partial<RunnerBudget> = {},
+  ) => {
     const taskId = randomUUID();
     const attemptId = randomUUID();
     await persistence.transaction(({ scheduler }) =>
-      scheduler.createTask(task(taskId, experimentIds[experimentIndex]!)),
+      scheduler.createTask(
+        task(taskId, experimentIds[experimentIndex]!, true, budgetOverrides),
+      ),
     );
     const result = await persistence.transaction(({ scheduler }) =>
       scheduler.claimTask({
@@ -1090,8 +1111,8 @@ integration("PostgreSQL scheduler persistence", () => {
     expect(attempt?.sequence).toBe(1);
   });
 
-  it("validates evidence against the immutable task snapshot and defers unbounded events", async () => {
-    const claim = await claimForEvents(18);
+  it("redacts, accounts, and replays bounded logs without changing lifecycle order", async () => {
+    const claim = await claimForEvents(18, { logBytes: 60 });
     await expect(
       persistence.transaction(({ scheduler }) =>
         scheduler.ingestEvent({
@@ -1123,28 +1144,208 @@ integration("PostgreSQL scheduler persistence", () => {
         },
       }),
     );
+    const rawLog =
+      "Authorization: Bearer abcdefghijklmnop\n<script>alert(1)</script>";
+    const logEvent = {
+      ...eventEnvelope(claim, 2),
+      type: "log.appended" as const,
+      payload: {
+        stream: "stdout" as const,
+        text: rawLog,
+        utf8Bytes: new TextEncoder().encode(rawLog).byteLength,
+        redacted: false,
+      },
+    };
+    const accepted = await persistence.transaction(({ scheduler }) =>
+      scheduler.ingestEvent({ event: logEvent }),
+    );
+    expect(accepted).toMatchObject({
+      state: "accepted",
+      acknowledgement: { acknowledgedSequence: 2 },
+    });
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.ingestEvent({ event: logEvent }),
+      ),
+    ).resolves.toMatchObject({ state: "replay" });
+
     await expect(
       persistence.transaction(({ scheduler }) =>
         scheduler.ingestEvent({
           event: {
-            ...eventEnvelope(claim, 2),
+            ...eventEnvelope(claim, 3),
+            type: "action.started",
+            payload: { commandIndex: 0 },
+          },
+        }),
+      ),
+    ).resolves.toMatchObject({ state: "accepted" });
+
+    const attemptedText = "x".repeat(32);
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.ingestEvent({
+          event: {
+            ...eventEnvelope(claim, 4),
             type: "log.appended",
             payload: {
-              stream: "stdout",
-              text: "bounded later",
-              utf8Bytes: 13,
+              stream: "stderr",
+              text: attemptedText,
+              utf8Bytes: attemptedText.length,
               redacted: true,
             },
           },
         }),
       ),
-    ).resolves.toEqual({ state: "unsupported_event" });
+    ).resolves.toEqual({
+      state: "budget_exhausted",
+      dimension: "log_bytes",
+      limitBytes: 60,
+      acceptedBytes: 58,
+      attemptedBytes: 32,
+    });
 
     const [attempt] = await database
-      .select({ sequence: runnerTaskAttempts.lastEventSequence })
+      .select({
+        sequence: runnerTaskAttempts.lastEventSequence,
+        acceptedLogBytes: runnerTaskAttempts.acceptedLogBytes,
+      })
       .from(runnerTaskAttempts)
       .where(eq(runnerTaskAttempts.id, claim.attemptId));
-    expect(attempt?.sequence).toBe(1);
+    expect(attempt).toEqual({ sequence: 3, acceptedLogBytes: 58 });
+    const [storedLog] = await database
+      .select({ payload: runnerTaskEvents.payload })
+      .from(runnerTaskEvents)
+      .where(eq(runnerTaskEvents.id, logEvent.eventId));
+    expect(storedLog?.payload).toEqual({
+      stream: "stdout",
+      text: "Authorization: Bearer [REDACTED]\n<script>alert(1)</script>",
+      utf8Bytes: 58,
+      redacted: true,
+    });
+  });
+
+  it("commits only verified artifact metadata and accounts exact replays once", async () => {
+    const claim = await claimForEvents(21, { artifactBytes: 8 });
+    await persistence.transaction(({ scheduler }) =>
+      scheduler.ingestEvent({
+        event: {
+          ...eventEnvelope(claim, 1),
+          type: "workspace.prepared",
+          payload: {
+            sourceDigest:
+              "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            imageDigest:
+              "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          },
+        },
+      }),
+    );
+
+    const root = await mkdtemp(join(tmpdir(), "socrates-db-artifacts-"));
+    try {
+      const store = new LocalContentAddressedArtifactStore(root);
+      const content = new TextEncoder().encode("artifact");
+      const digest = contentDigest(content);
+      const verifiedArtifact = await store.put({
+        content: binaryChunks(content),
+        expectedDigest: digest,
+        expectedSizeBytes: content.byteLength,
+        maxSizeBytes: content.byteLength,
+      });
+      const artifactEvent = {
+        ...eventEnvelope(claim, 2),
+        type: "artifact.produced" as const,
+        payload: {
+          artifactId: randomUUID(),
+          digest,
+          sizeBytes: content.byteLength,
+          mediaType: "application/octet-stream",
+          role: "diagnostic" as const,
+        },
+      };
+
+      await expect(
+        persistence.transaction(({ scheduler }) =>
+          scheduler.ingestEvent({ event: artifactEvent }),
+        ),
+      ).resolves.toEqual({ state: "invalid_evidence" });
+      await expect(
+        persistence.transaction(({ scheduler }) =>
+          scheduler.ingestEvent({ event: artifactEvent, verifiedArtifact }),
+        ),
+      ).resolves.toMatchObject({ state: "accepted" });
+      await expect(
+        persistence.transaction(({ scheduler }) =>
+          scheduler.ingestEvent({ event: artifactEvent }),
+        ),
+      ).resolves.toMatchObject({ state: "replay" });
+
+      const overflowContent = new TextEncoder().encode("x");
+      const overflowDigest = contentDigest(overflowContent);
+      const overflowVerification = await store.put({
+        content: binaryChunks(overflowContent),
+        expectedDigest: overflowDigest,
+        expectedSizeBytes: 1,
+        maxSizeBytes: 1,
+      });
+      await expect(
+        persistence.transaction(({ scheduler }) =>
+          scheduler.ingestEvent({
+            event: {
+              ...eventEnvelope(claim, 3),
+              type: "artifact.produced",
+              payload: {
+                artifactId: randomUUID(),
+                digest: overflowDigest,
+                sizeBytes: 1,
+                mediaType: "text/plain",
+                role: "diagnostic",
+              },
+            },
+            verifiedArtifact: overflowVerification,
+          }),
+        ),
+      ).resolves.toEqual({
+        state: "budget_exhausted",
+        dimension: "artifact_bytes",
+        limitBytes: 8,
+        acceptedBytes: 8,
+        attemptedBytes: 1,
+      });
+
+      const [attempt] = await database
+        .select({
+          sequence: runnerTaskAttempts.lastEventSequence,
+          acceptedArtifactBytes: runnerTaskAttempts.acceptedArtifactBytes,
+        })
+        .from(runnerTaskAttempts)
+        .where(eq(runnerTaskAttempts.id, claim.attemptId));
+      expect(attempt).toEqual({
+        sequence: 2,
+        acceptedArtifactBytes: 8,
+      });
+      await expect(
+        database
+          .select()
+          .from(artifactObjects)
+          .where(eq(artifactObjects.digest, digest)),
+      ).resolves.toHaveLength(1);
+      await expect(
+        database
+          .select()
+          .from(runnerTaskArtifacts)
+          .where(eq(runnerTaskArtifacts.id, artifactEvent.payload.artifactId)),
+      ).resolves.toHaveLength(1);
+      await expect(
+        database
+          .select()
+          .from(artifactObjects)
+          .where(eq(artifactObjects.digest, overflowDigest)),
+      ).resolves.toHaveLength(0);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("rejects new evidence after the database lease expires", async () => {

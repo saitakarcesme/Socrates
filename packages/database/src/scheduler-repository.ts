@@ -1,12 +1,23 @@
 import { createHash } from "node:crypto";
 
-import { and, asc, count, eq, inArray, max, sql } from "drizzle-orm";
+import { isVerifiedArtifact } from "@socrates/artifact-store";
 import {
   experimentTaskV2Schema,
   runnerEventV2Schema,
   runnerRegistrationV1Schema,
 } from "@socrates/contracts";
 import { runnerSatisfiesCapabilities } from "@socrates/domain";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  inArray,
+  max,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 
 import type { RunnerEventV2 } from "@socrates/contracts";
 import type { DatabaseTransaction } from "./database-types";
@@ -30,6 +41,7 @@ import type {
   RunnerTaskWrite,
   SchedulerRepository,
 } from "./ports";
+import { redactRunnerEvent } from "./runner-evidence";
 import * as schema from "./schema/index";
 
 const activeAttemptStatuses = [
@@ -770,12 +782,18 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
   async ingestEvent(
     input: IngestRunnerEventInput,
   ): Promise<IngestRunnerEventResult> {
-    const event = runnerEventV2Schema.parse(input.event);
+    const event = redactRunnerEvent(runnerEventV2Schema.parse(input.event));
     const digest = normalizedEventDigest(event);
 
-    await this.transaction.execute(
-      sql`SELECT pg_advisory_xact_lock(hashtextextended(${event.eventId}, 0))`,
-    );
+    const admissionIdentities = [
+      event.eventId,
+      ...(event.type === "artifact.produced" ? [event.payload.artifactId] : []),
+    ].sort();
+    for (const identity of admissionIdentities) {
+      await this.transaction.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${identity}, 0))`,
+      );
+    }
 
     const [existingEvent] = await this.transaction
       .select({
@@ -803,10 +821,6 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
       };
     }
 
-    if (event.type === "log.appended" || event.type === "artifact.produced") {
-      return { state: "unsupported_event" };
-    }
-
     const [current] = await this.transaction
       .select({
         runId: schema.runnerTasks.runId,
@@ -818,6 +832,8 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
         taskId: schema.runnerTaskAttempts.taskId,
         fence: schema.runnerTaskAttempts.fence,
         lastEventSequence: schema.runnerTaskAttempts.lastEventSequence,
+        acceptedLogBytes: schema.runnerTaskAttempts.acceptedLogBytes,
+        acceptedArtifactBytes: schema.runnerTaskAttempts.acceptedArtifactBytes,
         leaseActive: sql<boolean>`${schema.runnerTaskAttempts.leaseExpiresAt} > CURRENT_TIMESTAMP`,
       })
       .from(schema.runnerTaskAttempts)
@@ -862,6 +878,51 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
     if (event.sequence < expectedSequence) return { state: "stale" };
 
     const taskSnapshot = experimentTaskV2Schema.parse(current.taskPayload);
+    let acceptedLogByteDelta = 0;
+    let acceptedArtifactByteDelta = 0;
+    if (event.type === "log.appended") {
+      acceptedLogByteDelta = event.payload.utf8Bytes;
+      if (
+        acceptedLogByteDelta >
+        taskSnapshot.budget.logBytes - current.acceptedLogBytes
+      ) {
+        return {
+          state: "budget_exhausted",
+          dimension: "log_bytes",
+          limitBytes: taskSnapshot.budget.logBytes,
+          acceptedBytes: current.acceptedLogBytes,
+          attemptedBytes: acceptedLogByteDelta,
+        };
+      }
+    }
+    if (event.type === "artifact.produced") {
+      if (
+        !isVerifiedArtifact(input.verifiedArtifact) ||
+        input.verifiedArtifact.digest !== event.payload.digest ||
+        input.verifiedArtifact.sizeBytes !== event.payload.sizeBytes
+      ) {
+        return { state: "invalid_evidence" };
+      }
+      acceptedArtifactByteDelta = event.payload.sizeBytes;
+      if (
+        acceptedArtifactByteDelta >
+        taskSnapshot.budget.artifactBytes - current.acceptedArtifactBytes
+      ) {
+        return {
+          state: "budget_exhausted",
+          dimension: "artifact_bytes",
+          limitBytes: taskSnapshot.budget.artifactBytes,
+          acceptedBytes: current.acceptedArtifactBytes,
+          attemptedBytes: acceptedArtifactByteDelta,
+        };
+      }
+      const [occupiedArtifact] = await this.transaction
+        .select({ eventId: schema.runnerTaskArtifacts.eventId })
+        .from(schema.runnerTaskArtifacts)
+        .where(eq(schema.runnerTaskArtifacts.id, event.payload.artifactId));
+      if (occupiedArtifact) return { state: "event_conflict" };
+    }
+
     const [previousEvent] =
       current.lastEventSequence === 0
         ? []
@@ -874,9 +935,15 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
             .where(
               and(
                 eq(schema.runnerTaskEvents.attemptId, event.attemptId),
-                eq(schema.runnerTaskEvents.sequence, current.lastEventSequence),
+                notInArray(schema.runnerTaskEvents.type, [
+                  "log.appended",
+                  "artifact.produced",
+                ]),
+                sql`${schema.runnerTaskEvents.sequence} <= ${current.lastEventSequence}`,
               ),
-            );
+            )
+            .orderBy(desc(schema.runnerTaskEvents.sequence))
+            .limit(1);
     let nextAttemptStatus: PersistedRunnerAttemptStatus = current.attemptStatus;
     let nextTaskStatus: PersistedRunnerTaskStatus = current.taskStatus;
 
@@ -932,6 +999,9 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
         ) {
           return { state: "invalid_transition" };
         }
+        break;
+      case "log.appended":
+      case "artifact.produced":
         break;
       case "measurement.recorded":
         if (
@@ -994,6 +1064,36 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
     if (!storedEvent)
       throw new Error("Runner event insert returned no record.");
 
+    if (event.type === "artifact.produced") {
+      await this.transaction
+        .insert(schema.artifactObjects)
+        .values({
+          digest: event.payload.digest,
+          sizeBytes: event.payload.sizeBytes,
+        })
+        .onConflictDoNothing();
+      const [artifactObject] = await this.transaction
+        .select({ sizeBytes: schema.artifactObjects.sizeBytes })
+        .from(schema.artifactObjects)
+        .where(eq(schema.artifactObjects.digest, event.payload.digest));
+      if (artifactObject?.sizeBytes !== event.payload.sizeBytes) {
+        throw new Error(
+          "Verified artifact identity conflicts with stored content metadata.",
+        );
+      }
+      await this.transaction.insert(schema.runnerTaskArtifacts).values({
+        id: event.payload.artifactId,
+        digest: event.payload.digest,
+        taskId: event.taskId,
+        attemptId: event.attemptId,
+        runnerId: event.runnerId,
+        fence: event.fence,
+        eventId: event.eventId,
+        mediaType: event.payload.mediaType,
+        role: event.payload.role,
+      });
+    }
+
     const terminal = ["succeeded", "failed", "cancelled"].includes(
       nextTaskStatus,
     );
@@ -1002,6 +1102,14 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
       .set({
         status: nextAttemptStatus,
         lastEventSequence: event.sequence,
+        acceptedLogBytes:
+          acceptedLogByteDelta === 0
+            ? undefined
+            : sql`${schema.runnerTaskAttempts.acceptedLogBytes} + ${acceptedLogByteDelta}`,
+        acceptedArtifactBytes:
+          acceptedArtifactByteDelta === 0
+            ? undefined
+            : sql`${schema.runnerTaskAttempts.acceptedArtifactBytes} + ${acceptedArtifactByteDelta}`,
         startedAt:
           event.type === "action.started"
             ? sql`COALESCE(${schema.runnerTaskAttempts.startedAt}, CURRENT_TIMESTAMP)`
@@ -1063,7 +1171,9 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
         },
       );
     }
-    await this.appendProjectedRunnerEvent(current.runId, event);
+    if (event.type !== "log.appended") {
+      await this.appendProjectedRunnerEvent(current.runId, event);
+    }
 
     return {
       state: "accepted",

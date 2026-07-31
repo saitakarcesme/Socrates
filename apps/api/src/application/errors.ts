@@ -55,3 +55,10 @@ export function protocolMismatch(
 ): never {
   throw new CommandError(422, "protocol_mismatch", message, details);
 }
+
+export function budgetExhausted(
+  message: string,
+  details?: Record<string, unknown>,
+): never {
+  throw new CommandError(409, "budget_exhausted", message, details);
+}

@@ -1,3 +1,5 @@
+import type { VerifiedArtifact } from "@socrates/artifact-store";
+
 import type { CommandRepository } from "./command-model";
 import type { JsonValue } from "./json";
 import type { ReadRepository } from "./read-model";
@@ -172,6 +174,7 @@ export type ReconcileExpiredRunnerTasksResult = {
 
 export type IngestRunnerEventInput = {
   event: JsonValue;
+  verifiedArtifact?: VerifiedArtifact;
 };
 
 export type RunnerEventAcknowledgement = {
@@ -188,6 +191,13 @@ export type IngestRunnerEventResult =
       acknowledgement: RunnerEventAcknowledgement;
     }
   | { state: "gap"; expectedSequence: number }
+  | {
+      state: "budget_exhausted";
+      dimension: "log_bytes" | "artifact_bytes";
+      limitBytes: number;
+      acceptedBytes: number;
+      attemptedBytes: number;
+    }
   | {
       state:
         | "event_conflict"

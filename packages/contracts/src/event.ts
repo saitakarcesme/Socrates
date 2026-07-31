@@ -98,6 +98,16 @@ export const runnerBudgetDimensionSchema = z.enum([
   "egress_bytes",
 ]);
 
+export const artifactMediaTypeSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(255)
+  .regex(
+    /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/,
+    "Expected a lowercase type/subtype media type without parameters.",
+  );
+
 export const runnerEventV2Schema = z.discriminatedUnion("type", [
   runnerEventV2EnvelopeSchema.extend({
     type: z.literal("workspace.prepared"),
@@ -156,7 +166,7 @@ export const runnerEventV2Schema = z.discriminatedUnion("type", [
         artifactId: entityIdSchema,
         digest: sha256DigestSchema,
         sizeBytes: nonNegativeSafeIntegerSchema,
-        mediaType: z.string().trim().min(1).max(255),
+        mediaType: artifactMediaTypeSchema,
         role: z.enum([
           "source_snapshot",
           "patch",

@@ -17,6 +17,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.drizzle.json"
   },
   "dependencies": {
+    "@socrates/artifact-store": "workspace:*",
     "@socrates/contracts": "workspace:*",
     "@socrates/domain": "workspace:*",
     "drizzle-orm": "^0.45.2",

@@ -1075,10 +1075,10 @@ terminal compare-and-set.
 
 Every accepted non-log lifecycle event is also projected into the existing
 run-event ledger while the run row is locked, so SSE readers reconcile from one
-durable sequence. `log.appended` and `artifact.produced` remain valid protocol
-messages but ingestion returns `unsupported_event` until Slice 2.3 implements
-aggregate byte limits, redaction enforcement, digest verification, and
-retention. Parseability is not authorization to persist unbounded evidence.
+durable sequence. `log.appended` and `artifact.produced` are admitted through
+the same cursor only under the quota, redaction, verification, and retention
+rules in ADR-040. Parseability is not authorization to persist unbounded
+evidence.
 
 ### ADR-038: Runner error semantics precede the authenticated transport
 

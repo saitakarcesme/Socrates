@@ -7,6 +7,7 @@ import type {
 } from "@socrates/database";
 
 import {
+  budgetExhausted,
   invalidTransition,
   notFound,
   protocolMismatch,
@@ -77,6 +78,17 @@ export class RunnerGatewayService {
     }
 
     switch (result.state) {
+      case "budget_exhausted":
+        return budgetExhausted(
+          "The runner evidence would exceed its frozen byte budget.",
+          {
+            runnerReason: result.state,
+            dimension: result.dimension,
+            limitBytes: result.limitBytes,
+            acceptedBytes: result.acceptedBytes,
+            attemptedBytes: result.attemptedBytes,
+          },
+        );
       case "gap":
         return resourceConflict("The runner event sequence contains a gap.", {
           runnerReason: result.state,

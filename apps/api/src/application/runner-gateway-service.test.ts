@@ -125,6 +125,30 @@ describe("RunnerGatewayService", () => {
     });
   });
 
+  it("preserves bounded-evidence quota details", async () => {
+    await expect(
+      serviceReturning({
+        event: {
+          state: "budget_exhausted",
+          dimension: "artifact_bytes",
+          limitBytes: 1024,
+          acceptedBytes: 1000,
+          attemptedBytes: 25,
+        },
+      }).ingestEvent({ event: {} }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "budget_exhausted",
+      details: {
+        runnerReason: "budget_exhausted",
+        dimension: "artifact_bytes",
+        limitBytes: 1024,
+        acceptedBytes: 1000,
+        attemptedBytes: 25,
+      },
+    });
+  });
+
   it.each([
     ["invalid_transition", 409, "invalid_transition"],
     ["invalid_evidence", 422, "protocol_mismatch"],
