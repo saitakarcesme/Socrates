@@ -790,6 +790,27 @@ Evidence: implementation commit `94e1a25`, integration-fixture correction
 all PostgreSQL/API/runner integrations, 295 runner-local tests, native
 durability probes, Chromium, and production builds.
 
+### Slice 2.23 — durable execution-start barrier
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-060.
+
+Detailed plan: `docs/plans/slice-2.23-durable-execution-start.md`.
+
+- publish one immutable, checksummed execution-start record before sandbox
+  creation can be authorized;
+- bind it to the durable claim digest and exact attempt key;
+- replay only byte-equivalent identity and reject invalid transition order;
+- surface unresolved started work as indeterminate before new acquisition;
+- preserve pre-start cancellation completion without inventing execution;
+- keep lease reconciliation, session scheduling, sandbox execution, evidence
+  generation, and runner enablement out of scope.
+
+Exit: durability fault injection and recovery tests prove a crash on either
+side of the start barrier can never make an already-started attempt executable
+again.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

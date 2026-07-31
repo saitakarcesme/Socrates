@@ -2707,6 +2707,41 @@ timeout, and ADR-058 resolver composition. This admits ADR-059 and closes
 Slice 2.22; source ingestion, extraction, attempt-session composition,
 execution, and production runner enablement remain disabled.
 
+### ADR-060: Irreversible execution requires a durable start barrier
+
+The durable work journal currently distinguishes a claimed delivery from a
+completed delivery, but it does not record whether sandbox execution has
+crossed its irreversible boundary. A future session loop that simply resumes a
+`claimed` item after restart could run the same attempt again when the process
+crashed after starting the sandbox but before committing terminal evidence.
+The local sandbox has no network and no host-writable mount, but duplicate
+execution would still violate attempt identity and make measurements
+ambiguous.
+
+Before the first sandbox process may be created, the runner must therefore
+publish an immutable `execution-start.json` record in the existing private
+work-journal item. The checksummed record binds delivery key, durable execution
+digest, attempt key, and runner-clock timestamp. Publication uses the same
+temporary-write, file-sync, atomic-rename, directory-sync discipline as other
+journal records. Exact retries return the first record; identity drift,
+start-before-claim, start-after-rejection, and start-after-completion fail
+closed.
+
+An execution-start record changes local recovery semantics. A claimed item
+without the record remains safe to prepare. An item with the record and no
+durably acknowledged terminal completion is `execution_started`, an
+indeterminate outcome that `WorkAdmissionCoordinator` returns ahead of any new
+acquisition and never presents as executable work. This deliberately trades
+availability for at-most-once local attempt execution. A later recovery slice
+must reconcile that indeterminate attempt with its current server lease or
+expiry; it may not infer success, failure, or retry from local absence.
+
+Completion remains legal without an execution-start record because a durable
+cancellation may terminate an attempt before sandbox start. Completion after a
+start record remains legal and takes precedence in the public state. The
+record does not enable execution, add a runner loop, contact the control plane,
+generate terminal evidence, or garbage-collect journal items.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
