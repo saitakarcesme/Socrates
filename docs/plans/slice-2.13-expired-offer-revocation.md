@@ -1,6 +1,6 @@
 # Slice 2.13 expired offer revocation plan
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -104,3 +104,11 @@ keys and compatibility advances only in the last statement.
 10. Timers, cleanup, execution, and production enablement remain absent.
 11. Full repository, PostgreSQL, browser, build, and CI gates pass before the
     slice becomes Complete.
+
+## Evidence
+
+Implementation commits `9513f83` and `97e7d0f`; GitHub Actions run
+`30652305248` passed schema compatibility 8, the ordered expiry query plan,
+real PostgreSQL expiry/revocation/reassignment and concurrent reconciler
+tests, API and runner integrations, both native durability probes, the
+Chromium product journey, and every production build.

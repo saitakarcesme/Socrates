@@ -552,7 +552,7 @@ browser tests, and production builds.
 
 ### Slice 2.13 — expired offer revocation
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-050.
 
@@ -567,6 +567,12 @@ Detailed plan: `docs/plans/slice-2.13-expired-offer-revocation.md`.
 Exit: real PostgreSQL races prove claim or revocation wins one delivery row,
 never both; a revoked delivery cannot claim, while a new delivery can safely
 reserve the still-queued task.
+
+Evidence: commits `9513f83` and `97e7d0f`; GitHub Actions run `30652305248`
+passed schema compatibility 8, ordered expiry-index planning, real PostgreSQL
+revocation/reassignment and concurrent bounded reconciliation, authenticated
+API and runner integrations, native journal/spool durability, browser tests,
+and production builds.
 
 ## Acceptance gates
 

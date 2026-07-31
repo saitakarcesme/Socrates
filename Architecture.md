@@ -2201,6 +2201,19 @@ already owns that lifecycle. It does not retry, quarantine, delete, or compact
 revoked rows, infer runner death, mutate the integration outbox, or enable
 execution. `LocalRunnerNotEnabledError` remains the production entry point.
 
+Validation amendment, 2026-07-31: implementation commits `9513f83` and
+`97e7d0f` passed local formatting, TypeScript, ESLint, all workspace tests,
+Phase 1/2 dependency-boundary audits, and production builds. GitHub Actions
+run `30652305248` applied schema compatibility 8 and passed all 54 database
+tests, including the offered-expiry index plan and real PostgreSQL proofs for
+database-clocked expiry, expired-but-unreconciled fencing, stale-claim
+rejection, new-delivery reassignment, claimed-delivery immunity, and two
+concurrent reconcilers returning disjoint bounded batches. The authenticated
+API and runner integration suites, native spool and work-journal durability
+probes, Chromium product journey, and all production builds also passed. This
+admits ADR-050 and closes Slice 2.13. Timers, cleanup, autonomous execution,
+and production runner enablement remain absent.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
