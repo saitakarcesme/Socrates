@@ -97,6 +97,7 @@ jobs:
             --output "$nerdctl_archive"
           echo "${NERDCTL_FULL_SHA256}  ${nerdctl_archive}" | sha256sum --check -
           sudo tar --extract --gzip --file "$nerdctl_archive" --directory /usr/local
+          sudo apparmor_parser --replace spikes/oci-engine/apparmor/usr.local.bin.rootlesskit
           if ! grep -q "^${USER}:" /etc/subuid; then
             sudo usermod --add-subuids 100000-165535 "$USER"
           fi
