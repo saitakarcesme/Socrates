@@ -667,6 +667,26 @@ Evidence: implementation commit `c35bf7b`; GitHub Actions run `30656584157`
 passed 219 runner-local tests, all PostgreSQL/API/runner integrations, native
 durability probes, Chromium, and production builds.
 
+### Slice 2.18 — frozen execution plan projection
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-055.
+
+Detailed plan: `docs/plans/slice-2.18-execution-plan-projection.md`.
+
+- validate one frozen execution against explicit trusted local limits;
+- derive canonical runtime request and exact OCI resource profile once;
+- account for every writable tmpfs inside the task aggregate budget;
+- round CPU rate down to a declared cgroup quota quantum;
+- reject unsupported, over-policy, or unrepresentable work without clamping;
+- keep materialization, image admission, execution, supervision, events, and
+  runner enablement out of scope.
+
+Exit: pure adversarial tests prove every projected identity, command, metric,
+and budget originates from the frozen execution and no hard limit is weakened
+by derivation or rounding.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

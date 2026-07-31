@@ -2440,6 +2440,52 @@ replayed backend uncertainty. This admits ADR-054 and closes Slice 2.17;
 session scheduling, execution, event generation, and production enablement
 remain disabled.
 
+### ADR-055: Frozen budgets are projected once and never silently weakened
+
+Slice 2.18 defines the missing pure boundary between a validated
+`RunnerExecutionV1` and the task-runtime/OCI inputs. Passing task fields
+directly into independent constructors would distribute security policy across
+the future session loop and make it possible for one layer to clamp, round, or
+omit a hard limit without another layer observing the change.
+
+An `ExecutionPlanProjector` therefore validates the complete frozen execution
+against one trusted local policy and returns an immutable pair: a canonical
+`RuntimeRequest` and a `SandboxResourceProfile`. The projector has no I/O,
+clock, environment access, mutable cache, or default configuration. Invalid,
+unsupported, over-policy, arithmetically unsafe, or unrepresentable tasks fail
+before source materialization or image admission.
+
+Memory and PID limits map exactly after proving they do not exceed runner
+maximums. The task writable-byte budget is an aggregate limit across all three
+writable tmpfs mounts. Trusted fixed `/tmp` and `/dev/shm` reservations are
+subtracted with checked integer arithmetic; the positive remainder becomes
+both `/workspace` capacity and the runtime source-copy limit. The three profile
+values must sum exactly to the frozen task limit. Network allowlists remain
+unsupported by the local backend, so only disabled networking with zero egress
+is projectable.
+
+CPU time is converted into a cgroup CPU-rate ceiling only in combination with
+the frozen wall-time ceiling. Trusted integer quota-period, minimum-quota, and
+maximum-quota microseconds define the representable CPU range and quantum. The
+period must be a power of ten so every integer quota ratio has a finite decimal
+representation for the OCI `--cpus` boundary. The projector calculates the
+quota with exact integer arithmetic and rounds down, never up, then proves
+`quota / period * wallTimeMs <= cpuTimeMs`. Ratios below the trusted minimum or
+above the trusted maximum fail; they are not widened to a convenient value.
+The runtime retains the frozen aggregate wall limit and command-count limit.
+
+Runtime child-output capacity is derived with checked addition from the frozen
+log budget and measurement-result maximum. This derived bound must fit the
+trusted runtime output maximum. It does not replace the separate outer framed
+protocol cap or control-plane log quota. Artifact and egress budgets are not
+reinterpreted by this slice.
+
+The projector does not materialize a source or request, admit an image, start a
+sandbox, supervise a lease, create event envelopes, or persist evidence. A
+later one-attempt coordinator may consume only this validated plan and the
+opaque capabilities from the existing materializers. Production execution
+remains disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
