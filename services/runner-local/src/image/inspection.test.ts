@@ -61,6 +61,11 @@ function native(overrides: Record<string, unknown> = {}): ProcessResult {
           size: 1_024,
         },
       },
+      ImageConfigDesc: {
+        mediaType: "application/vnd.oci.image.config.v1+json",
+        digest: configurationDigest,
+        size: 1_024,
+      },
       ...overrides,
     }),
   );

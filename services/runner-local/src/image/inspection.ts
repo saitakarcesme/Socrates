@@ -147,6 +147,10 @@ export function parseSandboxImageInspection(input: {
   const configuration = object(compatible["Config"], "Config");
   const image = object(native["Image"], "Image");
   const target = object(image["Target"], "Image.Target");
+  const imageConfiguration = object(
+    native["ImageConfigDesc"],
+    "ImageConfigDesc",
+  );
   string(image["Name"], "Image.Name");
   const manifestDigest = digest(target["digest"], "Image.Target.digest");
   const mediaType = string(target["mediaType"], "Image.Target.mediaType");
@@ -163,6 +167,7 @@ export function parseSandboxImageInspection(input: {
     );
   }
   strings(compatible["RepoDigests"], "RepoDigests");
+  digest(compatible["Id"], "Id");
   if (
     compatible["Os"] !== "linux" ||
     compatible["Architecture"] !== input.architecture
@@ -179,7 +184,10 @@ export function parseSandboxImageInspection(input: {
     reference: input.reference,
     manifestDigest,
     manifestMediaType: mediaType as SandboxImageInspection["manifestMediaType"],
-    configurationDigest: digest(compatible["Id"], "Id"),
+    configurationDigest: digest(
+      imageConfiguration["digest"],
+      "ImageConfigDesc.digest",
+    ),
     platform: "linux",
     architecture: input.architecture,
     user: string(configuration["User"], "Config.User"),
