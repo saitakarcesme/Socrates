@@ -2264,6 +2264,19 @@ garbage collection, or automatic journal deletion. It does not enable the
 runner entry point. `LocalRunnerNotEnabledError` remains the production
 behavior until later slices admit lease supervision and end-to-end execution.
 
+Validation amendment, 2026-07-31: implementation commit `13b0d4a` passed
+local formatting, TypeScript, ESLint, 194 runner-local tests, all workspace
+tests, Phase 1/2 dependency-boundary audits, production builds, and the
+low-severity dependency audit with no known vulnerabilities. GitHub Actions
+run `30653250463` passed every PostgreSQL and API integration, the Chromium
+product journey, production builds, and both Linux native durability probes.
+The v2 work-journal evidence proved private `0600`, single-link rejection
+publication and authoritative rejected-state recovery after restart while
+preserving exact claimed-attempt replay with no network after commit. The run
+uploaded separate spool and journal evidence artifacts. This admits ADR-051
+and closes Slice 2.14; execution, lease supervision, timers, and cleanup remain
+disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

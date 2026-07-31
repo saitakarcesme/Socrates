@@ -1,6 +1,6 @@
 # Slice 2.14 restart-first work admission plan
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -101,3 +101,10 @@ a future completion/retention slice defines their lifecycle.
 8. Every crash boundary recovers to empty, pending, claimed, or rejected truth.
 9. No execution, supervision, cleanup, or production enablement is introduced.
 10. Full repository, native durability, browser, build, and CI gates pass.
+
+## Evidence
+
+Implementation commit `13b0d4a`; GitHub Actions run `30653250463` passed 194
+runner-local tests, every PostgreSQL and API integration, the v2 native work
+journal proof including private single-link rejection evidence and restart
+recovery, the native spool proof, Chromium journey, and production builds.

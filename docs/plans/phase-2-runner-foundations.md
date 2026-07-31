@@ -576,7 +576,7 @@ and production builds.
 
 ### Slice 2.14 — restart-first work admission
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-051.
 
@@ -592,6 +592,11 @@ Detailed plan: `docs/plans/slice-2.14-restart-first-work-admission.md`.
 Exit: crash-boundary tests prove each delivery has exactly one terminal local
 claim outcome, stale offers stop retrying after durable rejection, and no new
 offer is acquired while pending or claimed local work exists.
+
+Evidence: implementation commit `13b0d4a`; GitHub Actions run `30653250463`
+passed 194 runner-local tests, all database/API integrations, native v2 work
+journal rejection durability, native spool durability, browser tests, and
+production builds.
 
 ## Acceptance gates
 
