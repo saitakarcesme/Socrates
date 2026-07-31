@@ -357,13 +357,78 @@ integration("PostgreSQL scheduler persistence", () => {
   });
 
   it("reserves one task once and claims only through its exact delivery", async () => {
+    const deliveryWorkspaceId = randomUUID();
+    const deliveryProjectId = randomUUID();
+    const deliveryMetricId = randomUUID();
+    const deliveryRunId = randomUUID();
+    const deliveryExperimentId = randomUUID();
     const firstDeliveryRunner = randomUUID();
     const secondDeliveryRunner = randomUUID();
     const taskId = randomUUID();
+    await database.insert(workspaces).values({
+      id: deliveryWorkspaceId,
+      name: "Isolated delivery workspace",
+    });
+    await database.insert(projects).values({
+      id: deliveryProjectId,
+      workspaceId: deliveryWorkspaceId,
+      name: "Delivery project",
+      slug: `delivery-${deliveryProjectId}`,
+      objective: "Isolate concurrent delivery acquisition.",
+    });
+    await database.insert(metricDefinitions).values({
+      id: deliveryMetricId,
+      projectId: deliveryProjectId,
+      version: 1,
+      name: "delivery-duration",
+      unit: "ms",
+      direction: "minimize",
+      minimumImprovement: "1",
+      noiseTolerance: "0",
+    });
+    await database.insert(runs).values({
+      id: deliveryRunId,
+      projectId: deliveryProjectId,
+      metricDefinitionId: deliveryMetricId,
+      sequence: 1,
+      title: "Delivery run",
+      objective: "Reserve one task exactly once.",
+    });
+    await database.insert(experiments).values({
+      id: deliveryExperimentId,
+      runId: deliveryRunId,
+      sequence: 1,
+      hypothesis: "A fenced offer has one owner.",
+      action: "Acquire concurrently.",
+      estimatedDurationMs: 60_000,
+      estimatedCostMinor: 0,
+    });
+    const baseTask = task(taskId, deliveryExperimentId);
+    const basePayload = experimentTaskV2Schema.parse(baseTask.payload);
+    const deliveryTask: RunnerTaskWrite = {
+      ...baseTask,
+      workspaceId: deliveryWorkspaceId,
+      projectId: deliveryProjectId,
+      runId: deliveryRunId,
+      experimentId: deliveryExperimentId,
+      payload: {
+        ...basePayload,
+        runId: deliveryRunId,
+        experimentId: deliveryExperimentId,
+        measurement: {
+          ...basePayload.measurement,
+          metricDefinitionId: deliveryMetricId,
+        },
+      },
+    };
     await persistence.transaction(async ({ scheduler }) => {
-      await scheduler.registerRunner(registration(firstDeliveryRunner));
-      await scheduler.registerRunner(registration(secondDeliveryRunner));
-      await scheduler.createTask(task(taskId, experimentIds[16]!));
+      await scheduler.registerRunner(
+        registration(firstDeliveryRunner, deliveryWorkspaceId),
+      );
+      await scheduler.registerRunner(
+        registration(secondDeliveryRunner, deliveryWorkspaceId),
+      );
+      await scheduler.createTask(deliveryTask);
     });
 
     const offers = await Promise.all(
