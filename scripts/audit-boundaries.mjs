@@ -56,6 +56,21 @@ function isExecutionPlane(path) {
   return path.startsWith(join("services", "runner-local"));
 }
 
+function isAuthorizedOciProcessBoundary(path, source) {
+  return (
+    path === join("services", "runner-local", "src", "oci", "process.ts") &&
+    /import\s*\{\s*spawn\s*\}\s*from\s*["']node:child_process["']/.test(
+      source,
+    ) &&
+    (source.match(/(?:node:)?child_process/g) ?? []).length === 1 &&
+    !["worker_threads", "node:worker_threads"].some((moduleName) =>
+      importsModule(source, moduleName),
+    ) &&
+    source.includes("shell: false") &&
+    !/\b(?:exec|execFile|fork|spawnSync)\s*\(/.test(source)
+  );
+}
+
 function importsModule(source, moduleName) {
   const escaped = moduleName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(
@@ -138,10 +153,23 @@ export async function auditBoundaries(phase) {
         );
       }
       if (phase === 2 && isExecutionPlane(sourcePath)) {
+        if (
+          executionImports.some((moduleName) =>
+            importsModule(source, moduleName),
+          ) &&
+          !isAuthorizedOciProcessBoundary(sourcePath, source)
+        ) {
+          violations.push(
+            `${sourcePath}: unauthorized execution-plane process boundary`,
+          );
+        }
         continue;
       }
       for (const moduleName of executionImports) {
         if (importsModule(source, moduleName)) {
+          if (isAuthorizedOciProcessBoundary(sourcePath, source)) {
+            continue;
+          }
           violations.push(
             `${sourcePath}: forbidden runtime import ${moduleName}`,
           );

@@ -1308,6 +1308,15 @@ may translate a `RunnerExecutionV1` into events only after the source and image
 inputs described below exist. Until then, the package continues to export no
 enabled production `Runner`.
 
+The repository's no-host-execution audit remains in force everywhere except
+the exact OCI process-boundary module. That module may import only
+`spawn` from `node:child_process`, must set `shell: false`, and accepts only
+the fixed nerdctl executable plus typed argument arrays from the backend. The
+audit rejects another process import anywhere in the execution plane as well
+as every process import in control-plane and UI packages. This exception is
+authority to control the selected sandbox engine, not to run experiment
+commands on the host.
+
 Readiness is an explicit fail-closed state, not a best-effort check performed
 after accepting work. Trusted host provisioning installs nerdctl v2.3.x,
 starts rootless containerd, and loads the reviewed RootlessKit and
