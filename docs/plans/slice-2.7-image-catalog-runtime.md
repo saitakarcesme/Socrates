@@ -125,7 +125,8 @@ The closed frame union contains:
 - `command.output` with `stdout` or `stderr`, monotonic sequence, and base64
   bytes;
 - `command.exited`;
-- `measurement.result` with bounded base64 bytes;
+- `measurement.result` with bounded base64 bytes, an independent zero-based
+  sequence, and an explicit final marker;
 - `runtime.error`;
 - `runtime.completed`.
 

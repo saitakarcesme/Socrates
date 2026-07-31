@@ -20,7 +20,8 @@ export class RuntimeFrameSequenceValidator {
   #nextAction = 0;
   #nextOutputSequence = 0;
   #measurementExited = false;
-  #measurementResult = false;
+  #nextMeasurementSequence = 0;
+  #measurementResultComplete = false;
   #errorSeen = false;
   #completed = false;
 
@@ -122,19 +123,25 @@ export class RuntimeFrameSequenceValidator {
       case "measurement.result": {
         if (
           !this.#measurementExited ||
-          this.#measurementResult ||
+          this.#measurementResultComplete ||
           this.#active ||
-          this.#errorSeen
+          this.#errorSeen ||
+          frame.sequence !== this.#nextMeasurementSequence
         ) {
           throw new RuntimeFrameSequenceError(
             "Measurement result arrived in an invalid state.",
           );
         }
-        this.#measurementResult = true;
+        this.#nextMeasurementSequence += 1;
+        this.#measurementResultComplete = frame.final;
         break;
       }
       case "runtime.error": {
-        if (this.#active || this.#errorSeen || this.#measurementResult) {
+        if (
+          this.#active ||
+          this.#errorSeen ||
+          this.#nextMeasurementSequence > 0
+        ) {
           throw new RuntimeFrameSequenceError(
             "Runtime error arrived in an invalid state.",
           );
@@ -147,7 +154,7 @@ export class RuntimeFrameSequenceValidator {
           frame.status === "succeeded" &&
           this.#nextAction === this.#actionCount &&
           this.#measurementExited &&
-          this.#measurementResult &&
+          this.#measurementResultComplete &&
           !this.#errorSeen &&
           !this.#active;
         const failure =

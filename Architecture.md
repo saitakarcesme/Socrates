@@ -1574,11 +1574,16 @@ cgroups, cancellation, output bytes, and cleanup.
 Child stdout and stderr never share the runtime control channel verbatim. The
 runtime converts them into bounded binary-safe frames carrying command index,
 stream, sequence, and base64 payload. It emits explicit command-start,
-command-exit, measurement-result, runtime-error, and completion frames. Frames
-use a four-byte big-endian length followed by strict UTF-8 JSON, have a small
-fixed maximum, and reject unknown fields, sequence gaps, trailing bytes, or
-output after completion. Measurement bytes remain untrusted data and are
-validated by the outer lifecycle adapter in Slice 2.8.
+command-exit, measurement-result, runtime-error, and completion frames.
+Measurement results use the same bounded payload size as command output and
+carry an independent zero-based sequence plus an explicit final marker; this
+keeps the 1 MiB request-level result budget compatible with the small fixed
+frame maximum without allowing an oversized control message. At least one
+result frame is required, including for an empty result. Frames use a four-byte
+big-endian length followed by strict UTF-8 JSON and reject unknown fields,
+sequence gaps, trailing bytes, or output after completion. Measurement bytes
+remain untrusted data and are validated by the outer lifecycle adapter in
+Slice 2.8.
 
 Slice 2.7 admits the catalog capability, runtime protocol implementation, and
 native handshake/execution proof. It does not enable task leasing, translate

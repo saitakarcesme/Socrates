@@ -13,6 +13,10 @@ export type RuntimeWorkspaceResult = Readonly<{
   entryCount: number;
 }>;
 
+export interface RuntimeWorkspacePreparation {
+  prepare(limits: RuntimeWorkspaceLimits): Promise<RuntimeWorkspaceResult>;
+}
+
 export class RuntimeWorkspaceError extends Error {
   constructor(
     readonly code:
@@ -47,7 +51,7 @@ function assertDescendant(root: string, candidate: string): void {
   }
 }
 
-export class RuntimeWorkspacePreparer {
+export class RuntimeWorkspacePreparer implements RuntimeWorkspacePreparation {
   readonly #sourceRoot: string;
   readonly #workspaceRoot: string;
 

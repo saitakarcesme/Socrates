@@ -139,6 +139,8 @@ const commandExitedFrameSchema = z
 const measurementResultFrameSchema = z
   .object({
     type: z.literal("measurement.result"),
+    sequence: nonNegativeSafeInteger,
+    final: z.boolean(),
     bytes: base64Bytes,
   })
   .strict();
