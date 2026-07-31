@@ -15,7 +15,7 @@ const manifestDigest = `sha256:${"a".repeat(64)}`;
 const configurationDigest = `sha256:${"b".repeat(64)}`;
 const runtimeBuildDigest = `sha256:${"c".repeat(64)}`;
 const runtimeBundleDigest = `sha256:${"d".repeat(64)}`;
-const reference = `registry.example/socrates/task-runtime@${manifestDigest}`;
+const reference = manifestDigest;
 
 function declaration(
   overrides: Partial<TrustedSandboxImage> = {},

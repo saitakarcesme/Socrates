@@ -147,7 +147,7 @@ export function parseSandboxImageInspection(input: {
   const configuration = object(compatible["Config"], "Config");
   const image = object(native["Image"], "Image");
   const target = object(image["Target"], "Image.Target");
-  const reference = string(image["Name"], "Image.Name");
+  string(image["Name"], "Image.Name");
   const manifestDigest = digest(target["digest"], "Image.Target.digest");
   const mediaType = string(target["mediaType"], "Image.Target.mediaType");
   if (!acceptedManifestMediaTypes.has(mediaType)) {
@@ -156,22 +156,13 @@ export function parseSandboxImageInspection(input: {
       "Native image inspection has an unsupported manifest media type.",
     );
   }
-  if (
-    reference !== input.reference ||
-    manifestDigest !== input.reference.split("@").at(-1)
-  ) {
+  if (manifestDigest !== input.reference) {
     throw new SandboxImageInspectionError(
       "mismatch",
       "Local image target does not match its digest-pinned reference.",
     );
   }
-  const repositoryDigests = strings(compatible["RepoDigests"], "RepoDigests");
-  if (!repositoryDigests.includes(input.reference)) {
-    throw new SandboxImageInspectionError(
-      "mismatch",
-      "Docker-compatible inspection does not contain the exact reference.",
-    );
-  }
+  strings(compatible["RepoDigests"], "RepoDigests");
   if (
     compatible["Os"] !== "linux" ||
     compatible["Architecture"] !== input.architecture
@@ -185,7 +176,7 @@ export function parseSandboxImageInspection(input: {
   requireAbsentObject(configuration["Healthcheck"], "Config.Healthcheck");
 
   return Object.freeze({
-    reference,
+    reference: input.reference,
     manifestDigest,
     manifestMediaType: mediaType as SandboxImageInspection["manifestMediaType"],
     configurationDigest: digest(compatible["Id"], "Id"),

@@ -18,8 +18,6 @@ export type InspectedSandboxImage = Readonly<{
 const admittedImages = new WeakSet<object>();
 const inspectedImages = new WeakSet<object>();
 const digestPattern = /^sha256:[a-f0-9]{64}$/u;
-const imageReferencePattern =
-  /^[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[a-f0-9]{64}$/u;
 const absoluteExecutablePattern =
   /^\/(?:[^/\0.][^/\0]*|\.(?!\.?\/)[^/\0]+)(?:\/[^/\0]+)*$/u;
 
@@ -43,8 +41,7 @@ export function assertAdmittedImage(
   if (
     !admittedImages.has(image) ||
     !digestPattern.test(image.digest) ||
-    !imageReferencePattern.test(image.reference) ||
-    !image.reference.endsWith(`@${image.digest}`)
+    image.reference !== image.digest
   ) {
     throw new TypeError("Image was not admitted by the trusted catalog.");
   }
@@ -83,8 +80,7 @@ export function assertInspectedImage(
   if (
     !inspectedImages.has(image) ||
     !digestPattern.test(image.digest) ||
-    !imageReferencePattern.test(image.reference) ||
-    !image.reference.endsWith(`@${image.digest}`)
+    image.reference !== image.digest
   ) {
     throw new TypeError("Image was not issued from verified local inspection.");
   }

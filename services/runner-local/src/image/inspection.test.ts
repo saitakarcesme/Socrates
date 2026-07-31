@@ -15,7 +15,8 @@ import type {
 
 const manifestDigest = `sha256:${"a".repeat(64)}`;
 const configurationDigest = `sha256:${"b".repeat(64)}`;
-const reference = `registry.example/socrates/task-runtime@${manifestDigest}`;
+const reference = manifestDigest;
+const observedName = `registry.example/socrates/task-runtime:admitted`;
 const environment = [
   "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
   "NODE_VERSION=22.23.1",
@@ -53,7 +54,7 @@ function native(overrides: Record<string, unknown> = {}): ProcessResult {
   return successfulResult(
     JSON.stringify({
       Image: {
-        Name: reference,
+        Name: observedName,
         Target: {
           mediaType: "application/vnd.oci.image.manifest.v1+json",
           digest: manifestDigest,
@@ -110,14 +111,14 @@ describe("sandbox image inspection", () => {
   it.each([
     ["platform", compatible({ Architecture: "arm64" }), native(), "platform"],
     [
-      "reference",
+      "manifest digest",
       compatible(),
       native({
         Image: {
-          Name: `registry.example/other@${manifestDigest}`,
+          Name: observedName,
           Target: {
             mediaType: "application/vnd.oci.image.manifest.v1+json",
-            digest: manifestDigest,
+            digest: `sha256:${"e".repeat(64)}`,
           },
         },
       }),
@@ -128,7 +129,7 @@ describe("sandbox image inspection", () => {
       compatible(),
       native({
         Image: {
-          Name: reference,
+          Name: observedName,
           Target: {
             mediaType: "application/vnd.oci.image.index.v1+json",
             digest: manifestDigest,

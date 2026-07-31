@@ -21,7 +21,7 @@ events or enable the `Runner` interface.
 
 Each closed catalog entry pins:
 
-- a canonical repository plus platform-specific `sha256` reference;
+- a platform-specific bare manifest content address (`sha256:<64 hex>`);
 - Linux architecture (`amd64` or `arm64`);
 - OCI manifest digest and configuration digest;
 - `socrates.task-runtime.v1`;
@@ -30,7 +30,7 @@ Each closed catalog entry pins:
 - exact permitted image environment defaults;
 - the existing fixed sandbox profile probe.
 
-Catalog construction validates duplicate digests, references, platforms,
+Catalog construction validates duplicate digests, content addresses, platforms,
 entrypoints, environment names, and ABI/build identities. Task lookup uses only
 digest plus requested platform. Tags and caller-provided references are not
 inputs.
@@ -51,9 +51,11 @@ separate deployment concerns.
 
 Admission performs bounded no-shell process calls through the existing OCI
 process port. It never pulls. Docker-compatible inspection establishes the
-resolved local reference; native inspection establishes the OCI manifest,
+resolved local configuration; native inspection establishes the OCI manifest,
 configuration, platform, entrypoint, environment, volumes, and layer/config
-digests. Unknown or missing fields fail closed.
+digests. The containerd-reported image name is audit context only: the bare
+manifest digest is the inspected and executed engine locator. Unknown or
+missing fields fail closed.
 
 The image is then created under the guarded profile with the fixed
 `--handshake` runtime operation. One valid frame must match the catalog ABI and

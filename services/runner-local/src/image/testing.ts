@@ -9,7 +9,7 @@ export function createAdmittedImageForTesting(
 ): AdmittedSandboxImage {
   const digest = reference.slice(reference.lastIndexOf("@") + 1);
   return issueAdmittedSandboxImage({
-    reference,
+    reference: digest,
     digest,
     architecture,
     runtime: {

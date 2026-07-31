@@ -52,8 +52,6 @@ export class SandboxImageCatalogError extends Error {
 }
 
 const digestPattern = /^sha256:[a-f0-9]{64}$/u;
-const referencePattern =
-  /^[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[a-f0-9]{64}$/u;
 const executablePattern =
   /^\/(?:[^/\0.][^/\0]*|\.(?!\.?\/)[^/\0]+)(?:\/[^/\0]+)*$/u;
 const environmentNamePattern = /^[A-Z_][A-Z0-9_]*$/u;
@@ -113,9 +111,9 @@ function sameStrings(
 
 function validateDeclaration(image: TrustedSandboxImage): void {
   if (
-    !referencePattern.test(image.reference) ||
+    !digestPattern.test(image.reference) ||
     !digestPattern.test(image.manifestDigest) ||
-    !image.reference.endsWith(`@${image.manifestDigest}`) ||
+    image.reference !== image.manifestDigest ||
     !digestPattern.test(image.configurationDigest) ||
     !digestPattern.test(image.runtimeBuildDigest) ||
     !digestPattern.test(image.runtimeBundleDigest) ||

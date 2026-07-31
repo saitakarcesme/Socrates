@@ -1526,8 +1526,8 @@ research loop remain later slices.
 
 An OCI digest proves content identity; image labels, configuration, and
 process output remain claims made by that content. Slice 2.7 introduces a
-`SandboxImageCatalog` whose trusted configuration pins the complete
-platform-specific image reference, manifest digest, Linux architecture,
+`SandboxImageCatalog` whose trusted configuration pins the platform-specific
+manifest content address, Linux architecture,
 `socrates.task-runtime.v1` ABI revision, runtime entrypoint, and build identity.
 The initial catalog is deployment configuration readable only by the runner.
 A later signed control-plane distribution mechanism may replace that source,
@@ -1542,6 +1542,18 @@ implicit platform selection, unrecognized media types, missing content,
 volumes, healthcheck side effects, credential-like environment names, and
 configuration drift fail before container creation. OCI configuration is
 content-addressed evidence, not the authorization source.
+
+The engine locator is the bare manifest content address (`sha256:<64 hex>`),
+not a mutable tag or a registry-qualified digest reference. Reference-host
+validation showed that nerdctl 2.3.1 resolves a locally created
+`repository@digest` as a registry lookup even when containerd holds an image
+metadata alias with that exact spelling. The bare address resolves only the
+already-present local manifest and, with pulls disabled, cannot cross a
+registry boundary. Native inspection must resolve that address to the same
+manifest digest; the image name reported by containerd is audit context only
+and cannot become identity or authority. The admitted opaque capability carries
+only this verified local content address. This preserves the stronger property
+that tag mutation between admission and creation cannot change executed bytes.
 
 The catalog then executes a bounded handshake under the same guarded sandbox
 profile used for work. The fixed runtime entrypoint must emit one strictly
@@ -1571,7 +1583,7 @@ bind.
 
 For every guarded container invocation, the backend maps the authorized outer
 command executable to nerdctl's explicit `--entrypoint` option and places only
-its argument array after the image reference. Image configuration therefore
+its argument array after the image content address. Image configuration therefore
 cannot prepend a second executable or reinterpret handshake/profile/runtime
 arguments. Task-declared commands remain exclusively inside the framed runtime
 request.

@@ -47,7 +47,7 @@ type BuildIdentity = Readonly<{
 }>;
 
 const digestPattern = /^sha256:[a-f0-9]{64}$/u;
-const imageReferencePattern = /^.+@sha256:[a-f0-9]{64}$/u;
+const imageReferencePattern = /^sha256:[a-f0-9]{64}$/u;
 
 function argument(name: string): string {
   const index = process.argv.indexOf(name);
@@ -149,7 +149,7 @@ function decodeFrameBytes(
 
 const imageReference = argument("--image");
 if (!imageReferencePattern.test(imageReference)) {
-  throw new Error("--image must be an immutable SHA-256 reference.");
+  throw new Error("--image must be a bare SHA-256 manifest content address.");
 }
 const buildManifestPath = fileURLToPath(
   new URL("../../../task-runtime/dist/build-identity.json", import.meta.url),

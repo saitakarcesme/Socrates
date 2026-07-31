@@ -21,7 +21,7 @@ import type {
 const manifestDigest = `sha256:${"a".repeat(64)}`;
 const buildDigest = `sha256:${"b".repeat(64)}`;
 const image = issueInspectedSandboxImage({
-  reference: `registry.example/socrates/runtime@${manifestDigest}`,
+  reference: manifestDigest,
   digest: manifestDigest,
   architecture: "amd64",
   profileProbe: { executable: "/bin/probe", arguments: [] },
