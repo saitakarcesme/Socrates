@@ -121,12 +121,21 @@ export function verifyNativeSpec(
     "permitted",
     "ambient",
   ];
+  let capabilityMismatch = false;
   for (const capabilitySet of capabilitySets) {
     if (
       strings(caseInsensitiveValue(capabilities, capabilitySet))?.length !== 0
     ) {
+      capabilityMismatch = true;
       failures.push(`capabilities.${capabilitySet}`);
     }
+  }
+  if (capabilityMismatch) {
+    failures.push(
+      `capabilities.shape=${JSON.stringify(
+        caseInsensitiveValue(process, "capabilities"),
+      ).slice(0, 1_000)}`,
+    );
   }
   if (process?.["apparmorProfile"] !== sandboxAppArmorProfile) {
     failures.push("process.apparmorProfile");
