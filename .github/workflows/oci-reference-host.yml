@@ -30,6 +30,8 @@ jobs:
     env:
       IMAGE: ${{ inputs.image }}
       LATENCY_SAMPLES: ${{ inputs.latency_samples }}
+      NERDCTL_VERSION: "2.3.1"
+      NERDCTL_FULL_SHA256: 7a0d8efcf55b10b57d831541266adb9c6ec3d55b44ec041c95f6eb994d1faab9
 
     steps:
       - name: Check out source
@@ -89,6 +91,12 @@ jobs:
           sudo apparmor_status --enabled
           sudo apparmor_status
           sudo apparmor_parser --replace spikes/oci-engine/apparmor/socrates-sandbox
+          nerdctl_archive="/tmp/nerdctl-full-${NERDCTL_VERSION}-linux-amd64.tar.gz"
+          curl --fail --silent --show-error --location \
+            "https://github.com/containerd/nerdctl/releases/download/v${NERDCTL_VERSION}/nerdctl-full-${NERDCTL_VERSION}-linux-amd64.tar.gz" \
+            --output "$nerdctl_archive"
+          echo "${NERDCTL_FULL_SHA256}  ${nerdctl_archive}" | sha256sum --check -
+          sudo tar --extract --gzip --file "$nerdctl_archive" --directory /usr/local
           if ! grep -q "^${USER}:" /etc/subuid; then
             sudo usermod --add-subuids 100000-165535 "$USER"
           fi
@@ -113,6 +121,14 @@ jobs:
           echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}" >> "$GITHUB_ENV"
           echo "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS}" >> "$GITHUB_ENV"
 
+      - name: Start rootless containerd
+        shell: bash
+        run: |
+          set -euo pipefail
+          containerd-rootless-setuptool.sh install
+          systemctl --user restart containerd
+          systemctl --user is-active containerd
+
       - name: Verify rootless engines
         shell: bash
         run: |
@@ -122,6 +138,7 @@ jobs:
           test "$(docker info --format '{{.CgroupDriver}}')" = "systemd"
           podman info --format json | jq -e \
             '.host.security.rootless == true and .host.cgroupVersion == "v2"'
+          nerdctl info
 
       - name: Pre-pull immutable image
         shell: bash
@@ -130,6 +147,7 @@ jobs:
           [[ "$IMAGE" =~ @sha256:[a-f0-9]{64}$ ]]
           docker pull "$IMAGE"
           podman pull "$IMAGE"
+          nerdctl pull "$IMAGE"
 
       - name: Probe explicit Podman AppArmor confinement
         continue-on-error: true
@@ -137,6 +155,21 @@ jobs:
         run: |
           set -euo pipefail
           podman run --rm \
+            --security-opt apparmor=socrates-sandbox \
+            "$IMAGE" \
+            sh -c '
+              label="$(cat /proc/self/attr/current)"
+              printf "label=%s\n" "$label"
+              test "$label" = "socrates-sandbox (enforce)"
+              ! touch /tmp/socrates-lsm-probe
+            '
+
+      - name: Probe explicit nerdctl AppArmor confinement
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          nerdctl run --rm \
             --security-opt apparmor=socrates-sandbox \
             "$IMAGE" \
             sh -c '
