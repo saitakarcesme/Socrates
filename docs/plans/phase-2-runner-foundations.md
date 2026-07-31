@@ -574,6 +574,25 @@ revocation/reassignment and concurrent bounded reconciliation, authenticated
 API and runner integrations, native journal/spool durability, browser tests,
 and production builds.
 
+### Slice 2.14 — restart-first work admission
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-051.
+
+Detailed plan: `docs/plans/slice-2.14-restart-first-work-admission.md`.
+
+- inspect durable local work before acquiring another delivery;
+- replay claimed execution without network traffic;
+- reconcile pending claims with the exact stored attempt identity;
+- append an immutable rejection only for an authoritative claim conflict;
+- keep timers, retries, lease supervision, execution, and cleanup out of
+  scope.
+
+Exit: crash-boundary tests prove each delivery has exactly one terminal local
+claim outcome, stale offers stop retrying after durable rejection, and no new
+offer is acquired while pending or claimed local work exists.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

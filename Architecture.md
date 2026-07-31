@@ -2214,6 +2214,56 @@ probes, Chromium product journey, and all production builds also passed. This
 admits ADR-050 and closes Slice 2.13. Timers, cleanup, autonomous execution,
 and production runner enablement remain absent.
 
+### ADR-051: Work admission is restart-first and records authoritative rejection
+
+Slice 2.14 composes the already-admitted task source, local work journal, and
+delivery-scoped claim into one single-transition coordinator. Today each
+primitive is safe in isolation, but a caller could acquire a new offer before
+recovering an older `pending_claim` manifest after restart. The coordinator
+must inspect durable local work first and may contact acquire only when no
+locally actionable item exists. This ordering is a safety invariant rather
+than a polling preference.
+
+The work-journal state machine becomes closed and append-only:
+
+```text
+manifest(pending_claim) -> claim(claimed)
+manifest(pending_claim) -> rejection(rejected: control_plane_conflict)
+```
+
+A claim and rejection are mutually exclusive terminal records for one
+delivery key. An authenticated, contract-valid HTTP `409` from the exact
+delivery claim is authoritative evidence that the durable attempt cannot own
+that delivery; the coordinator commits a bounded rejection record before
+returning the rejected result. Timeout, abort, network, authentication,
+server, response-size, and protocol failures are not authoritative and leave
+the manifest pending for an exact-identity retry. Rejection never deletes or
+rewrites the manifest and never creates a replacement attempt.
+
+One `prepareNext` call is serialized in-process and performs at most one
+control-plane transition. It orders journal entries by `admittedAt`, then
+delivery ID. A claimed item is returned byte-equivalently without acquire or
+claim traffic. A pending item is reconciled with its stored attempt UUID. A
+rejected item is retained for diagnostics but is not actionable. Only when no
+pending or claimed item exists may the coordinator acquire one offer, durably
+admit it, and attempt its exact claim. An idle acquire returns an explicit
+idle result. There is no hidden loop or backoff.
+
+Crash boundaries preserve monotonic truth: before manifest publication there
+is no local work; after it, restart retries the same attempt identity; after a
+claim response but before claim publication, exact server replay returns the
+same lease; after an authoritative conflict but before rejection publication,
+restart repeats the same harmless conflict; and after either terminal record,
+restart performs no duplicate transition. Filesystem publication reuses the
+private, no-overwrite, fsync-backed durability primitive admitted by ADR-046
+and ADR-048.
+
+Slice 2.14 adds no daemon, polling interval, retry delay, heartbeat,
+cancellation monitor, execution handoff, event production, completion marker,
+garbage collection, or automatic journal deletion. It does not enable the
+runner entry point. `LocalRunnerNotEnabledError` remains the production
+behavior until later slices admit lease supervision and end-to-end execution.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
