@@ -19,3 +19,10 @@ export type {
   SourceSnapshotMaterializerOptions,
 } from "./materializer";
 export type { SourcePathLimits } from "./path-policy";
+export {
+  BoundedSourceArtifactResolver,
+  BoundedSourceArtifactResolverError,
+  type ResolveSourceArtifactInput,
+  type RunnerSourceSnapshotTransport,
+  type SourceSnapshotStream,
+} from "./artifact-resolver";
