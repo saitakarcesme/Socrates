@@ -477,6 +477,25 @@ Validation: GitHub Actions run `30644887440` passed the isolated database, API,
 runner, browser, build, and native Linux spool gates. Immutable evidence is at
 `services/runner-local/evidence/native/1785513485110-bbef45b2-ef4d-4bdd-a8cf-7358b8622bb4-spool.json`.
 
+### Slice 2.10 — authenticated runner transport
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-047.
+
+Detailed plan: `docs/plans/slice-2.10-authenticated-runner-transport.md`.
+
+- bind opaque, revocable bearer credentials to one runner/workspace principal
+- expose exact claim, fenced heartbeat/cancel directive, and ordered event
+  ingestion through strict bounded Hono routes
+- add a typed single-attempt Node client and sequential durable-spool sender
+- preserve task discovery, retry scheduling, coordinator loops, and OCI
+  execution for later slices
+- keep the production local-runner entry point disabled
+
+Exit: authenticated transport tests prove that caller IDs cannot cross the
+principal boundary and that ambiguous delivery never advances durable evidence.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

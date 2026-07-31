@@ -1847,6 +1847,106 @@ dependency-boundary audits, production builds, and the low-severity dependency
 audit also passed with no known vulnerabilities. This admits ADR-046 and closes
 Slice 2.9. `LocalRunnerNotEnabledError` remains unchanged.
 
+### ADR-047: Runner HTTP transport derives identity from a revocable principal
+
+Slice 2.10 introduces the first public runner transport, but it does not turn
+the local runner into a production execution service. The Hono API exposes a
+small outbound-only HTTP boundary for a runner that already knows a durable
+task ID: claim that exact task, renew its exact attempt lease while observing a
+cancellation directive, and submit one already-spooled event for a durable
+acknowledgement. The runner-side adapter is a typed client for those operations.
+It does not start the OCI engine, discover tasks, own a heartbeat loop, or
+delete spool evidence without an exact acknowledgement.
+
+The transport is disabled unless both persistence and a runner-authenticator
+port are configured. Every route authenticates before parsing or invoking an
+application command. Authentication returns a typed principal containing the
+token ID, runner ID, and workspace ID. Route handlers inject that runner ID;
+claim and heartbeat bodies do not contain one. Event envelopes necessarily
+carry their immutable runner ID, so the handler compares it with the principal
+before ingestion. A caller-supplied ID can never select another registration.
+Unknown, malformed, expired, or revoked credentials share one unauthorized
+response and no authentication response reveals whether a runner or token
+exists.
+
+The initial deployment authenticator uses a manually provisioned opaque bearer
+credential with a public UUID selector and a 256-bit random secret. PostgreSQL
+stores the selector, runner binding, SHA-256 secret digest, creation/expiry,
+and revocation facts, never the raw credential. A uniformly random 256-bit
+secret retains its security against offline guessing when represented by a
+fast digest; verification still decodes fixed-length bytes and uses a
+constant-time comparison. Multiple token rows permit overlap during rotation.
+Registration status remains an independent scheduler authorization check, so
+a valid credential cannot revive a draining or offline runner. Token creation
+is an operator-only utility, not a public API route, and reveals the raw secret
+exactly once.
+
+Runner routes are versioned JSON under `/v1/runner`:
+
+- `POST /tasks/:taskId/claims` accepts a client-generated attempt UUID and a
+  bounded requested lease duration. Repeating the same task/attempt identity
+  is the existing exact claim replay; a lost response never requires a new
+  identity.
+- `POST /tasks/:taskId/attempts/:attemptId/heartbeat` accepts the fence and a
+  bounded requested lease duration. A renewed response carries the
+  database-clocked expiry and a closed `continue` or `cancel` directive derived
+  from the task state in the same transaction.
+- `POST /events` accepts exactly one complete `RunnerEventV2`. Success returns
+  the versioned wire acknowledgement from ADR-046 plus whether ingestion was
+  an exact replay.
+
+Task discovery is deliberately not inferred from this API. ADR-031 already
+makes the transactional outbox the durable delivery boundary; a later
+dispatcher/task-source slice may deliver task IDs at least once and may choose
+polling, streaming, or a broker without changing claim semantics. Scanning an
+arbitrary JSON capability queue inside a convenient `claim-next` endpoint
+would create an unbounded scheduler policy and bypass the unpublished outbox
+contract. Slice 2.10 therefore accepts task IDs only from an injected future
+task-source port or direct transport tests.
+
+All request and response bodies use strict shared Zod contracts, RFC 3339
+strings at the wire, JSON media types, and explicit byte ceilings. The API does
+not rely on `Content-Length` alone and rejects oversized streamed bodies. The
+client likewise bounds response bytes before JSON parsing, rejects redirects,
+validates media type and schema, and never includes bearer credentials in an
+error. Hono's generic bearer middleware supports asynchronous token checks,
+but Socrates uses a dedicated typed middleware because downstream handlers
+need the authenticated principal, not a boolean. Authentication, domain
+errors, and protocol errors retain the existing API error envelope.
+
+The Node client uses the stable built-in `fetch` boundary behind an injected
+port and composes caller cancellation with an operation timeout. HTTPS is the
+default and required for deployed credentials. Plain HTTP requires an explicit
+development/test option; it is never enabled because an address is loopback.
+Transport primitives make one network attempt and classify timeout,
+connection ambiguity, authentication, protocol, conflict, and server failure.
+The future coordinator owns backoff and may retry only with the same durable
+identity: the same claim attempt UUID, heartbeat fence, or exact spooled event.
+This prevents hidden retries from extending leases or changing evidence
+identity outside coordinator policy.
+
+The event sender reads the first pending spool envelope, submits only that
+envelope, validates the exact acknowledgement, then delegates advancement to
+the spool. It never pipelines attempt sequences and never treats an HTTP 2xx
+status alone as acknowledgement. A gap response is actionable only when its
+expected sequence agrees with local durable state; conflicting control-plane
+state fails closed. Authentication material belongs to the transport process
+and is never copied into a task, source workspace, sandbox environment, log,
+artifact, or diagnostic snapshot.
+
+Primary implementation references are Hono's official bearer/custom
+middleware documentation and Node's official global `fetch`,
+`AbortSignal.timeout`, and `AbortSignal.any` documentation:
+
+- <https://hono.dev/docs/middleware/builtin/bearer-auth>
+- <https://hono.dev/docs/guides/middleware>
+- <https://nodejs.org/api/globals.html>
+
+`LocalRunnerNotEnabledError` remains the production entry-point behavior after
+Slice 2.10. Enabling task discovery, the lease coordinator, OCI execution,
+restart reconciliation, and automatic cancellation is a later architecture
+decision with native end-to-end evidence.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
