@@ -204,6 +204,31 @@ describe("Phase 2 scheduler migration", () => {
     expect(migration.trimEnd()).toMatch(/SET "version" = 7 WHERE "id" = 1;$/u);
   });
 
+  it("backfills offer expiry before advancing compatibility", async () => {
+    const migration = await readFile(
+      new URL(
+        "../drizzle/0011_expired_runner_task_offers.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    for (const evidence of [
+      `ADD COLUMN "expires_at" timestamp with time zone`,
+      `SET "expires_at" = "offered_at" + INTERVAL '5 minutes'`,
+      `ALTER COLUMN "expires_at" SET NOT NULL`,
+      `CREATE INDEX "runner_task_deliveries_offered_expiry_id_idx"`,
+      `"state" IN ('offered', 'claimed', 'revoked')`,
+      `"revocation_reason" = 'expired'`,
+      `SET "version" = 8`,
+    ]) {
+      expect(migration).toContain(evidence);
+    }
+    expect(migration.indexOf(`SET "expires_at"`)).toBeLessThan(
+      migration.indexOf(`ALTER COLUMN "expires_at" SET NOT NULL`),
+    );
+    expect(migration.trimEnd()).toMatch(/SET "version" = 8 WHERE "id" = 1;$/u);
+  });
+
   it("adds append-only cancellation identity and advances compatibility", async () => {
     const migration = await readFile(
       new URL("../drizzle/0006_runner_task_cancellation.sql", import.meta.url),

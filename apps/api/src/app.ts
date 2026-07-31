@@ -32,6 +32,7 @@ export type AppOptions = {
   persistence?: Persistence;
   reads?: ReadRepository;
   runnerAuthenticator?: RunnerAuthenticator;
+  runnerOfferDurationMs?: number;
   workspaceId?: string;
 };
 
@@ -67,7 +68,9 @@ export function createApp(options: AppOptions = {}) {
     : null;
   const runnerGateway =
     options.persistence && options.runnerAuthenticator
-      ? new RunnerGatewayService(options.persistence)
+      ? new RunnerGatewayService(options.persistence, {
+          offerDurationMs: options.runnerOfferDurationMs,
+        })
       : null;
 
   app.use("*", requestId());

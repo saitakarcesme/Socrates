@@ -1,0 +1,13 @@
+ALTER TABLE "runner_task_deliveries" DROP CONSTRAINT "runner_task_deliveries_state";--> statement-breakpoint
+ALTER TABLE "runner_task_deliveries" DROP CONSTRAINT "runner_task_deliveries_claim_identity_complete";--> statement-breakpoint
+ALTER TABLE "runner_task_deliveries" ADD COLUMN "expires_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "runner_task_deliveries" ADD COLUMN "revoked_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "runner_task_deliveries" ADD COLUMN "revocation_reason" text;--> statement-breakpoint
+UPDATE "runner_task_deliveries" SET "expires_at" = "offered_at" + INTERVAL '5 minutes' WHERE "expires_at" IS NULL;--> statement-breakpoint
+ALTER TABLE "runner_task_deliveries" ALTER COLUMN "expires_at" SET NOT NULL;--> statement-breakpoint
+CREATE INDEX "runner_task_deliveries_offered_expiry_id_idx" ON "runner_task_deliveries" USING btree ("expires_at","id") WHERE "runner_task_deliveries"."state" = 'offered';--> statement-breakpoint
+ALTER TABLE "runner_task_deliveries" ADD CONSTRAINT "runner_task_deliveries_expiry_after_offer" CHECK ("runner_task_deliveries"."expires_at" > "runner_task_deliveries"."offered_at");--> statement-breakpoint
+ALTER TABLE "runner_task_deliveries" ADD CONSTRAINT "runner_task_deliveries_revoked_after_offer" CHECK ("runner_task_deliveries"."revoked_at" IS NULL OR "runner_task_deliveries"."revoked_at" >= "runner_task_deliveries"."offered_at");--> statement-breakpoint
+ALTER TABLE "runner_task_deliveries" ADD CONSTRAINT "runner_task_deliveries_state" CHECK ("runner_task_deliveries"."state" IN ('offered', 'claimed', 'revoked'));--> statement-breakpoint
+ALTER TABLE "runner_task_deliveries" ADD CONSTRAINT "runner_task_deliveries_claim_identity_complete" CHECK (("runner_task_deliveries"."state" = 'offered' AND "runner_task_deliveries"."attempt_id" IS NULL AND "runner_task_deliveries"."fence" IS NULL AND "runner_task_deliveries"."claimed_at" IS NULL AND "runner_task_deliveries"."revoked_at" IS NULL AND "runner_task_deliveries"."revocation_reason" IS NULL) OR ("runner_task_deliveries"."state" = 'claimed' AND "runner_task_deliveries"."attempt_id" IS NOT NULL AND "runner_task_deliveries"."fence" IS NOT NULL AND "runner_task_deliveries"."claimed_at" IS NOT NULL AND "runner_task_deliveries"."revoked_at" IS NULL AND "runner_task_deliveries"."revocation_reason" IS NULL) OR ("runner_task_deliveries"."state" = 'revoked' AND "runner_task_deliveries"."attempt_id" IS NULL AND "runner_task_deliveries"."fence" IS NULL AND "runner_task_deliveries"."claimed_at" IS NULL AND "runner_task_deliveries"."revoked_at" IS NOT NULL AND "runner_task_deliveries"."revocation_reason" = 'expired'));--> statement-breakpoint
+UPDATE "socrates_schema_metadata" SET "version" = 8 WHERE "id" = 1;

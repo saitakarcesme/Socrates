@@ -115,7 +115,10 @@ export type ClaimRunnerTaskInput = {
 
 export type AcquireRunnerTaskDeliveryInput = {
   runnerId: string;
+  offerDurationMs: number;
 };
+
+export const maximumRunnerTaskOfferDurationMs = 15 * 60 * 1_000;
 
 export type RunnerTaskDelivery = {
   deliveryId: string;
@@ -144,6 +147,19 @@ export type ClaimRunnerTaskDeliveryResult =
         | "delivery_conflict"
         | Exclude<ClaimRunnerTaskResult["state"], "claimed">;
     };
+
+export type ReconcileExpiredTaskDeliveriesInput = { limit: number };
+
+export type RevokedRunnerTaskDelivery = {
+  deliveryId: string;
+  taskId: string;
+  runnerId: string;
+  reason: "expired";
+};
+
+export type ReconcileExpiredTaskDeliveriesResult = {
+  revoked: readonly RevokedRunnerTaskDelivery[];
+};
 
 export type ClaimedRunnerTask = {
   runnerId: string;
@@ -279,6 +295,9 @@ export interface SchedulerRepository {
   claimTaskDelivery(
     input: ClaimRunnerTaskDeliveryInput,
   ): Promise<ClaimRunnerTaskDeliveryResult>;
+  reconcileExpiredTaskDeliveries(
+    input: ReconcileExpiredTaskDeliveriesInput,
+  ): Promise<ReconcileExpiredTaskDeliveriesResult>;
   claimTask(input: ClaimRunnerTaskInput): Promise<ClaimRunnerTaskResult>;
   heartbeat(
     input: HeartbeatRunnerTaskInput,

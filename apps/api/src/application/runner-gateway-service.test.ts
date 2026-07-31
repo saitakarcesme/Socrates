@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import type {
+  AcquireRunnerTaskDeliveryInput,
   ClaimRunnerTaskResult,
   HeartbeatRunnerTaskResult,
   IngestRunnerEventResult,
@@ -48,6 +49,49 @@ function serviceReturning(options: {
 }
 
 describe("RunnerGatewayService", () => {
+  it("rejects untrusted or unbounded offer durations at construction", () => {
+    const persistence = {
+      transaction: async () => {
+        throw new Error("Unexpected transaction.");
+      },
+    } as unknown as Pick<Persistence, "transaction">;
+    for (const offerDurationMs of [0, -1, Number.MAX_SAFE_INTEGER]) {
+      expect(
+        () => new RunnerGatewayService(persistence, { offerDurationMs }),
+      ).toThrow(RangeError);
+    }
+  });
+
+  it("supplies the trusted offer duration instead of accepting runner input", async () => {
+    const runnerId = randomUUID();
+    const taskId = randomUUID();
+    const deliveryId = randomUUID();
+    let received: AcquireRunnerTaskDeliveryInput | undefined;
+    const scheduler = {
+      acquireTaskDelivery: async (input: AcquireRunnerTaskDeliveryInput) => {
+        received = input;
+        return {
+          state: "acquired" as const,
+          delivery: { deliveryId, taskId },
+        };
+      },
+    } as unknown as SchedulerRepository;
+    const persistence: Pick<Persistence, "transaction"> = {
+      transaction: async <T>(
+        work: (repositories: TransactionRepositories) => Promise<T>,
+      ) => work({ scheduler } as TransactionRepositories),
+    };
+    const service = new RunnerGatewayService(persistence, {
+      offerDurationMs: 45_000,
+    });
+
+    await expect(service.acquireTaskDelivery({ runnerId })).resolves.toEqual({
+      deliveryId,
+      taskId,
+    });
+    expect(received).toEqual({ runnerId, offerDurationMs: 45_000 });
+  });
+
   it("preserves a successful fenced claim", async () => {
     const claim = {
       ...claimInput,

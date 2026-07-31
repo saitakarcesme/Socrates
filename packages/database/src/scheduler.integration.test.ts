@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { LocalContentAddressedArtifactStore } from "@socrates/artifact-store/local";
 import { experimentTaskV2Schema, type RunnerBudget } from "@socrates/contracts";
-import { eq } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -403,23 +403,28 @@ integration("PostgreSQL scheduler persistence", () => {
       estimatedDurationMs: 60_000,
       estimatedCostMinor: 0,
     });
-    const baseTask = task(taskId, deliveryExperimentId);
-    const basePayload = experimentTaskV2Schema.parse(baseTask.payload);
-    const deliveryTask: RunnerTaskWrite = {
-      ...baseTask,
-      workspaceId: deliveryWorkspaceId,
-      projectId: deliveryProjectId,
-      runId: deliveryRunId,
-      experimentId: deliveryExperimentId,
-      payload: {
-        ...basePayload,
+    const deliveryTask = (
+      deliveryTaskId: string,
+      experimentId: string,
+    ): RunnerTaskWrite => {
+      const baseTask = task(deliveryTaskId, experimentId);
+      const basePayload = experimentTaskV2Schema.parse(baseTask.payload);
+      return {
+        ...baseTask,
+        workspaceId: deliveryWorkspaceId,
+        projectId: deliveryProjectId,
         runId: deliveryRunId,
-        experimentId: deliveryExperimentId,
-        measurement: {
-          ...basePayload.measurement,
-          metricDefinitionId: deliveryMetricId,
+        experimentId,
+        payload: {
+          ...basePayload,
+          runId: deliveryRunId,
+          experimentId,
+          measurement: {
+            ...basePayload.measurement,
+            metricDefinitionId: deliveryMetricId,
+          },
         },
-      },
+      };
     };
     await persistence.transaction(async ({ scheduler }) => {
       await scheduler.registerRunner(
@@ -428,13 +433,30 @@ integration("PostgreSQL scheduler persistence", () => {
       await scheduler.registerRunner(
         registration(secondDeliveryRunner, deliveryWorkspaceId),
       );
-      await scheduler.createTask(deliveryTask);
+      await scheduler.createTask(deliveryTask(taskId, deliveryExperimentId));
     });
+
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.acquireTaskDelivery({
+          runnerId: firstDeliveryRunner,
+          offerDurationMs: 0,
+        }),
+      ),
+    ).rejects.toThrow(RangeError);
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.reconcileExpiredTaskDeliveries({ limit: 0 }),
+      ),
+    ).rejects.toThrow(RangeError);
 
     const offers = await Promise.all(
       [firstDeliveryRunner, secondDeliveryRunner].map((candidateRunnerId) =>
         persistence.transaction(({ scheduler }) =>
-          scheduler.acquireTaskDelivery({ runnerId: candidateRunnerId }),
+          scheduler.acquireTaskDelivery({
+            runnerId: candidateRunnerId,
+            offerDurationMs: 60_000,
+          }),
         ),
       ),
     );
@@ -447,17 +469,88 @@ integration("PostgreSQL scheduler persistence", () => {
 
     await expect(
       persistence.transaction(({ scheduler }) =>
-        scheduler.acquireTaskDelivery({ runnerId: winnerRunner }),
+        scheduler.acquireTaskDelivery({
+          runnerId: winnerRunner,
+          offerDurationMs: 60_000,
+        }),
       ),
     ).resolves.toEqual(winner);
 
     const attemptId = randomUUID();
-    const claimInput = {
+    const staleClaimInput = {
       runnerId: winnerRunner,
       deliveryId: winner.delivery.deliveryId,
       taskId,
       attemptId,
       leaseDurationMs: 30_000,
+    };
+    const [offered] = await database
+      .select({
+        offeredAt: runnerTaskDeliveries.offeredAt,
+        expiresAt: runnerTaskDeliveries.expiresAt,
+      })
+      .from(runnerTaskDeliveries)
+      .where(eq(runnerTaskDeliveries.id, winner.delivery.deliveryId));
+    expect(offered!.expiresAt.getTime()).toBeGreaterThan(
+      offered!.offeredAt.getTime(),
+    );
+    await database
+      .update(runnerTaskDeliveries)
+      .set({
+        expiresAt: sql`${runnerTaskDeliveries.offeredAt} + INTERVAL '1 microsecond'`,
+      })
+      .where(eq(runnerTaskDeliveries.id, winner.delivery.deliveryId));
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.acquireTaskDelivery({
+          runnerId: winnerRunner,
+          offerDurationMs: 60_000,
+        }),
+      ),
+    ).resolves.toEqual({ state: "none" });
+    const reconciliation = await persistence.transaction(({ scheduler }) =>
+      scheduler.reconcileExpiredTaskDeliveries({ limit: 1 }),
+    );
+    expect(reconciliation).toEqual({
+      revoked: [
+        {
+          deliveryId: winner.delivery.deliveryId,
+          taskId,
+          runnerId: winnerRunner,
+          reason: "expired",
+        },
+      ],
+    });
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.claimTaskDelivery(staleClaimInput),
+      ),
+    ).resolves.toEqual({ state: "delivery_conflict" });
+
+    const replacementRunner =
+      winnerRunner === firstDeliveryRunner
+        ? secondDeliveryRunner
+        : firstDeliveryRunner;
+    const replacement = await persistence.transaction(({ scheduler }) =>
+      scheduler.acquireTaskDelivery({
+        runnerId: replacementRunner,
+        offerDurationMs: 60_000,
+      }),
+    );
+    expect(replacement).toMatchObject({
+      state: "acquired",
+      delivery: { taskId },
+    });
+    if (replacement.state !== "acquired") {
+      throw new Error("Expected a replacement offer.");
+    }
+    expect(replacement.delivery.deliveryId).not.toBe(
+      winner.delivery.deliveryId,
+    );
+    const claimInput = {
+      ...staleClaimInput,
+      runnerId: replacementRunner,
+      deliveryId: replacement.delivery.deliveryId,
     };
     const claim = await persistence.transaction(({ scheduler }) =>
       scheduler.claimTaskDelivery(claimInput),
@@ -477,6 +570,18 @@ integration("PostgreSQL scheduler persistence", () => {
       ),
     ).resolves.toEqual({ state: "delivery_conflict" });
 
+    await database
+      .update(runnerTaskDeliveries)
+      .set({
+        expiresAt: sql`${runnerTaskDeliveries.offeredAt} + INTERVAL '1 microsecond'`,
+      })
+      .where(eq(runnerTaskDeliveries.id, replacement.delivery.deliveryId));
+    await expect(
+      persistence.transaction(({ scheduler }) =>
+        scheduler.reconcileExpiredTaskDeliveries({ limit: 10 }),
+      ),
+    ).resolves.toEqual({ revoked: [] });
+
     const [storedDelivery] = await database
       .select({
         state: runnerTaskDeliveries.state,
@@ -484,13 +589,67 @@ integration("PostgreSQL scheduler persistence", () => {
         fence: runnerTaskDeliveries.fence,
       })
       .from(runnerTaskDeliveries)
-      .where(eq(runnerTaskDeliveries.id, winner.delivery.deliveryId));
+      .where(eq(runnerTaskDeliveries.id, replacement.delivery.deliveryId));
     const [message] = await database
       .select({ publishedAt: outboxMessages.publishedAt })
       .from(outboxMessages)
       .where(eq(outboxMessages.taskId, taskId));
     expect(storedDelivery).toEqual({ state: "claimed", attemptId, fence: 1 });
     expect(message).toEqual({ publishedAt: null });
+
+    const batchExperimentIds = [randomUUID(), randomUUID()];
+    const batchTaskIds = [randomUUID(), randomUUID()];
+    await database.insert(experiments).values(
+      batchExperimentIds.map((id, index) => ({
+        id,
+        runId: deliveryRunId,
+        sequence: index + 2,
+        hypothesis: "Expired offers are partitioned across reconcilers.",
+        action: "Revoke one bounded batch.",
+        estimatedDurationMs: 60_000,
+        estimatedCostMinor: 0,
+      })),
+    );
+    await persistence.transaction(async ({ scheduler }) => {
+      for (const [index, batchTaskId] of batchTaskIds.entries()) {
+        await scheduler.createTask(
+          deliveryTask(batchTaskId!, batchExperimentIds[index]!),
+        );
+      }
+    });
+    const batchOffers = await Promise.all(
+      [firstDeliveryRunner, secondDeliveryRunner].map((candidateRunnerId) =>
+        persistence.transaction(({ scheduler }) =>
+          scheduler.acquireTaskDelivery({
+            runnerId: candidateRunnerId,
+            offerDurationMs: 60_000,
+          }),
+        ),
+      ),
+    );
+    expect(batchOffers.every((offer) => offer.state === "acquired")).toBe(true);
+    const batchDeliveryIds = batchOffers.flatMap((offer) =>
+      offer.state === "acquired" ? [offer.delivery.deliveryId] : [],
+    );
+    await database
+      .update(runnerTaskDeliveries)
+      .set({
+        expiresAt: sql`${runnerTaskDeliveries.offeredAt} + INTERVAL '1 microsecond'`,
+      })
+      .where(inArray(runnerTaskDeliveries.id, batchDeliveryIds));
+    const batches = await Promise.all([
+      persistence.transaction(({ scheduler }) =>
+        scheduler.reconcileExpiredTaskDeliveries({ limit: 1 }),
+      ),
+      persistence.transaction(({ scheduler }) =>
+        scheduler.reconcileExpiredTaskDeliveries({ limit: 1 }),
+      ),
+    ]);
+    const revokedIds = batches.flatMap((batch) =>
+      batch.revoked.map((delivery) => delivery.deliveryId),
+    );
+    expect(revokedIds).toHaveLength(2);
+    expect(new Set(revokedIds)).toEqual(new Set(batchDeliveryIds));
   });
 
   it("rolls back both task and outbox when the transaction fails", async () => {

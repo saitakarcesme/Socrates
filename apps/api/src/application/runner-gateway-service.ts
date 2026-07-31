@@ -1,3 +1,4 @@
+import { maximumRunnerTaskOfferDurationMs } from "@socrates/database";
 import type {
   AcquireRunnerTaskDeliveryInput,
   ClaimRunnerTaskInput,
@@ -24,13 +25,33 @@ function runnerConflict(reason: string, message: string): never {
 }
 
 export class RunnerGatewayService {
-  constructor(private readonly persistence: RunnerGatewayPersistence) {}
+  readonly #offerDurationMs: number;
+
+  constructor(
+    private readonly persistence: RunnerGatewayPersistence,
+    options: { offerDurationMs?: number } = {},
+  ) {
+    const duration = options.offerDurationMs ?? 2 * 60 * 1_000;
+    if (
+      !Number.isSafeInteger(duration) ||
+      duration <= 0 ||
+      duration > maximumRunnerTaskOfferDurationMs
+    ) {
+      throw new RangeError(
+        `Runner offer duration must be between 1 and ${maximumRunnerTaskOfferDurationMs} ms.`,
+      );
+    }
+    this.#offerDurationMs = duration;
+  }
 
   async acquireTaskDelivery(
-    input: AcquireRunnerTaskDeliveryInput,
+    input: Pick<AcquireRunnerTaskDeliveryInput, "runnerId">,
   ): Promise<{ deliveryId: string; taskId: string } | null> {
     const result = await this.persistence.transaction(({ scheduler }) =>
-      scheduler.acquireTaskDelivery(input),
+      scheduler.acquireTaskDelivery({
+        ...input,
+        offerDurationMs: this.#offerDurationMs,
+      }),
     );
     if (result.state === "acquired") return result.delivery;
     if (result.state === "none" || result.state === "runner_at_capacity") {

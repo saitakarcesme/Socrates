@@ -23,6 +23,7 @@ import {
 import type { RunnerEventV2 } from "@socrates/contracts";
 import type { DatabaseTransaction } from "./database-types";
 import type { JsonValue } from "./json";
+import { maximumRunnerTaskOfferDurationMs } from "./ports";
 import type {
   AcquireRunnerTaskDeliveryInput,
   AcquireRunnerTaskDeliveryResult,
@@ -39,6 +40,8 @@ import type {
   IngestRunnerEventResult,
   ReconcileExpiredRunnerTasksInput,
   ReconcileExpiredRunnerTasksResult,
+  ReconcileExpiredTaskDeliveriesInput,
+  ReconcileExpiredTaskDeliveriesResult,
   RequestRunnerTaskCancellationInput,
   RequestRunnerTaskCancellationResult,
   RunnerRegistrationWrite,
@@ -72,6 +75,18 @@ function assertLeaseDuration(value: number): void {
   ) {
     throw new RangeError(
       `Lease duration must be between 1 and ${maximumLeaseDurationMs} ms.`,
+    );
+  }
+}
+
+function assertOfferDuration(value: number): void {
+  if (
+    !Number.isSafeInteger(value) ||
+    value <= 0 ||
+    value > maximumRunnerTaskOfferDurationMs
+  ) {
+    throw new RangeError(
+      `Offer duration must be between 1 and ${maximumRunnerTaskOfferDurationMs} ms.`,
     );
   }
 }
@@ -274,6 +289,7 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
   async acquireTaskDelivery(
     input: AcquireRunnerTaskDeliveryInput,
   ): Promise<AcquireRunnerTaskDeliveryResult> {
+    assertOfferDuration(input.offerDurationMs);
     const [runner] = await this.transaction
       .select({
         id: schema.runnerRegistrations.id,
@@ -299,6 +315,7 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
         and(
           eq(schema.runnerTaskDeliveries.runnerId, runner.id),
           eq(schema.runnerTaskDeliveries.state, "offered"),
+          sql`${schema.runnerTaskDeliveries.expiresAt} > CURRENT_TIMESTAMP`,
         ),
       )
       .orderBy(
@@ -368,6 +385,7 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
         workspaceId: runner.workspaceId,
         taskId: candidate.id,
         runnerId: runner.id,
+        expiresAt: sql`CURRENT_TIMESTAMP + (${input.offerDurationMs} * INTERVAL '1 millisecond')`,
       })
       .returning({
         deliveryId: schema.runnerTaskDeliveries.id,
@@ -380,6 +398,13 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
   async claimTaskDelivery(
     input: ClaimRunnerTaskDeliveryInput,
   ): Promise<ClaimRunnerTaskDeliveryResult> {
+    const [runner] = await this.transaction
+      .select({ id: schema.runnerRegistrations.id })
+      .from(schema.runnerRegistrations)
+      .where(eq(schema.runnerRegistrations.id, input.runnerId))
+      .for("update");
+    if (!runner) return { state: "delivery_not_found" };
+
     const [delivery] = await this.transaction
       .select({
         id: schema.runnerTaskDeliveries.id,
@@ -388,6 +413,7 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
         state: schema.runnerTaskDeliveries.state,
         attemptId: schema.runnerTaskDeliveries.attemptId,
         fence: schema.runnerTaskDeliveries.fence,
+        unexpired: sql<boolean>`${schema.runnerTaskDeliveries.expiresAt} > CURRENT_TIMESTAMP`,
       })
       .from(schema.runnerTaskDeliveries)
       .where(eq(schema.runnerTaskDeliveries.id, input.deliveryId))
@@ -396,6 +422,12 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
       return { state: "delivery_not_found" };
     }
     if (delivery.taskId !== input.taskId) {
+      return { state: "delivery_conflict" };
+    }
+    if (
+      delivery.state === "revoked" ||
+      (delivery.state === "offered" && !delivery.unexpired)
+    ) {
       return { state: "delivery_conflict" };
     }
     if (
@@ -430,6 +462,53 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
       .returning({ id: schema.runnerTaskDeliveries.id });
     if (!claimed) return { state: "delivery_conflict" };
     return result;
+  }
+
+  async reconcileExpiredTaskDeliveries(
+    input: ReconcileExpiredTaskDeliveriesInput,
+  ): Promise<ReconcileExpiredTaskDeliveriesResult> {
+    assertReconciliationLimit(input.limit);
+    const expired = await this.transaction
+      .select({
+        deliveryId: schema.runnerTaskDeliveries.id,
+        taskId: schema.runnerTaskDeliveries.taskId,
+        runnerId: schema.runnerTaskDeliveries.runnerId,
+      })
+      .from(schema.runnerTaskDeliveries)
+      .where(
+        and(
+          eq(schema.runnerTaskDeliveries.state, "offered"),
+          sql`${schema.runnerTaskDeliveries.expiresAt} <= CURRENT_TIMESTAMP`,
+        ),
+      )
+      .orderBy(
+        asc(schema.runnerTaskDeliveries.expiresAt),
+        asc(schema.runnerTaskDeliveries.id),
+      )
+      .limit(input.limit)
+      .for("update", { skipLocked: true });
+
+    const revoked: ReconcileExpiredTaskDeliveriesResult["revoked"][number][] =
+      [];
+    for (const delivery of expired) {
+      const [updated] = await this.transaction
+        .update(schema.runnerTaskDeliveries)
+        .set({
+          state: "revoked",
+          revokedAt: sql`CURRENT_TIMESTAMP`,
+          revocationReason: "expired",
+        })
+        .where(
+          and(
+            eq(schema.runnerTaskDeliveries.id, delivery.deliveryId),
+            eq(schema.runnerTaskDeliveries.state, "offered"),
+            sql`${schema.runnerTaskDeliveries.expiresAt} <= CURRENT_TIMESTAMP`,
+          ),
+        )
+        .returning({ id: schema.runnerTaskDeliveries.id });
+      if (updated) revoked.push({ ...delivery, reason: "expired" });
+    }
+    return { revoked: Object.freeze(revoked) };
   }
 
   async claimTask(input: ClaimRunnerTaskInput): Promise<ClaimRunnerTaskResult> {

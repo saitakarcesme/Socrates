@@ -304,7 +304,10 @@ export const runnerTaskDeliveries = pgTable(
     offeredAt: timestamp("offered_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revocationReason: text("revocation_reason"),
   },
   (table) => [
     uniqueIndex("runner_task_deliveries_one_active_per_task")
@@ -316,6 +319,9 @@ export const runnerTaskDeliveries = pgTable(
       table.offeredAt,
       table.id,
     ),
+    index("runner_task_deliveries_offered_expiry_id_idx")
+      .on(table.expiresAt, table.id)
+      .where(sql`${table.state} = 'offered'`),
     foreignKey({
       name: "runner_task_deliveries_task_workspace_fk",
       columns: [table.workspaceId, table.taskId],
@@ -338,15 +344,23 @@ export const runnerTaskDeliveries = pgTable(
     }),
     check(
       "runner_task_deliveries_state",
-      sql`${table.state} IN ('offered', 'claimed')`,
+      sql`${table.state} IN ('offered', 'claimed', 'revoked')`,
     ),
     check(
       "runner_task_deliveries_claim_identity_complete",
-      sql`(${table.state} = 'offered' AND ${table.attemptId} IS NULL AND ${table.fence} IS NULL AND ${table.claimedAt} IS NULL) OR (${table.state} = 'claimed' AND ${table.attemptId} IS NOT NULL AND ${table.fence} IS NOT NULL AND ${table.claimedAt} IS NOT NULL)`,
+      sql`(${table.state} = 'offered' AND ${table.attemptId} IS NULL AND ${table.fence} IS NULL AND ${table.claimedAt} IS NULL AND ${table.revokedAt} IS NULL AND ${table.revocationReason} IS NULL) OR (${table.state} = 'claimed' AND ${table.attemptId} IS NOT NULL AND ${table.fence} IS NOT NULL AND ${table.claimedAt} IS NOT NULL AND ${table.revokedAt} IS NULL AND ${table.revocationReason} IS NULL) OR (${table.state} = 'revoked' AND ${table.attemptId} IS NULL AND ${table.fence} IS NULL AND ${table.claimedAt} IS NULL AND ${table.revokedAt} IS NOT NULL AND ${table.revocationReason} = 'expired')`,
+    ),
+    check(
+      "runner_task_deliveries_expiry_after_offer",
+      sql`${table.expiresAt} > ${table.offeredAt}`,
     ),
     check(
       "runner_task_deliveries_claimed_after_offer",
       sql`${table.claimedAt} IS NULL OR ${table.claimedAt} >= ${table.offeredAt}`,
+    ),
+    check(
+      "runner_task_deliveries_revoked_after_offer",
+      sql`${table.revokedAt} IS NULL OR ${table.revokedAt} >= ${table.offeredAt}`,
     ),
   ],
 );

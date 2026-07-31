@@ -98,6 +98,13 @@ integration("PostgreSQL read query plans", () => {
       "runner_task_attempts_active_lease_id_idx",
     ],
     [
+      "expired task delivery offers",
+      `SELECT id, expires_at FROM runner_task_deliveries
+       WHERE state = 'offered' AND expires_at <= CURRENT_TIMESTAMP
+       ORDER BY expires_at, id LIMIT 100`,
+      "runner_task_deliveries_offered_expiry_id_idx",
+    ],
+    [
       "task runner evidence",
       `SELECT id, received_at FROM runner_task_events
        WHERE task_id = '${scopeId}'
