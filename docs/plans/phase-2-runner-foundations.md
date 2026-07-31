@@ -818,7 +818,7 @@ Chromium, and production builds.
 
 ### Slice 2.24 — indeterminate attempt reconciliation
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-061.
 
@@ -836,6 +836,11 @@ Detailed plan: `docs/plans/slice-2.24-indeterminate-reconciliation.md`.
 Exit: PostgreSQL race tests and local fault injection prove that a started
 attempt is never replayed and is skipped only after an irreversible server
 retirement has been durably recorded.
+
+Evidence: implementation commit `5497fd7`, isolated PostgreSQL fixture
+correction `5c28746`; GitHub Actions run `30665390494` passed exact
+reconciliation/heartbeat races, authenticated API and runner integrations,
+Linux native work-journal v5, Chromium, and production builds.
 
 ## Acceptance gates
 

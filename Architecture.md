@@ -2798,6 +2798,20 @@ leave the item indeterminate. This slice adds no polling loop, heartbeat,
 terminal-event invention, sandbox execution, garbage collection, or production
 runner enablement.
 
+Validation amendment, 2026-07-31: implementation commit `5497fd7` plus the
+isolated PostgreSQL fixture correction `5c28746` passed local formatting,
+TypeScript, ESLint, Phase 1/2 dependency-boundary audits, 316 runner-local
+tests, all workspace tests, and production builds. GitHub Actions run
+`30665390494` passed PostgreSQL exact-reconciliation, heartbeat-race, shared
+expiry, authenticated API, and runner integrations; the Linux native
+work-journal v5 probe; the Chromium product journey; and every production
+build. Tests proved that current reconciliation does not renew a lease, an
+expired exact attempt atomically retires while its racing heartbeat becomes
+stale, retirement is durably published across all six fault boundaries, and
+new acquisition waits for a later call. This admits ADR-061 and closes Slice
+2.24; polling, sandbox execution, invented terminal evidence, cleanup, and
+production runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

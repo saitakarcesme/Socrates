@@ -1,6 +1,6 @@
 # Slice 2.24 indeterminate attempt reconciliation
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -95,3 +95,12 @@ may skip retired work and acquire another delivery.
 5. Admission advances only after durable exact local retirement.
 6. No runtime result or terminal acknowledgement is invented.
 7. Polling, sandbox execution, cleanup, and runner enablement remain disabled.
+
+## Validation
+
+Implementation commit `5497fd7` and isolated PostgreSQL fixture correction
+`5c28746` passed local formatting, type, lint, dependency-boundary, workspace
+test, 316-test runner-local, and production-build gates. GitHub Actions run
+`30665390494` passed exact reconciliation and heartbeat races on PostgreSQL,
+the authenticated current-to-retired API flow, runner integration, Linux
+native work-journal v5 durability, Chromium, and all production builds.
