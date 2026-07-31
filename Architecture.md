@@ -2921,6 +2921,46 @@ This admits ADR-063 and closes Slice 2.26; attempt-session composition,
 execution, evidence persistence, and production runner enablement remain
 disabled.
 
+### ADR-064: The runtime executor cannot bypass the durable start barrier
+
+ADR-060 requires durable `execution-start.json` publication before the first
+sandbox process may be created, but the current `RuntimeSandboxExecutor` has no
+start-barrier dependency. Calling the journal from a future outer session
+before invoking the executor would be safe against duplicate execution, yet it
+would mark the attempt indeterminate even when request-envelope materialization
+failed and the sandbox backend was never reachable. Leaving the callback
+optional would preserve a production path that bypasses the invariant.
+
+Every runtime execution therefore requires one `RuntimeExecutionStartBarrier`
+capability. The executor validates and materializes the read-only runtime
+request first, checks cancellation, then awaits `cross()` as the final
+asynchronous operation before invoking `executeRuntime`. It performs no await,
+timer, event dispatch, or caller callback between a successful crossing and
+the backend method invocation. The backend still receives the bound signal, so
+cancellation racing or following the barrier prevents or stops owned process
+work while the conservative start record remains correct.
+
+The request envelope is released on every post-materialization path, including
+pre-barrier cancellation, barrier failure, synchronous backend failure, and
+normal completion. A failed or indeterminate barrier never invokes the
+backend. Once `cross()` resolves, any later failure is post-start even if the
+backend proves that no container became active; restart logic must continue to
+treat the attempt as indeterminate until ADR-061 retirement or acknowledged
+terminal completion.
+
+`DurableExecutionStartBarrier` binds one validated execution and delivery ID
+to `LocalWorkJournal.commitExecutionStart`. Its first `cross()` call owns one
+promise; concurrent and later calls share the exact result or failure without
+issuing another journal operation. It accepts only the journal's
+`execution_started` state and retains no mutable record. This capability
+contains no filesystem implementation of its own and cannot choose a different
+execution on replay.
+
+This slice changes the low-level executor contract and all deterministic/native
+fixtures so a barrier is always explicit. It does not admit work, start lease
+monitoring, map failures, append or send evidence, complete work, compose an
+attempt session, or enable the production runner entry point.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

@@ -895,6 +895,26 @@ runner-local tests passed locally with every repository quality gate. GitHub
 Actions run `30666995698` passed every integration suite, both Linux native
 durability probes, Chromium, and production builds.
 
+### Slice 2.27 — mandatory runtime start barrier
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-064.
+
+Detailed plan: `docs/plans/slice-2.27-runtime-start-barrier.md`.
+
+- require an explicit start-barrier capability for every runtime execution;
+- materialize the request and check cancellation before crossing it;
+- invoke the sandbox backend immediately after successful durable crossing;
+- release the request capability on all post-materialization paths;
+- bind delivery and execution identity in one replay-stable journal adapter;
+- keep admission, lease monitoring, events, completion, session composition,
+  and runner enablement out of scope.
+
+Exit: call-order, fault-injection, cancellation, cleanup, and replay tests prove
+that no sandbox invocation can occur before a durable exact execution-start
+record and no pre-barrier failure can become indeterminate unnecessarily.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
