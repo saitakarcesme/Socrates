@@ -949,6 +949,24 @@ acknowledged terminal batch and committed durable work completion. GitHub
 Actions run `30668714816` passed every integration suite, both Linux native
 durability probes, Chromium, and production builds.
 
+### Slice 2.29 — pre-start terminal evidence recovery
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-066.
+
+Detailed plan: `docs/plans/slice-2.29-pre-start-evidence-recovery.md`.
+
+- recover exact terminal evidence for claimed work before returning ready;
+- reuse the single ADR-065 bounded replay and completion path;
+- carry durable delivery identity in every ready admission result;
+- suppress execution and acquisition on recovery ambiguity;
+- keep execution, fresh event creation, polling, and runner enablement out of
+  scope.
+
+Exit: restart and ambiguity tests prove a claimed attempt with terminal
+evidence completes before it can be released for execution.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

@@ -3040,6 +3040,44 @@ journey, and all production builds. This admits ADR-065 and closes Slice 2.28;
 execution, fresh event creation, claimed pre-start evidence recovery, polling,
 and runner enablement remain disabled.
 
+### ADR-066: Claimed work recovers terminal evidence before becoming ready
+
+Terminal evidence can be valid before sandbox execution starts. Source
+resolution, image admission, request preparation, cancellation, or another
+controlled pre-start failure may produce a terminal batch while the durable
+work journal remains `claimed`. If admission returns that work as `ready`
+without inspecting its spool, a restart can execute an attempt that already
+has terminal evidence or strand an acknowledgement that the control plane has
+committed.
+
+`WorkAdmissionCoordinator` must therefore invoke the same
+`TerminalEvidenceRecoveryCoordinator` for both `claimed` and
+`execution_started` work. For `claimed` work the recovery probe occurs before
+the coordinator can return `ready`. A completed recovery returns the existing
+`completed` admission result and ends the call. Absent or exactly empty spool
+state returns `none` and permits the original ready path. Corruption,
+identity conflict, partial non-terminal evidence, transport uncertainty, and
+completion uncertainty fail closed and suppress execution and same-call
+acquisition.
+
+The `ready` result must carry the durable `deliveryId` in addition to the
+frozen execution. Event publication and work completion are delivery-scoped;
+the delivery identity cannot be reconstructed from a task or attempt ID. The
+coordinator copies it only from the admitted journal record and returns a
+frozen result. This is a local contract addition and does not alter the wire
+protocol.
+
+Recovery retains the state-dependent ordering: `claimed` work recovers before
+ready, while `execution_started` work recovers before exact lease retirement
+reconciliation. A successful recovery never acquires another delivery in the
+same call. No new recovery algorithm or second sender is introduced; ADR-065
+remains the single bounded replay path for both journal states.
+
+This slice adds no preparation, runtime execution, heartbeat ownership, fresh
+event append, failure mapping, polling loop, or runner enablement. It closes
+the final admission-side evidence gap before a terminal publication
+coordinator can be composed.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
