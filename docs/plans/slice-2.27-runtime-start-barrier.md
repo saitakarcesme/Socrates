@@ -1,6 +1,6 @@
 # Slice 2.27 mandatory runtime start barrier
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -75,3 +75,19 @@ first publication.
 6. No lifecycle evidence or completion is invented.
 7. Admission, session composition, polling, and runner enablement remain
    disabled.
+
+## Validation
+
+Cleanup-policy documentation commit `1aaf429` preceded implementation commit
+`2537dff`. Local formatting, TypeScript, ESLint, Phase 1/2 dependency-boundary
+audits, 379 runner-local tests, all workspace tests, production builds, and the
+low-severity dependency audit passed. Eight focused durable-barrier tests
+covered identity validation and freezing, concurrent and sequential replay,
+first-failure retention, and unexpected journal states. The 15-test executor
+suite covered exact call order, pre-barrier cancellation, barrier and backend
+failure, release on every materialized path, stable cleanup classification,
+and aggregate failure retention. The native runtime evidence schema v5 now
+requires exactly one barrier crossing for both success and cancellation
+fixtures. GitHub Actions run `30667861578` passed every PostgreSQL,
+authenticated API, and runner integration, both Linux native durability
+probes, Chromium, and all production builds.

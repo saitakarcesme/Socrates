@@ -897,7 +897,7 @@ durability probes, Chromium, and production builds.
 
 ### Slice 2.27 — mandatory runtime start barrier
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-064.
 
@@ -914,6 +914,12 @@ Detailed plan: `docs/plans/slice-2.27-runtime-start-barrier.md`.
 Exit: call-order, fault-injection, cancellation, cleanup, and replay tests prove
 that no sandbox invocation can occur before a durable exact execution-start
 record and no pre-barrier failure can become indeterminate unnecessarily.
+
+Evidence: cleanup-policy documentation commit `1aaf429` and implementation
+commit `2537dff`; eight barrier tests, the 15-test executor suite, and 379
+runner-local tests passed locally with every repository quality gate. GitHub
+Actions run `30667861578` passed every integration suite, both Linux native
+durability probes, Chromium, and production builds.
 
 ## Acceptance gates
 

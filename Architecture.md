@@ -2965,6 +2965,22 @@ fixtures so a barrier is always explicit. It does not admit work, start lease
 monitoring, map failures, append or send evidence, complete work, compose an
 attempt session, or enable the production runner entry point.
 
+Validation amendment, 2026-07-31: cleanup-policy documentation commit
+`1aaf429` preceded implementation commit `2537dff`. Local formatting,
+TypeScript, ESLint, Phase 1/2 dependency-boundary audits, 379 runner-local
+tests, all workspace tests, production builds, and the low-severity dependency
+audit passed. Eight durable-barrier tests proved exact frozen identity,
+pre-access validation, concurrent/sequential single publication, replayed
+uncertainty, and fail-closed unexpected states. The 15-test runtime executor
+suite proved materialize/barrier/backend/release order, cancellation on both
+pre-barrier sides, no backend call on barrier failure, synchronous invocation
+failure cleanup, stable release classification, and dual-cause aggregation.
+GitHub Actions run `30667861578` passed every PostgreSQL, authenticated API,
+and runner integration, both Linux native durability probes, the Chromium
+product journey, and all production builds. This admits ADR-064 and closes
+Slice 2.27; admission, session composition, evidence production, and runner
+enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
