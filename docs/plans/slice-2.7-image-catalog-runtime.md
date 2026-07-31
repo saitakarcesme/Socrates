@@ -1,10 +1,12 @@
 # Slice 2.7 admitted image catalog and task-runtime ABI plan
 
-Status: In progress
+Status: Complete
 
 Date: 2026-07-31
 
 Architecture: ADR-033, ADR-042, ADR-043, ADR-044
+
+Admitted by native reference-host run `30641068455` at commit `64ffe11`.
 
 ## Outcome
 
@@ -217,6 +219,10 @@ Slice 2.7 is complete only when:
 6. source copying and command execution remain inside bounded sandbox paths;
 7. unit, property, dependency, full workspace, and native gates pass;
 8. immutable evidence and an ADR validation amendment admit the implementation.
+
+All exit criteria passed on the Ubuntu 24.04 rootless reference host. Immutable
+runtime evidence is committed at
+`services/runner-local/evidence/native/30641068455-runtime.json`.
 
 ## References
 

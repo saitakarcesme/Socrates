@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 4,
+  "recordedAt": "2026-07-31T15:02:31.731Z",
+  "image": {
+    "reference": "sha256:0cbddca2a8e774395ddd301ae708cc1cbe964181f99c7a5696fa3c7af71937c4",
+    "manifestDigest": "sha256:0cbddca2a8e774395ddd301ae708cc1cbe964181f99c7a5696fa3c7af71937c4",
+    "configurationDigest": "sha256:a1c19b791cce2fadf2ac467fba6376c71b1f7c18d4cb273eb2e3be74dec2becd",
+    "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+    "architecture": "amd64",
+    "runtimeBuildDigest": "sha256:14506cf0bb7ea74f3ecb259ae04203293a99bdbc97cdb2d3a0f42b7184614f76",
+    "runtimeBundleDigest": "sha256:ab1cc9713e581a478fba324e46539ae994e78909f38a3c1a832719a9999363c4"
+  },
+  "gates": {
+    "pipelineIssuedCatalogIdentity": true,
+    "localPullFreeInspection": true,
+    "opaqueInspectedCapability": true,
+    "guardedLiveHandshake": true,
+    "opaqueAdmittedCapability": true,
+    "canonicalBoundedRequestArtifact": true,
+    "exactRuntimeEntrypoint": true,
+    "sourceCopiedToWorkspace": true,
+    "recursiveReadOnlySourceBind": true,
+    "workspaceWrite": true,
+    "framedMeasurement": true,
+    "exactFenceCancellation": true,
+    "sourceReleased": true,
+    "cleanup": true,
+    "scopedRecoveryBeforeRun": true,
+    "sourceRecoveryBeforeRun": true
+  },
+  "successfulExecution": {
+    "status": "succeeded",
+    "durationMs": 535.31,
+    "frameCount": 7
+  },
+  "cancellation": {
+    "accepted": true,
+    "error": "RuntimeSandboxError"
+  }
+}

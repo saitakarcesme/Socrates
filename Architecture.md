@@ -1644,6 +1644,18 @@ frames into runner events, persist a spool, acknowledge events, or connect a
 runner transport. `LocalRunnerNotEnabledError` remains correct until those
 Slice 2.8 and 2.9 responsibilities land.
 
+Validation amendment, 2026-07-31: GitHub Actions reference-host run
+`30641068455` at commit `64ffe11` passed the rootless containerd readiness,
+guarded production backend, admitted image catalog and live handshake, exact
+read-only request artifact, fixed runtime entrypoint, source-copy and
+read-only-source proof, workspace write, framed measurement, exact-fence
+cancellation, release, recovery, and zero-residual-container gates. The
+successful execution completed in 535.31 ms with seven valid frames. Immutable
+evidence is committed at
+`services/runner-local/evidence/native/30641068455-runtime.json`. This amendment
+admits ADR-044 and closes Slice 2.7; lifecycle event translation remains Slice
+2.8.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
