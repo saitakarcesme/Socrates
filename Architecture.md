@@ -2029,6 +2029,14 @@ delivery IDs fail closed. Re-admitting the same delivery/task returns the
 original attempt ID. Reusing a delivery ID for another task is an identity
 conflict and never overwrites the manifest.
 
+An item directory created immediately before a process crash may contain no
+record. That exact empty hashed-directory state is recoverable: startup counts
+it toward capacity but exposes no diagnostic item, and a later admission for
+the matching delivery may publish its first manifest. Any claim, unknown
+entry, invalid temporary name, or malformed manifest in that directory remains
+corruption. This distinguishes a proven pre-publication crash residue from an
+identity or evidence rewrite without inventing a cleanup policy.
+
 `ExactClaimReconciler` reads the durable manifest and invokes the Slice 2.10
 client with that exact task and attempt identity. It makes one HTTP attempt per
 call. A valid response is checked against the manifest and committed before it

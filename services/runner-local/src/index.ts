@@ -26,4 +26,4 @@ export * from "./request/index";
 export * from "./lifecycle/index";
 export * from "./spool/index";
 export * from "./transport/index";
-export * from "./durability/index";
+export * from "./work-journal/index";
