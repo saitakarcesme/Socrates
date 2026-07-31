@@ -171,6 +171,7 @@ jobs:
           runtime_bundle_digest="$(jq -er '.bundleDigest' "$manifest")"
           docker build \
             --file services/task-runtime/image/Containerfile \
+            --provenance=false \
             --build-arg "RUNTIME_BUILD_DIGEST=${runtime_build_digest}" \
             --build-arg "RUNTIME_BUNDLE_DIGEST=${runtime_bundle_digest}" \
             --tag socrates-task-runtime:native \
@@ -178,9 +179,8 @@ jobs:
           docker save --output /tmp/socrates-task-runtime.tar \
             socrates-task-runtime:native
           nerdctl load --input /tmp/socrates-task-runtime.tar
-          source_ref="$(nerdctl images --format '{{.Repository}}:{{.Tag}}' |
-            grep -E '(^|/)socrates-task-runtime:native$' | head -n 1)"
-          test -n "$source_ref"
+          source_ref="docker.io/library/socrates-task-runtime:native"
+          nerdctl image inspect --platform linux/amd64 "$source_ref" >/dev/null
           native="$(nerdctl image inspect \
             --mode native \
             --platform linux/amd64 \
