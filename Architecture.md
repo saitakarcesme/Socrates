@@ -1297,6 +1297,84 @@ the native OCI spec, and fail closed before accepting work. No Docker or Podman
 fallback is permitted. The immutable decision evidence lives under
 `spikes/oci-engine/evidence/native/2026-07-31T03-45-02-824Z-8be04f01`.
 
+### ADR-042: The production OCI boundary is capability-gated and two-layered
+
+Slice 2.5 introduces a new `NerdctlSandboxBackend` in
+`services/runner-local`; it does not promote or import the spike harness. The
+backend owns typed, argument-array-only nerdctl invocations, startup
+attestation, container identity, native OCI-spec verification, bounded
+termination, and label-scoped cleanup. A higher `Runner` lifecycle adapter
+may translate a `RunnerExecutionV1` into events only after the source and image
+inputs described below exist. Until then, the package continues to export no
+enabled production `Runner`.
+
+Readiness is an explicit fail-closed state, not a best-effort check performed
+after accepting work. Trusted host provisioning installs nerdctl v2.3.x,
+starts rootless containerd, and loads the reviewed RootlessKit and
+`socrates-sandbox` AppArmor policies. The unprivileged runner verifies Linux,
+its non-root identity, rootless containerd, cgroup v2 delegation for CPU,
+memory, and PIDs, seccomp, AppArmor, the expected nerdctl major/minor family,
+and native OCI inspection support. It cannot install software, start a
+rootful daemon, load policy, pull an image, or fall back to Docker or Podman.
+A failed or stale attestation makes the backend unavailable and every
+execution request fails before container creation.
+
+Every sandbox has a runner-derived opaque execution key and exact ownership
+labels containing runner, task, attempt, and fence identity digests. Container
+names never contain raw protocol identifiers. Creation uses the digest-pinned
+image with pulls disabled, an empty inherited environment plus the fixed
+`SOCRATES_SANDBOX=1` marker, disabled networking, read-only rootfs, non-root
+UID/GID, private namespaces, no devices, all capabilities dropped,
+no-new-privileges, the preloaded AppArmor profile, bounded tmpfs, memory, CPU,
+PIDs, and no daemon log storage. Task budgets are capped by trusted runner
+maximums; unsupported or unrepresentable limits fail before creation rather
+than being rounded into weaker policy.
+
+Sent arguments are intent, not enforcement evidence. The backend creates the
+container without starting user work, reads `nerdctl inspect --mode native`,
+and verifies the runtime-facing OCI spec against the exact requested profile.
+Only then may the sandbox start. Inspection failure, timeout, cancellation,
+or any mismatch triggers idempotent removal and produces no successful
+workspace event. Network allowlists, accelerators, credentials, arbitrary
+bind mounts, host namespace sharing, and privileged execution remain
+unsupported capabilities in this slice.
+
+An immutable snapshot digest is not a filesystem capability. A future
+`SourceSnapshotMaterializer` must verify content digest and size, reject
+links, devices, absolute paths, traversal, duplicate entries, and extraction
+outside a runner-owned attempt directory, and return an opaque
+attempt-scoped capability. Only the backend may resolve that capability into
+the single read-only source bind allowed by ADR-041. Protocol fields and
+caller strings are never joined to host paths.
+
+Likewise, an image digest is identity but not admission. A future
+`SandboxImageCatalog` must return an opaque capability proving that the
+already-present digest is approved for the task architecture and implements
+the versioned Socrates task-runtime ABI. That in-image runtime prepares the
+bounded `/workspace` tmpfs from the read-only source, executes every declared
+command with `shell: false`, frames untrusted stdout and stderr into bounded
+data records, and emits one measurement result. The outer adapter remains
+authoritative for time, resource, cancellation, framing, event identity, and
+cleanup. Image metadata or output cannot self-authorize an image.
+
+Cancellation addresses only the exact active attempt and fence. The backend
+records its owned container before start, requests a graceful stop for at most
+the accepted grace period, then hard-kills and removes it. A newer fence can
+never be targeted by an older cancellation. Startup recovery enumerates only
+containers carrying both the deployment ownership label and this runner's
+identity label, verifies their full label set, and removes abandoned objects;
+it never performs an unscoped engine prune.
+
+The first native end-to-end test exercises readiness, create-before-start
+native inspection, bounded execution, forced cancellation, and orphan cleanup
+on the same provisioned Ubuntu host class as ADR-041. Unit tests use an
+injected process boundary and assert exact argv, parsing, timeout, and cleanup
+semantics without requiring Linux. The native test is explicit and gated; it
+does not make ordinary workspace tests depend on an installed container
+engine. An authenticated runner transport, lease polling, heartbeat loop,
+durable event spool, source materializer, image catalog, task-runtime ABI,
+artifact upload, and autonomous research loop remain later slices.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
