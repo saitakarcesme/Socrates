@@ -1,6 +1,6 @@
 # Slice 2.11 durable work journal plan
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -186,3 +186,23 @@ task payloads, and filesystem metadata.
 9. `LocalRunnerNotEnabledError` remains the production entry-point behavior.
 10. Full repository and native Linux CI gates pass before the slice becomes
     Complete.
+
+## Validation
+
+Completed on 2026-07-31.
+
+- implementation commit `06612fa` added the strict delivery contract, private
+  journal, immutable manifest/claim codecs, exact claim reconciler, and native
+  Linux evidence probe;
+- runner-local passed 178 local tests, including 19 journal tests and twelve
+  manifest/claim publication fault boundaries; all workspace formatting,
+  typecheck, lint, tests, Phase 1/2 audits, production builds, and the
+  low-severity dependency audit passed;
+- GitHub Actions run `30648879704` passed the real PostgreSQL suites, API and
+  runner integrations, native spool regression, native journal validation,
+  Chromium product journey, and production builds;
+- native artifacts `runner-work-journal-native-evidence` and
+  `runner-spool-native-evidence` were uploaded by the successful run;
+- delivery discovery, source acknowledgement, timers, retries, heartbeat
+  coordination, OCI execution, garbage collection, and production runner
+  enablement remain absent.

@@ -2064,6 +2064,19 @@ cleanup; age alone never deletes unresolved work.
 Slice 2.11. The slice proves exact restart reconciliation but does not start an
 executable runner.
 
+Validation amendment, 2026-07-31: implementation commit `06612fa` passed local
+formatting, typecheck, lint, 178 runner-local tests, all workspace tests, Phase
+1/2 boundary audits, production builds, and the low-severity dependency audit.
+GitHub Actions run `30648879704` passed real PostgreSQL integration, the native
+spool regression, the new native work-journal permission/restart probe, the
+Chromium product journey, and production builds. The run uploaded separate
+`runner-spool-native-evidence` and `runner-work-journal-native-evidence`
+artifacts. Fault injection covers all six immutable publication boundaries for
+both manifests and claims; restart exposes an empty recoverable item, one
+complete manifest, or one complete claim and never a replacement durable
+attempt. This evidence admits ADR-048 and closes Slice 2.11 while production
+execution remains disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

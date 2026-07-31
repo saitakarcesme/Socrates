@@ -503,7 +503,7 @@ builds. `LocalRunnerNotEnabledError` remains the production entry point.
 
 ### Slice 2.11 — durable work journal
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-048.
 
@@ -520,6 +520,11 @@ Detailed plan: `docs/plans/slice-2.11-durable-work-journal.md`.
 Exit: injected crashes and restart tests prove that delivery creates at most
 one visible attempt identity and a claim response is never handed off before
 its immutable execution snapshot is durable.
+
+Evidence: implementation commit `06612fa`; GitHub Actions run `30648879704`
+passed native journal/spool durability, real PostgreSQL integration, browser,
+and build gates and uploaded both native evidence artifacts. Runner-local
+passed 178 local tests, including 19 work-journal tests.
 
 ## Acceptance gates
 
