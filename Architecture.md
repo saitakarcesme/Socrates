@@ -2486,6 +2486,18 @@ later one-attempt coordinator may consume only this validated plan and the
 opaque capabilities from the existing materializers. Production execution
 remains disabled.
 
+Validation amendment, 2026-07-31: implementation commit `0c3a925` passed
+local formatting, TypeScript, ESLint, 232 runner-local tests, all workspace
+tests, Phase 1/2 dependency-boundary audits, and production builds. GitHub
+Actions run `30657580224` passed every PostgreSQL, authenticated API, and
+runner integration, both Linux native durability probes, the Chromium product
+journey, and all builds. Projection tests proved exact frozen-field mapping,
+aggregate writable equality, checked overflow/underflow, unsupported-network
+rejection, deep immutability, and property-tested downward CPU quantization.
+This admits ADR-055 and closes Slice 2.18; materialization coordination,
+execution, supervision timing, event generation, and production enablement
+remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

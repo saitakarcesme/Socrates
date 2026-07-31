@@ -1,6 +1,6 @@
 # Slice 2.18 frozen execution plan projection
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -77,3 +77,11 @@ so the OCI CPU value is a finite exact decimal. There are no implicit defaults.
 6. Projection is deterministic, immutable, and side-effect free.
 7. No materialization, execution, event, or production enablement lands.
 8. Full repository, native durability, browser, build, and CI gates pass.
+
+## Evidence
+
+Implementation commit `0c3a925`; GitHub Actions run `30657580224` passed 232
+runner-local tests, all PostgreSQL/API/runner integrations, native spool and
+journal durability, the Chromium product journey, and production builds.
+Local format, type, lint, boundary audit, workspace test, property-test, and
+build gates also passed.

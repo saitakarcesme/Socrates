@@ -669,7 +669,7 @@ durability probes, Chromium, and production builds.
 
 ### Slice 2.18 — frozen execution plan projection
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-055.
 
@@ -686,6 +686,10 @@ Detailed plan: `docs/plans/slice-2.18-execution-plan-projection.md`.
 Exit: pure adversarial tests prove every projected identity, command, metric,
 and budget originates from the frozen execution and no hard limit is weakened
 by derivation or rounding.
+
+Evidence: implementation commit `0c3a925`; GitHub Actions run `30657580224`
+passed 232 runner-local tests, all PostgreSQL/API/runner integrations, native
+durability probes, Chromium, and production builds.
 
 ## Acceptance gates
 
