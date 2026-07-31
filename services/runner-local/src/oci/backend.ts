@@ -155,7 +155,11 @@ function inspectOwnership(
   ) {
     throw new SandboxBackendError(
       "image_mismatch",
-      "Container image does not match the admitted digest.",
+      `Container image does not match the admitted identity: ${JSON.stringify({
+        expectedManifest: image.digest,
+        expectedConfiguration: image.configurationDigest,
+        observed: observedImages.map((value) => value.slice(0, 256)),
+      })}`,
     );
   }
 }
