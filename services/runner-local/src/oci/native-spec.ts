@@ -113,7 +113,7 @@ export function verifyNativeSpec(
   validateSandboxProfile(profile);
   const failures: string[] = [];
   const process = object(spec["process"]);
-  const capabilities = object(process?.["capabilities"]);
+  const capabilities = object(caseInsensitiveValue(process, "capabilities"));
   const capabilitySets = [
     "bounding",
     "effective",

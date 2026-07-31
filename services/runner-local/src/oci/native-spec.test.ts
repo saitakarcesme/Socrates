@@ -21,7 +21,8 @@ describe("native OCI spec verification", () => {
     const parsed = parseNativeSpec(fixtureNativeInspection());
     const process = parsed["process"] as Record<string, unknown>;
     const capabilities = process["capabilities"] as Record<string, unknown>;
-    process["capabilities"] = Object.fromEntries(
+    delete process["capabilities"];
+    process["Capabilities"] = Object.fromEntries(
       Object.entries(capabilities).map(([name, value]) => [
         `${name[0]?.toUpperCase()}${name.slice(1)}`,
         value,
