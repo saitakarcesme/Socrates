@@ -59,7 +59,9 @@ export class WorkAdmissionCoordinator {
   async prepareNext(signal?: AbortSignal): Promise<WorkAdmissionResult> {
     return this.#serialize(async () => {
       const local = ordered(await this.#journal.list());
-      const actionable = local.find((work) => work.state !== "rejected");
+      const actionable = local.find(
+        (work) => work.state === "pending_claim" || work.state === "claimed",
+      );
       if (actionable) return this.#prepare(actionable, true, signal);
 
       const delivery = await this.#client.acquireTaskDelivery(signal);

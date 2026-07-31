@@ -93,17 +93,39 @@ export const workRejectionSchema = workRejectionCoreSchema
   .strict();
 export type WorkRejection = z.infer<typeof workRejectionSchema>;
 
+export const workCompletionCoreSchema = z
+  .object({
+    version: z.literal("1"),
+    deliveryKey: keySchema,
+    executionDigest: digestSchema,
+    attemptKey: keySchema,
+    acknowledgedSequence: positiveSafeIntegerSchema,
+    committedAt: z.iso.datetime(),
+  })
+  .strict();
+export type WorkCompletionCore = z.infer<typeof workCompletionCoreSchema>;
+
+export const workCompletionSchema = workCompletionCoreSchema
+  .safeExtend({ checksum: digestSchema })
+  .strict();
+export type WorkCompletion = z.infer<typeof workCompletionSchema>;
+
 export type WorkJournalState = Readonly<{
   deliveryId: string;
   taskId: string;
   attemptId: string;
-  state: "pending_claim" | "claimed" | "rejected";
+  state: "pending_claim" | "claimed" | "completed" | "rejected";
   admittedAt: string;
   claimedAt?: string;
   rejectedAt?: string;
   rejection?: WorkRejectionCore["response"] & {
     reason: WorkRejectionCore["reason"];
   };
+  completedAt?: string;
+  completion?: Readonly<{
+    attemptKey: string;
+    acknowledgedSequence: number;
+  }>;
 }>;
 
 export type WorkJournalErrorCode =

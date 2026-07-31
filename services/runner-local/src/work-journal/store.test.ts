@@ -343,4 +343,82 @@ describe("LocalWorkJournal", () => {
     expect(await restarted.reconcile(delivery)).toEqual(execution);
     expect(noNetwork).not.toHaveBeenCalled();
   });
+
+  it.each([
+    "before_temp_open",
+    "after_temp_write",
+    "after_temp_sync",
+    "after_immutable_publish",
+    "after_temp_unlink",
+    "after_directory_sync",
+  ] satisfies WorkJournalFaultPoint[])(
+    "recovers completion publication after the %s fault boundary",
+    async (faultPoint) => {
+      const rootPath = root();
+      const initial = await open(rootPath);
+      await initial.admit(delivery);
+      await initial.commitClaim(delivery.deliveryId, execution);
+      let injected = false;
+      const faulting = await LocalWorkJournal.open({
+        rootPath,
+        limits,
+        identitySource: identities(),
+        directorySync: { sync: async () => undefined },
+        injectFault: (point) => {
+          if (!injected && point === faultPoint) {
+            injected = true;
+            throw new Error(`fault:${point}`);
+          }
+        },
+      });
+      const evidence = {
+        attemptKey: "a".repeat(64),
+        acknowledgedSequence: 3,
+      };
+      await expect(
+        faulting.commitCompletion(delivery.deliveryId, execution, evidence),
+      ).rejects.toThrow(`fault:${faultPoint}`);
+      const restarted = await open(rootPath);
+      const state = await restarted.inspect(delivery.deliveryId);
+      if (state?.state === "completed") {
+        expect(state.completion).toEqual(evidence);
+      } else {
+        await expect(
+          restarted.commitCompletion(delivery.deliveryId, execution, evidence),
+        ).resolves.toMatchObject({ state: "completed" });
+      }
+    },
+  );
+
+  it("requires the exact durable claim and completion evidence", async () => {
+    const pending = await open(root());
+    await pending.admit(delivery);
+    await expect(
+      pending.commitCompletion(delivery.deliveryId, execution, {
+        attemptKey: "a".repeat(64),
+        acknowledgedSequence: 3,
+      }),
+    ).rejects.toMatchObject({ code: "identity_conflict" });
+
+    const completed = await open(root());
+    await completed.admit(delivery);
+    await completed.commitClaim(delivery.deliveryId, execution);
+    await completed.commitCompletion(delivery.deliveryId, execution, {
+      attemptKey: "a".repeat(64),
+      acknowledgedSequence: 3,
+    });
+    await expect(
+      completed.commitCompletion(delivery.deliveryId, execution, {
+        attemptKey: "b".repeat(64),
+        acknowledgedSequence: 3,
+      }),
+    ).rejects.toMatchObject({ code: "identity_conflict" });
+    await expect(
+      completed.commitRejection(delivery.deliveryId, {
+        status: 409,
+        apiCode: "resource_conflict",
+        requestId: "request-after-completion",
+      }),
+    ).rejects.toMatchObject({ code: "identity_conflict" });
+  });
 });

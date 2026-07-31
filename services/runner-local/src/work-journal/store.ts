@@ -10,9 +10,11 @@ import { canonicalJson } from "@socrates/runtime-protocol";
 
 import {
   createWorkClaim,
+  createWorkCompletion,
   createWorkManifest,
   createWorkRejection,
   decodeWorkClaim,
+  decodeWorkCompletion,
   decodeWorkManifest,
   decodeWorkRejection,
   deliveryKeyFor,
@@ -22,9 +24,11 @@ import {
 } from "./codec";
 import {
   workJournalLimitsSchema,
+  workCompletionCoreSchema,
   workRejectionCoreSchema,
   WorkJournalError,
   type WorkClaim,
+  type WorkCompletion,
   type WorkJournalLimits,
   type WorkJournalState,
   type WorkManifest,
@@ -57,6 +61,7 @@ export const systemWorkJournalIdentitySource: WorkJournalIdentitySource =
 type LoadedWork = Readonly<{
   manifest: WorkManifest;
   claim: WorkClaim | null;
+  completion: WorkCompletion | null;
   rejection: WorkRejection | null;
 }>;
 
@@ -123,7 +128,8 @@ export class LocalWorkJournal {
       if (!existing) {
         if (
           (await this.#filesystem.readClaim(key)) ||
-          (await this.#filesystem.readRejection(key))
+          (await this.#filesystem.readRejection(key)) ||
+          (await this.#filesystem.readCompletion(key))
         ) {
           throw new WorkJournalError(
             "corrupt",
@@ -171,7 +177,8 @@ export class LocalWorkJournal {
         if (!(await this.#filesystem.readManifest(key))) {
           if (
             (await this.#filesystem.readClaim(key)) ||
-            (await this.#filesystem.readRejection(key))
+            (await this.#filesystem.readRejection(key)) ||
+            (await this.#filesystem.readCompletion(key))
           ) {
             throw new WorkJournalError(
               "corrupt",
@@ -292,6 +299,74 @@ export class LocalWorkJournal {
     });
   }
 
+  async commitCompletion(
+    deliveryId: string,
+    executionInput: RunnerExecutionV1,
+    evidence: { attemptKey: string; acknowledgedSequence: number },
+  ): Promise<WorkJournalState> {
+    const execution = runnerExecutionV1Schema.parse(executionInput);
+    const attemptKey = workCompletionCoreSchema.shape.attemptKey.parse(
+      evidence.attemptKey,
+    );
+    const acknowledgedSequence =
+      workCompletionCoreSchema.shape.acknowledgedSequence.parse(
+        evidence.acknowledgedSequence,
+      );
+    return this.#serialize(async () => {
+      const loaded = await this.#requireByDeliveryId(deliveryId);
+      if (!loaded.claim) {
+        throw new WorkJournalError(
+          "identity_conflict",
+          "Work cannot complete without a durable claim.",
+        );
+      }
+      if (loaded.rejection) {
+        throw new WorkJournalError(
+          "identity_conflict",
+          "Rejected work cannot become completed.",
+        );
+      }
+      const executionDigest = executionDigestFor(execution);
+      if (loaded.claim.executionDigest !== executionDigest) {
+        throw new WorkJournalError(
+          "identity_conflict",
+          "Completion execution does not match the durable claim.",
+        );
+      }
+      if (loaded.completion) {
+        if (
+          loaded.completion.executionDigest !== executionDigest ||
+          loaded.completion.attemptKey !== attemptKey ||
+          loaded.completion.acknowledgedSequence !== acknowledgedSequence
+        ) {
+          throw new WorkJournalError(
+            "identity_conflict",
+            "Different completion evidence conflicts with this delivery.",
+          );
+        }
+        return this.#state(loaded);
+      }
+      const completion = createWorkCompletion({
+        deliveryKey: loaded.manifest.deliveryKey,
+        execution,
+        attemptKey,
+        acknowledgedSequence,
+        committedAt: this.#instant(),
+      });
+      const bytes = encodeWorkRecord(completion);
+      await this.#checkCapacity(
+        bytes.byteLength,
+        this.#limits.maximumClaimBytes,
+        "completion",
+      );
+      await this.#filesystem.publishCompletion(
+        loaded.manifest.deliveryKey,
+        bytes,
+      );
+      return this.#state(await this.#load(loaded.manifest.deliveryKey));
+    });
+  }
+
   async #loadByDeliveryId(deliveryId: string): Promise<LoadedWork | null> {
     const parsed =
       runnerTaskDeliveryV1Schema.shape.deliveryId.parse(deliveryId);
@@ -329,7 +404,8 @@ export class LocalWorkJournal {
     if (!manifestBytes) {
       if (
         (await this.#filesystem.readClaim(key)) ||
-        (await this.#filesystem.readRejection(key))
+        (await this.#filesystem.readRejection(key)) ||
+        (await this.#filesystem.readCompletion(key))
       )
         throw new WorkJournalError(
           "corrupt",
@@ -359,10 +435,19 @@ export class LocalWorkJournal {
     const rejection = rejectionBytes
       ? decodeWorkRejection(rejectionBytes)
       : null;
+    const completionBytes = await this.#filesystem.readCompletion(key);
+    const completion = completionBytes
+      ? decodeWorkCompletion(completionBytes)
+      : null;
     if (claim && rejection)
       throw new WorkJournalError(
         "corrupt",
         "A work item cannot contain both claim and rejection records.",
+      );
+    if (completion && (!claim || rejection))
+      throw new WorkJournalError(
+        "corrupt",
+        "Work completion requires a claim and forbids rejection.",
       );
     if (
       claim &&
@@ -379,7 +464,16 @@ export class LocalWorkJournal {
         "identity_conflict",
         "Work rejection identity does not match its manifest.",
       );
-    return Object.freeze({ manifest, claim, rejection });
+    if (
+      completion &&
+      (completion.deliveryKey !== key ||
+        completion.executionDigest !== claim?.executionDigest)
+    )
+      throw new WorkJournalError(
+        "identity_conflict",
+        "Work completion identity does not match its claim.",
+      );
+    return Object.freeze({ manifest, claim, completion, rejection });
   }
 
   #requireDelivery(
@@ -402,11 +496,13 @@ export class LocalWorkJournal {
       deliveryId: loaded.manifest.identity.deliveryId,
       taskId: loaded.manifest.identity.taskId,
       attemptId: loaded.manifest.identity.attemptId,
-      state: loaded.claim
-        ? "claimed"
-        : loaded.rejection
-          ? "rejected"
-          : "pending_claim",
+      state: loaded.completion
+        ? "completed"
+        : loaded.claim
+          ? "claimed"
+          : loaded.rejection
+            ? "rejected"
+            : "pending_claim",
       admittedAt: loaded.manifest.admittedAt,
       ...(loaded.claim ? { claimedAt: loaded.claim.committedAt } : {}),
       ...(loaded.rejection
@@ -415,6 +511,15 @@ export class LocalWorkJournal {
             rejection: {
               reason: loaded.rejection.reason,
               ...loaded.rejection.response,
+            },
+          }
+        : {}),
+      ...(loaded.completion
+        ? {
+            completedAt: loaded.completion.committedAt,
+            completion: {
+              attemptKey: loaded.completion.attemptKey,
+              acknowledgedSequence: loaded.completion.acknowledgedSequence,
             },
           }
         : {}),
@@ -459,7 +564,8 @@ export class LocalWorkJournal {
       if (!(await this.#filesystem.readManifest(key))) {
         if (
           (await this.#filesystem.readClaim(key)) ||
-          (await this.#filesystem.readRejection(key))
+          (await this.#filesystem.readRejection(key)) ||
+          (await this.#filesystem.readCompletion(key))
         ) {
           throw new WorkJournalError(
             "corrupt",

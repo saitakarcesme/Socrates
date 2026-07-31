@@ -121,6 +121,13 @@ export class WorkJournalFilesystem {
     );
   }
 
+  readCompletion(key: string): Promise<Uint8Array | null> {
+    return this.#durability.readOptional(
+      join(this.#itemPath(key), "completion.json"),
+      "Work completion",
+    );
+  }
+
   publishManifest(key: string, bytes: Uint8Array): Promise<void> {
     return this.#durability.publishImmutable(
       this.#itemPath(key),
@@ -148,6 +155,15 @@ export class WorkJournalFilesystem {
     );
   }
 
+  publishCompletion(key: string, bytes: Uint8Array): Promise<void> {
+    return this.#durability.publishImmutable(
+      this.#itemPath(key),
+      "completion.json",
+      bytes,
+      "work completion",
+    );
+  }
+
   totalBytes(): Promise<number> {
     return this.#durability.totalBytes();
   }
@@ -155,9 +171,12 @@ export class WorkJournalFilesystem {
   async #validateEntries(directory: string): Promise<void> {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       if (
-        (["manifest.json", "claim.json", "rejection.json"].includes(
-          entry.name,
-        ) ||
+        ([
+          "manifest.json",
+          "claim.json",
+          "rejection.json",
+          "completion.json",
+        ].includes(entry.name) ||
           temporaryNamePattern.test(entry.name)) &&
         entry.isFile() &&
         !entry.isSymbolicLink()

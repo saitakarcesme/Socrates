@@ -11,6 +11,8 @@ import { canonicalJson } from "@socrates/runtime-protocol";
 import {
   workClaimCoreSchema,
   workClaimSchema,
+  workCompletionCoreSchema,
+  workCompletionSchema,
   workManifestCoreSchema,
   workManifestSchema,
   workRejectionCoreSchema,
@@ -18,6 +20,8 @@ import {
   WorkJournalError,
   type WorkClaim,
   type WorkClaimCore,
+  type WorkCompletion,
+  type WorkCompletionCore,
   type WorkManifest,
   type WorkManifestCore,
   type WorkRejection,
@@ -157,6 +161,42 @@ export function decodeWorkClaim(bytes: Uint8Array): WorkClaim {
     );
   }
   return claim;
+}
+
+export function createWorkCompletion(input: {
+  deliveryKey: string;
+  execution: RunnerExecutionV1;
+  attemptKey: string;
+  acknowledgedSequence: number;
+  committedAt: string;
+}): WorkCompletion {
+  const core = workCompletionCoreSchema.parse({
+    version: "1",
+    deliveryKey: input.deliveryKey,
+    executionDigest: executionDigestFor(input.execution),
+    attemptKey: input.attemptKey,
+    acknowledgedSequence: input.acknowledgedSequence,
+    committedAt: input.committedAt,
+  });
+  return freezeDeep(
+    workCompletionSchema.parse({ ...core, checksum: checksum(core) }),
+  );
+}
+
+export function decodeWorkCompletion(bytes: Uint8Array): WorkCompletion {
+  const completion = decodeCanonical(
+    bytes,
+    (value) => workCompletionSchema.parse(value),
+    "Work completion",
+  );
+  const { checksum: actual, ...rawCore } = completion;
+  const core: WorkCompletionCore = workCompletionCoreSchema.parse(rawCore);
+  if (actual !== checksum(core))
+    throw new WorkJournalError(
+      "corrupt",
+      "Work completion checksum does not match.",
+    );
+  return completion;
 }
 
 export function createWorkRejection(input: {
