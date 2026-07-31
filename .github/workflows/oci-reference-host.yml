@@ -190,7 +190,8 @@ jobs:
           manifest_digest="$(jq -er '.Image.Target.digest' <<<"$native")"
           [[ "$manifest_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
           runtime_image="docker.io/socrates/task-runtime-native@${manifest_digest}"
-          nerdctl tag "$source_ref" "$runtime_image"
+          containerd-rootless-setuptool.sh nsenter -- \
+            ctr --namespace default images tag "$source_ref" "$runtime_image"
           nerdctl image inspect --platform linux/amd64 "$runtime_image" >/dev/null
           echo "RUNTIME_IMAGE=${runtime_image}" >> "$GITHUB_ENV"
           echo "Runtime image: ${runtime_image}"
