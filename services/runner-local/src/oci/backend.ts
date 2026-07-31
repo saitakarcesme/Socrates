@@ -141,14 +141,16 @@ function inspectOwnership(
       );
     }
   }
-  const observedImage = [inspection["Image"], config["Image"]].find(
+  const observedImages = [inspection["Image"], config["Image"]].filter(
     (value): value is string => typeof value === "string",
   );
   if (
-    !observedImage ||
-    (observedImage !== image.digest &&
-      observedImage !== image.reference &&
-      !observedImage.endsWith(`@${image.digest}`))
+    !observedImages.some(
+      (observedImage) =>
+        observedImage === image.digest ||
+        observedImage === image.reference ||
+        observedImage.endsWith(`@${image.digest}`),
+    )
   ) {
     throw new SandboxBackendError(
       "image_mismatch",

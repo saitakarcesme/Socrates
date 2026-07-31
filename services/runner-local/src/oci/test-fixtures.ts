@@ -128,7 +128,7 @@ export function fixtureCompatibleInspection(deploymentId: string): string {
   const ownership = createSandboxOwnership(deploymentId, fixtureIdentity);
   return JSON.stringify({
     Name: ownership.containerName,
-    Image: fixtureImage.digest,
+    Image: `sha256:${"b".repeat(64)}`,
     Config: {
       Image: fixtureImage.reference,
       Labels: ownership.labels,
