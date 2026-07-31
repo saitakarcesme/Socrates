@@ -644,6 +644,25 @@ Evidence: implementation commit `0e84b3b`; GitHub Actions run `30655485955`
 passed schema compatibility 9 migration, all PostgreSQL/API/runner
 integrations, native durability probes, Chromium, and production builds.
 
+### Slice 2.17 — identity-bound sandbox cancellation scope
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-054.
+
+Detailed plan: `docs/plans/slice-2.17-sandbox-cancellation-scope.md`.
+
+- bind one cancellation scope before execution preparation can begin;
+- abort pre-start work and stop an active owned sandbox with server policy;
+- deduplicate exact concurrent cancellation without retrying backend errors;
+- reject identity or policy drift before any cancellation side effect;
+- keep heartbeat timers, session loops, execution, events, and runner
+  enablement out of scope.
+
+Exit: deterministic race tests prove a cancel command cannot miss future
+execution, target another fence, replace its first policy, or invoke backend
+cancellation more than once.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

@@ -2392,6 +2392,42 @@ classification, error propagation, and serialized calls. This admits ADR-053
 and closes Slice 2.16; heartbeat scheduling, execution, terminal event
 generation, and production runner enablement remain disabled.
 
+### ADR-054: Sandbox cancellation is bound before execution can start
+
+Slice 2.17 connects the cancellation port admitted by ADR-053 to the OCI
+backend without introducing a runner loop. A cancellation command can arrive
+before container creation, while creation is crossing its publication
+boundary, or after the sandbox becomes active. Calling only
+`NerdctlSandboxBackend.cancel` is insufficient in the first case because no
+active sandbox exists yet; retaining only an `AbortSignal` is insufficient in
+the last case because an already-running container must receive the durable
+grace policy.
+
+Each admitted execution therefore receives one `SandboxCancellationScope`
+before any preparation or execution work. The scope validates and freezes the
+complete execution identity, exposes one AbortSignal for the whole future
+execution path, and implements the `RunnerCancellationTarget` port. A valid
+cancel command must exactly match runner, task, attempt, and fence. The scope
+aborts first, then asks the backend to stop the exact owned sandbox with the
+server-frozen grace period. A missing active sandbox is an accepted pre-start
+cancellation: any later process start receives an already-aborted signal and
+the backend cleanup path remains authoritative.
+
+The first valid cancellation command is immutable. Concurrent and later
+byte-equivalent calls share one in-flight/result promise and invoke backend
+cancellation at most once. A different identity or different cancellation
+policy fails closed and cannot abort or target the bound execution. Backend
+errors are retained and replayed to duplicate callers rather than retried;
+the scope never converts an uncertain engine result into success.
+
+The scope does not own heartbeat timing, task acquisition, source or request
+materialization, sandbox execution, lifecycle-event generation, spool
+publication, acknowledgement, or journal completion. It is an in-memory
+single-attempt authority seam. Restart behavior continues to derive from the
+durable journal and server cancellation row; a later session coordinator must
+create a fresh scope around recovered execution before performing work.
+Production execution remains disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
