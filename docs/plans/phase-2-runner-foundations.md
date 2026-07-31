@@ -765,6 +765,26 @@ Evidence: implementation commit `3033a0b`; GitHub Actions run `30660344955`
 passed 290 runner-local tests, all PostgreSQL/API/runner integrations, native
 durability probes, Chromium, and production builds.
 
+### Slice 2.22 — authenticated fenced source transport
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-059.
+
+Detailed plan: `docs/plans/slice-2.22-authenticated-source-transport.md`.
+
+- add immutable source snapshot metadata with a forward-only migration;
+- authorize exact source reads against the current unexpired fenced lease;
+- verify catalog metadata through the configured artifact store;
+- stream bytes from an authenticated bounded API route without redirects;
+- implement the runner transport as a non-buffering async iterable;
+- keep source ingestion, signed URLs, extraction, sessions, and runner
+  enablement out of scope.
+
+Exit: PostgreSQL/API/client integration tests prove credentials alone cannot
+read bytes and stale, drifted, missing, oversized, truncated, or mutated
+sources cannot become resolver authority.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

@@ -2651,6 +2651,48 @@ forged artifact capabilities. This admits ADR-058 and closes Slice 2.21;
 authenticated HTTP source serving, backing object-store reads, attempt session
 composition, execution, and production enablement remain disabled.
 
+### ADR-059: Source bytes require a current fenced lease and immutable catalog
+
+Slice 2.22 connects ADR-058's transport port to the control plane. Bearer
+authentication alone is insufficient: a valid runner credential must not read
+an arbitrary snapshot, a source from another task, or bytes after its lease is
+stale. Route parameters and request JSON are untrusted claims, not authority.
+
+Source object metadata is therefore stored in an immutable PostgreSQL catalog
+keyed by `snapshotId`, with exact digest, positive byte length, canonical
+source-snapshot media type, and creation time. The content-addressed object is
+published before its catalog row; an orphan object is acceptable, while a
+catalog row without a locally verifiable object fails closed. Catalog identity
+is never inferred from a filesystem path or caller-provided length.
+
+The runner gateway authorizes a source read in one database transaction. It
+requires the authenticated runner, task, attempt, fence, unexpired current
+lease, executable task version, frozen task `(snapshotId, digest)`, and catalog
+row to match exactly. Mismatch, expiry, cancellation/terminal state, missing
+metadata, or stale fence returns no read authority. The transaction returns
+only immutable metadata; it never opens or streams a file.
+
+The API then asks the configured `ArtifactStore` to verify the catalog digest
+and length and streams its one-shot read directly in the response. The route
+is `POST` with validated JSON so fence/source identity is explicit; redirects
+are never used. A successful response carries exact `Content-Type` and
+`Content-Length`. Errors remain bounded JSON. If the store is absent,
+unverifiable, changes during read, or fails mid-stream, the request does not
+become successful evidence and the runner's local store cannot issue a
+verified capability.
+
+`RunnerHttpClient` implements `RunnerSourceSnapshotTransport` with the same
+credential, HTTPS/origin policy, timeout, redirect rejection, and caller
+signal used by control messages. It validates status and headers before
+exposing an async iterable over the response body, never buffers the complete
+archive, and enforces a configured transport byte ceiling while streaming.
+The ADR-058 resolver performs the independent final size and digest proof.
+
+This slice does not add source upload UI, signed URLs, retention collection,
+task creation from repositories, source extraction, attempt sessions, sandbox
+execution, or runner enablement. A later ingestion slice must publish object
+bytes before inserting the immutable catalog row.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
