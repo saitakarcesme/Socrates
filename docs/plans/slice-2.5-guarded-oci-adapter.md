@@ -65,7 +65,8 @@ Before any create operation, one attestation must prove:
 6. a harmless, already-present admitted image can be created and inspected
    through `inspect --mode native`.
 7. a fixed in-image probe observes `socrates-sandbox (enforce)` and the
-   profile-specific write denial before task work starts.
+   profile-specific write denial, a non-identity UID map, and five zero live
+   capability masks before task work starts.
 
 The attestation result contains structured facts and a timestamp. It is valid
 only for a short trusted configuration interval and is invalidated by process

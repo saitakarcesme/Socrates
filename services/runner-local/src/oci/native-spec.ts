@@ -113,7 +113,8 @@ export function verifyNativeSpec(
   validateSandboxProfile(profile);
   const failures: string[] = [];
   const process = object(spec["process"]);
-  const capabilities = object(caseInsensitiveValue(process, "capabilities"));
+  const capabilitiesValue = caseInsensitiveValue(process, "capabilities");
+  const capabilities = object(capabilitiesValue);
   const capabilitySets = [
     "bounding",
     "effective",
@@ -121,22 +122,25 @@ export function verifyNativeSpec(
     "permitted",
     "ambient",
   ];
-  let capabilityMismatch = false;
-  for (const capabilitySet of capabilitySets) {
-    if (
-      strings(caseInsensitiveValue(capabilities, capabilitySet))?.length !== 0
-    ) {
-      capabilityMismatch = true;
-      failures.push(`capabilities.${capabilitySet}`);
-    }
-  }
-  if (capabilityMismatch) {
-    failures.push(
-      `capabilities.shape=${(
-        JSON.stringify(caseInsensitiveValue(process, "capabilities")) ??
-        "undefined"
-      ).slice(0, 1_000)}`,
+  const capabilityEntries = Object.entries(capabilities ?? {});
+  const explicitEmptyObject =
+    capabilities !== undefined && capabilityEntries.length === 0;
+  const explicitEmptySets =
+    capabilities !== undefined &&
+    capabilityEntries.length === capabilitySets.length &&
+    capabilitySets.every(
+      (capabilitySet) =>
+        strings(caseInsensitiveValue(capabilities, capabilitySet))?.length ===
+        0,
+    ) &&
+    capabilityEntries.every(([name]) =>
+      capabilitySets.includes(name.toLowerCase()),
     );
+  if (
+    capabilitiesValue === undefined ||
+    (!explicitEmptyObject && !explicitEmptySets)
+  ) {
+    failures.push("process.capabilities");
   }
   if (process?.["apparmorProfile"] !== sandboxAppArmorProfile) {
     failures.push("process.apparmorProfile");

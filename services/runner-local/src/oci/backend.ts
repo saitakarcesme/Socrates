@@ -138,6 +138,15 @@ function isIsolatedUidMap(value: unknown): boolean {
   );
 }
 
+function hasNoProcessCapabilities(value: unknown): boolean {
+  const capabilities = object(value);
+  const expected = ["CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"];
+  return (
+    Object.keys(capabilities).length === expected.length &&
+    expected.every((name) => /^0+$/.test(String(capabilities[name] ?? "")))
+  );
+}
+
 export class NerdctlSandboxBackend {
   private readonly executable: string;
   private readonly readinessTtlMs: number;
@@ -278,7 +287,8 @@ export class NerdctlSandboxBackend {
       result.exitCode !== 0 ||
       proof["label"] !== "socrates-sandbox (enforce)" ||
       proof["denied"] !== true ||
-      !isIsolatedUidMap(proof["uidMap"])
+      !isIsolatedUidMap(proof["uidMap"]) ||
+      !hasNoProcessCapabilities(proof["capabilities"])
     ) {
       this.invalidateReadiness();
       throw new SandboxBackendError(

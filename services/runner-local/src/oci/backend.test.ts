@@ -64,6 +64,13 @@ class LifecycleProcesses implements ProcessExecutor {
             label: "socrates-sandbox (enforce)",
             denied: true,
             uidMap: "0 100000 65536",
+            capabilities: {
+              CapInh: "0000000000000000",
+              CapPrm: "0000000000000000",
+              CapEff: "0000000000000000",
+              CapBnd: "0000000000000000",
+              CapAmb: "0000000000000000",
+            },
           }),
         );
       }
@@ -218,6 +225,13 @@ describe("nerdctl sandbox backend", () => {
                 label: "socrates-sandbox (enforce)",
                 denied: true,
                 uidMap: "0 100000 65536",
+                capabilities: {
+                  CapInh: "0000000000000000",
+                  CapPrm: "0000000000000000",
+                  CapEff: "0000000000000000",
+                  CapBnd: "0000000000000000",
+                  CapAmb: "0000000000000000",
+                },
               }),
             );
           }

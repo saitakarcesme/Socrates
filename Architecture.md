@@ -1345,6 +1345,14 @@ absent on the selected host. The deep probe instead reads its effective
 Private mount, PID, IPC, cgroup, and network namespaces remain mandatory in the
 native OCI spec.
 
+nerdctl serializes `--cap-drop ALL` as an explicit empty native
+`Capabilities: {}` object rather than five empty arrays. The verifier admits
+only that exact empty representation or all five named sets as explicit empty
+arrays. Absence of the capabilities object, an unknown key, or any non-empty
+set fails. The deep probe independently requires the live process's
+`CapInh`, `CapPrm`, `CapEff`, `CapBnd`, and `CapAmb` values from
+`/proc/self/status` to be all zero.
+
 Every sandbox has a runner-derived opaque execution key and exact ownership
 labels containing runner, task, attempt, and fence identity digests. Container
 names never contain raw protocol identifiers. Creation uses the digest-pinned

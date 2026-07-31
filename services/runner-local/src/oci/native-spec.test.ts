@@ -31,6 +31,27 @@ describe("native OCI spec verification", () => {
     expect(() => verifyNativeSpec(parsed, fixtureProfile)).not.toThrow();
   });
 
+  it("accepts nerdctl's explicit empty capability object", () => {
+    const parsed = parseNativeSpec(fixtureNativeInspection());
+    const process = parsed["process"] as Record<string, unknown>;
+    process["Capabilities"] = {};
+    delete process["capabilities"];
+    expect(() => verifyNativeSpec(parsed, fixtureProfile)).not.toThrow();
+  });
+
+  it("rejects an absent or partially specified capability object", () => {
+    const parsed = parseNativeSpec(fixtureNativeInspection());
+    const process = parsed["process"] as Record<string, unknown>;
+    delete process["capabilities"];
+    expect(() => verifyNativeSpec(parsed, fixtureProfile)).toThrow(
+      SandboxInspectionError,
+    );
+    process["Capabilities"] = { effective: [] };
+    expect(() => verifyNativeSpec(parsed, fixtureProfile)).toThrow(
+      SandboxInspectionError,
+    );
+  });
+
   it("rejects host environment inheritance", () => {
     const parsed = parseNativeSpec(fixtureNativeInspection());
     const process = parsed["process"] as Record<string, unknown>;
