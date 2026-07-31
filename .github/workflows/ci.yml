@@ -79,8 +79,17 @@ jobs:
       - name: Seed development workspace
         run: pnpm --filter @socrates/database db:seed-development
 
-      - name: Test
-        run: pnpm test
+      - name: Test workspace units
+        run: DATABASE_URL= pnpm test
+
+      - name: Test database integrations
+        run: pnpm --filter @socrates/database test
+
+      - name: Test API integrations before runner projections
+        run: pnpm --filter @socrates/api test
+
+      - name: Test runner integrations
+        run: pnpm --filter @socrates/runner-local test
 
       - name: Validate native runner spool durability
         run: pnpm --filter @socrates/runner-local test:native-spool
