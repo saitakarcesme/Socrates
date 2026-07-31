@@ -12,7 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@hono/node-server": "^1.18.0",
+    "@hono/node-server": "^2.0.12",
     "@hono/standard-validator": "^0.3.0",
     "@socrates/contracts": "workspace:*",
     "@socrates/database": "workspace:*",
