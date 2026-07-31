@@ -178,7 +178,7 @@ jobs:
             --build-arg "RUNTIME_BUNDLE_DIGEST=${runtime_bundle_digest}" \
             --tag socrates/task-runtime-native:admission-candidate \
             services/task-runtime
-          source_ref="docker.io/socrates/task-runtime-native:admission-candidate"
+          source_ref="socrates/task-runtime-native:admission-candidate"
           nerdctl image inspect --platform linux/amd64 "$source_ref" >/dev/null
           native="$(nerdctl image inspect \
             --mode native \
