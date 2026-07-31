@@ -119,6 +119,7 @@ describe("WorkAdmissionCoordinator", () => {
 
     await expect(coordinator.prepareNext()).resolves.toEqual({
       state: "ready",
+      deliveryId: delivery.deliveryId,
       execution,
       recovered: false,
     });
@@ -166,11 +167,72 @@ describe("WorkAdmissionCoordinator", () => {
     });
     await expect(claimedRecovery.prepareNext()).resolves.toEqual({
       state: "ready",
+      deliveryId: delivery.deliveryId,
       execution,
       recovered: true,
     });
     expect(noNetworkAcquire).not.toHaveBeenCalled();
     expect(noNetworkClaim).not.toHaveBeenCalled();
+  });
+
+  it("recovers claimed terminal evidence before returning ready", async () => {
+    const rootPath = root();
+    const durable = await journal(rootPath);
+    await durable.admit(delivery);
+    const claimed = await durable.commitClaim(delivery.deliveryId, execution);
+    const completed = Object.freeze({
+      ...claimed,
+      state: "completed" as const,
+      completedAt: "2026-07-31T12:00:02.000Z",
+      completion: {
+        attemptKey: "a".repeat(64),
+        acknowledgedSequence: 1,
+      },
+    });
+    const recover = vi.fn(async () => ({
+      state: "completed" as const,
+      work: completed,
+    }));
+    const acquire = vi.fn();
+    const claim = vi.fn();
+    const coordinator = new WorkAdmissionCoordinator({
+      journal: await journal(rootPath),
+      client: client({ acquire, claim }),
+      leaseDurationMs: 60_000,
+      terminalRecovery: { recover },
+    });
+
+    await expect(coordinator.prepareNext()).resolves.toEqual({
+      state: "completed",
+      execution,
+      work: completed,
+      recovered: true,
+    });
+    expect(recover).toHaveBeenCalledWith(delivery.deliveryId, execution);
+    expect(acquire).not.toHaveBeenCalled();
+    expect(claim).not.toHaveBeenCalled();
+  });
+
+  it("keeps claimed recovery ambiguity from releasing execution", async () => {
+    const rootPath = root();
+    const durable = await journal(rootPath);
+    await durable.admit(delivery);
+    await durable.commitClaim(delivery.deliveryId, execution);
+    const failure = new Error("pre-start evidence delivery ambiguous");
+    const acquire = vi.fn();
+    const claim = vi.fn();
+    const recover = vi.fn(async () => Promise.reject(failure));
+    const coordinator = new WorkAdmissionCoordinator({
+      journal: await journal(rootPath),
+      client: client({ acquire, claim }),
+      leaseDurationMs: 60_000,
+      terminalRecovery: { recover },
+    });
+
+    await expect(coordinator.prepareNext()).rejects.toBe(failure);
+    expect(recover).toHaveBeenCalledWith(delivery.deliveryId, execution);
+    expect(acquire).not.toHaveBeenCalled();
+    expect(claim).not.toHaveBeenCalled();
   });
 
   it("keeps a server-current started execution indeterminate", async () => {

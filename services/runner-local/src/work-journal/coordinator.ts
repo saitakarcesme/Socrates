@@ -23,6 +23,7 @@ export type WorkAdmissionResult =
   | Readonly<{ state: "idle" }>
   | Readonly<{
       state: "ready";
+      deliveryId: string;
       execution: RunnerExecutionV1;
       recovered: boolean;
     }>
@@ -121,18 +122,12 @@ export class WorkAdmissionCoordinator {
           "Started work has no durable execution.",
         );
       }
-      const terminal = await this.#terminalRecovery.recover(
+      const terminal = await this.#recoverTerminal(
         work.deliveryId,
         execution,
+        recovered,
       );
-      if (terminal.state === "completed") {
-        return Object.freeze({
-          state: "completed",
-          execution,
-          work: terminal.work,
-          recovered,
-        });
-      }
+      if (terminal) return terminal;
       const reconciliation = await this.#client.reconcileAttempt(
         {
           taskId: execution.lease.taskId,
@@ -174,12 +169,28 @@ export class WorkAdmissionCoordinator {
           "Claimed journal state has no durable execution.",
         );
       }
-      return Object.freeze({ state: "ready", execution, recovered });
+      const terminal = await this.#recoverTerminal(
+        work.deliveryId,
+        execution,
+        recovered,
+      );
+      if (terminal) return terminal;
+      return Object.freeze({
+        state: "ready",
+        deliveryId: work.deliveryId,
+        execution,
+        recovered,
+      });
     }
 
     try {
       const execution = await this.#claims.reconcile(deliveryFor(work), signal);
-      return Object.freeze({ state: "ready", execution, recovered });
+      return Object.freeze({
+        state: "ready",
+        deliveryId: work.deliveryId,
+        execution,
+        recovered,
+      });
     } catch (error) {
       if (
         error instanceof RunnerTransportError &&
@@ -195,6 +206,24 @@ export class WorkAdmissionCoordinator {
       }
       throw error;
     }
+  }
+
+  async #recoverTerminal(
+    deliveryId: string,
+    execution: RunnerExecutionV1,
+    recovered: boolean,
+  ): Promise<Extract<WorkAdmissionResult, { state: "completed" }> | null> {
+    const terminal = await this.#terminalRecovery.recover(
+      deliveryId,
+      execution,
+    );
+    if (terminal.state === "none") return null;
+    return Object.freeze({
+      state: "completed",
+      execution,
+      work: terminal.work,
+      recovered,
+    });
   }
 
   async #serialize<T>(operation: () => Promise<T>): Promise<T> {
