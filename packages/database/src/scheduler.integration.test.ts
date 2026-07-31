@@ -64,7 +64,7 @@ integration("PostgreSQL scheduler persistence", () => {
   const projectId = randomUUID();
   const metricDefinitionId = randomUUID();
   const runId = randomUUID();
-  const experimentIds = Array.from({ length: 24 }, () => randomUUID());
+  const experimentIds = Array.from({ length: 26 }, () => randomUUID());
   const runnerId = randomUUID();
   const secondRunnerId = randomUUID();
   const foreignRunnerId = randomUUID();
@@ -849,7 +849,7 @@ integration("PostgreSQL scheduler persistence", () => {
     const taskId = randomUUID();
     const attemptId = randomUUID();
     await persistence.transaction(({ scheduler }) =>
-      scheduler.createTask(task(taskId, experimentIds[16]!)),
+      scheduler.createTask(task(taskId, experimentIds[24]!)),
     );
     const claim = await persistence.transaction(({ scheduler }) =>
       scheduler.claimTask({
@@ -894,7 +894,7 @@ integration("PostgreSQL scheduler persistence", () => {
     const taskId = randomUUID();
     const attemptId = randomUUID();
     await persistence.transaction(({ scheduler }) =>
-      scheduler.createTask(task(taskId, experimentIds[17]!)),
+      scheduler.createTask(task(taskId, experimentIds[25]!)),
     );
     const claim = await persistence.transaction(({ scheduler }) =>
       scheduler.claimTask({
