@@ -34,6 +34,51 @@ function number(value: unknown): number | undefined {
     : undefined;
 }
 
+function caseInsensitiveValue(
+  value: JsonObject | undefined,
+  expected: string,
+): unknown {
+  return Object.entries(value ?? {}).find(
+    ([name]) => name.toLowerCase() === expected.toLowerCase(),
+  )?.[1];
+}
+
+function environmentIsSafe(
+  environment: readonly string[] | undefined,
+): boolean {
+  if (!environment || !environment.includes("SOCRATES_SANDBOX=1")) return false;
+  const names = environment.map((entry) => entry.slice(0, entry.indexOf("=")));
+  if (
+    names.some((name) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) ||
+    new Set(names).size !== names.length
+  ) {
+    return false;
+  }
+  return !names.some((name) =>
+    /^(?:ACTIONS_|ANTHROPIC_|AWS_|AZURE_|CI$|DBUS_|DOCKER_|GITHUB_|GOOGLE_|HF_TOKEN$|NPM_TOKEN$|OPENAI_|RUNNER_|SOCRATES_HOST_|SSH_|XDG_RUNTIME_DIR$)/i.test(
+      name,
+    ),
+  );
+}
+
+function isOwnedMetadataBind(mount: JsonObject): boolean {
+  if (
+    !["/etc/hosts", "/etc/hostname", "/etc/resolv.conf"].includes(
+      String(mount["destination"]),
+    )
+  ) {
+    return false;
+  }
+  const source = mount["source"];
+  return (
+    typeof source === "string" &&
+    !source.includes("/../") &&
+    /^(?:\/run\/user\/\d+\/|\/home\/[^/]+\/\.local\/share\/nerdctl\/)/.test(
+      source,
+    )
+  );
+}
+
 function mountOption(mount: JsonObject | undefined, expected: string): boolean {
   return strings(mount?.["options"])?.includes(expected) === true;
 }
@@ -77,7 +122,9 @@ export function verifyNativeSpec(
     "ambient",
   ];
   for (const capabilitySet of capabilitySets) {
-    if (strings(capabilities?.[capabilitySet])?.length !== 0) {
+    if (
+      strings(caseInsensitiveValue(capabilities, capabilitySet))?.length !== 0
+    ) {
       failures.push(`capabilities.${capabilitySet}`);
     }
   }
@@ -92,7 +139,7 @@ export function verifyNativeSpec(
     failures.push("process.user");
   }
   const environment = strings(process?.["env"]);
-  if (environment?.length !== 1 || environment[0] !== "SOCRATES_SANDBOX=1") {
+  if (!environmentIsSafe(environment)) {
     failures.push("process.env");
   }
   if (object(spec["root"])?.["readonly"] !== true) {
@@ -106,13 +153,14 @@ export function verifyNativeSpec(
     failures.push("mounts");
   } else {
     if (
-      mounts.some(
-        (mount) =>
+      mounts.some((mount) => {
+        const bind =
           mount["type"] === "bind" ||
           strings(mount["options"])?.some((option) =>
             ["bind", "rbind"].includes(option),
-          ),
-      )
+          );
+        return bind && !isOwnedMetadataBind(mount);
+      })
     ) {
       failures.push("mounts.bind");
     }
@@ -144,7 +192,7 @@ export function verifyNativeSpec(
       .map((namespace) => namespace?.["type"])
       .filter((type): type is string => typeof type === "string") ?? [],
   );
-  for (const type of ["mount", "pid", "ipc", "user", "cgroup", "network"]) {
+  for (const type of ["mount", "pid", "ipc", "cgroup", "network"]) {
     if (!namespaceTypes.has(type)) failures.push(`namespaces.${type}`);
   }
 

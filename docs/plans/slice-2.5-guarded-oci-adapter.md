@@ -102,11 +102,14 @@ After `create` and before `start`, the backend parses
 - the expected AppArmor profile and `noNewPrivileges: true`;
 - empty bounding, effective, inheritable, permitted, and ambient capability
   sets;
-- non-root process identity and the exact explicit environment;
-- private mount, PID, IPC, user, cgroup, and network namespaces;
+- non-root process identity, the Socrates marker, unique environment names, and
+  no host/CI/credential environment inheritance;
+- private mount, PID, IPC, cgroup, and network namespaces plus a non-identity
+  user mapping observed by the deep probe;
 - read-only root and only the expected writable tmpfs mounts;
 - memory/swap, CPU, and PID limits equal to the accepted profile;
-- no devices, privileged annotations, runtime socket, or unexpected bind;
+- no devices, privileged annotations, runtime socket, or unexpected bind; only
+  containerd-owned per-container hostname metadata binds are admitted;
 - the exact admitted image digest and complete ownership labels.
 
 Unknown or missing security-relevant fields fail closed. A verifier test fixture

@@ -63,6 +63,7 @@ class LifecycleProcesses implements ProcessExecutor {
           JSON.stringify({
             label: "socrates-sandbox (enforce)",
             denied: true,
+            uidMap: "0 100000 65536",
           }),
         );
       }
@@ -216,6 +217,7 @@ describe("nerdctl sandbox backend", () => {
               JSON.stringify({
                 label: "socrates-sandbox (enforce)",
                 denied: true,
+                uidMap: "0 100000 65536",
               }),
             );
           }

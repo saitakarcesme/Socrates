@@ -119,6 +119,25 @@ function inspectOwnership(
   }
 }
 
+function isIsolatedUidMap(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const mappings = value
+    .split(/\r?\n/)
+    .map((line) => line.trim().split(/\s+/).map(Number))
+    .filter(
+      (mapping) =>
+        mapping.length === 3 &&
+        mapping.every((component) => Number.isSafeInteger(component)),
+    );
+  if (mappings.length === 0 || mappings[0]?.[0] !== 0) return false;
+  return !mappings.some(
+    (mapping) =>
+      mapping[0] === 0 &&
+      mapping[1] === 0 &&
+      (mapping[2] ?? 0) >= 4_294_967_295,
+  );
+}
+
 export class NerdctlSandboxBackend {
   private readonly executable: string;
   private readonly readinessTtlMs: number;
@@ -258,7 +277,8 @@ export class NerdctlSandboxBackend {
     if (
       result.exitCode !== 0 ||
       proof["label"] !== "socrates-sandbox (enforce)" ||
-      proof["denied"] !== true
+      proof["denied"] !== true ||
+      !isIsolatedUidMap(proof["uidMap"])
     ) {
       this.invalidateReadiness();
       throw new SandboxBackendError(

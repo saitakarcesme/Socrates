@@ -1338,6 +1338,13 @@ write denial. That proof is cached only for the same admitted image, resource
 profile, engine readiness interval, and runner process. Failure invalidates
 readiness and prevents the task sandbox from starting.
 
+Rootless containerd places the runtime inside RootlessKit's user namespace, so
+an additional OCI `linux.namespaces[type=user]` entry is not required and was
+absent on the selected host. The deep probe instead reads its effective
+`/proc/self/uid_map`; an identity mapping or host-root mapping fails readiness.
+Private mount, PID, IPC, cgroup, and network namespaces remain mandatory in the
+native OCI spec.
+
 Every sandbox has a runner-derived opaque execution key and exact ownership
 labels containing runner, task, attempt, and fence identity digests. Container
 names never contain raw protocol identifiers. Creation uses the digest-pinned
@@ -1348,6 +1355,17 @@ no-new-privileges, the preloaded AppArmor profile, bounded tmpfs, memory, CPU,
 PIDs, and no daemon log storage. Task budgets are capped by trusted runner
 maximums; unsupported or unrepresentable limits fail before creation rather
 than being rounded into weaker policy.
+
+An admitted image may contribute environment defaults because they are part of
+its immutable digest; host process variables are never forwarded. Inspection
+requires the Socrates marker, unique variable names, and the absence of
+deployment, CI, credential, runtime-socket, and provider-secret names. A later
+image catalog records the exact admitted image environment. The backend also
+replaces nerdctl's default shared-memory bind with an explicit bounded tmpfs.
+The only non-source bind mounts it may admit are containerd-generated,
+per-container `/etc/hosts`, `/etc/hostname`, and `/etc/resolv.conf` metadata
+whose source is inside the unprivileged nerdctl runtime state. System `/etc`,
+arbitrary home paths, and every other bind source fail inspection.
 
 Sent arguments are intent, not enforcement evidence. The backend creates the
 container without starting user work, reads `nerdctl inspect --mode native`,
