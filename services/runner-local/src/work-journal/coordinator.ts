@@ -10,6 +10,14 @@ import {
 import { WorkJournalError, type WorkJournalState } from "./contracts";
 import { ExactClaimReconciler } from "./reconciler";
 import { LocalWorkJournal } from "./store";
+import type { TerminalEvidenceRecoveryResult } from "./terminal-evidence-recovery";
+
+export interface TerminalEvidenceRecoveryPort {
+  recover(
+    deliveryId: string,
+    execution: RunnerExecutionV1,
+  ): Promise<TerminalEvidenceRecoveryResult>;
+}
 
 export type WorkAdmissionResult =
   | Readonly<{ state: "idle" }>
@@ -36,6 +44,12 @@ export type WorkAdmissionResult =
       execution: RunnerExecutionV1;
       work: WorkJournalState;
       recovered: boolean;
+    }>
+  | Readonly<{
+      state: "completed";
+      execution: RunnerExecutionV1;
+      work: WorkJournalState;
+      recovered: boolean;
     }>;
 
 function deliveryFor(state: WorkJournalState): RunnerTaskDeliveryV1 {
@@ -58,16 +72,19 @@ export class WorkAdmissionCoordinator {
   readonly #journal: LocalWorkJournal;
   readonly #client: RunnerControlPlaneClient;
   readonly #claims: ExactClaimReconciler;
+  readonly #terminalRecovery: TerminalEvidenceRecoveryPort;
   #operationTail: Promise<void> = Promise.resolve();
 
   constructor(options: {
     journal: LocalWorkJournal;
     client: RunnerControlPlaneClient;
     leaseDurationMs: number;
+    terminalRecovery: TerminalEvidenceRecoveryPort;
   }) {
     this.#journal = options.journal;
     this.#client = options.client;
     this.#claims = new ExactClaimReconciler(options);
+    this.#terminalRecovery = options.terminalRecovery;
   }
 
   async prepareNext(signal?: AbortSignal): Promise<WorkAdmissionResult> {
@@ -103,6 +120,18 @@ export class WorkAdmissionCoordinator {
           "corrupt",
           "Started work has no durable execution.",
         );
+      }
+      const terminal = await this.#terminalRecovery.recover(
+        work.deliveryId,
+        execution,
+      );
+      if (terminal.state === "completed") {
+        return Object.freeze({
+          state: "completed",
+          execution,
+          work: terminal.work,
+          recovered,
+        });
       }
       const reconciliation = await this.#client.reconcileAttempt(
         {

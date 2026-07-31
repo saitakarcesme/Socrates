@@ -303,6 +303,16 @@ export class LocalEventSpool {
     );
   }
 
+  async inspectExisting(input: RunnerExecutionV1): Promise<SpoolState | null> {
+    const execution = runnerExecutionV1Schema.parse(input);
+    const attemptKey = attemptKeyFor(execution);
+    return this.#serialize(async () => {
+      const existing = await this.#filesystem.listAttemptKeys();
+      if (!existing.includes(attemptKey)) return null;
+      return this.#publicState(await this.#loadAttempt(execution));
+    });
+  }
+
   async #validateRoot(): Promise<void> {
     const attempts = await this.#filesystem.listAttemptKeys();
     if (attempts.length > this.#limits.maximumAttempts) {

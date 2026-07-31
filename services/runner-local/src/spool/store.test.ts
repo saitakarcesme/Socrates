@@ -1,4 +1,4 @@
-import { readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -121,6 +121,16 @@ afterEach(async () => {
 });
 
 describe("local event spool", () => {
+  it("inspects an absent attempt without creating spool state", async () => {
+    const rootPath = root();
+    const spool = await open(rootPath);
+    const attemptsPath = join(rootPath, "attempts");
+    const before = await readdir(attemptsPath);
+
+    await expect(spool.inspectExisting(execution)).resolves.toBeNull();
+    expect(await readdir(attemptsPath)).toEqual(before);
+  });
+
   it("recovers a committed batch byte-identically after restart", async () => {
     const rootPath = root();
     const first = await open(rootPath);

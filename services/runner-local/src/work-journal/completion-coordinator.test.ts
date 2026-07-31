@@ -170,6 +170,9 @@ describe("WorkCompletionCoordinator", () => {
       journal,
       client: { acquireTaskDelivery } as RunnerControlPlaneClient,
       leaseDurationMs: 60_000,
+      terminalRecovery: {
+        recover: async () => Object.freeze({ state: "none" as const }),
+      },
     });
     await expect(admission.prepareNext()).resolves.toEqual({ state: "idle" });
     expect(acquireTaskDelivery).toHaveBeenCalledOnce();
