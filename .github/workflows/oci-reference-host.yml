@@ -19,6 +19,11 @@ on:
         required: true
         default: true
         type: boolean
+      validate_task_runtime:
+        description: Build and validate the admitted Socrates task-runtime image
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -155,6 +160,40 @@ jobs:
           podman pull "$IMAGE"
           nerdctl pull "$IMAGE"
 
+      - name: Build immutable task-runtime image
+        if: ${{ inputs.validate_task_runtime }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @socrates/task-runtime build
+          manifest="services/task-runtime/dist/build-identity.json"
+          runtime_build_digest="$(jq -er '.runtimeBuildDigest' "$manifest")"
+          runtime_bundle_digest="$(jq -er '.bundleDigest' "$manifest")"
+          docker build \
+            --file services/task-runtime/image/Containerfile \
+            --build-arg "RUNTIME_BUILD_DIGEST=${runtime_build_digest}" \
+            --build-arg "RUNTIME_BUNDLE_DIGEST=${runtime_bundle_digest}" \
+            --tag socrates-task-runtime:native \
+            services/task-runtime
+          docker save --output /tmp/socrates-task-runtime.tar \
+            socrates-task-runtime:native
+          nerdctl load --input /tmp/socrates-task-runtime.tar
+          source_ref="$(nerdctl images --format '{{.Repository}}:{{.Tag}}' |
+            grep -E '(^|/)socrates-task-runtime:native$' | head -n 1)"
+          test -n "$source_ref"
+          native="$(nerdctl image inspect \
+            --mode native \
+            --platform linux/amd64 \
+            --format '{{json .}}' \
+            "$source_ref")"
+          manifest_digest="$(jq -er '.target.digest' <<<"$native")"
+          [[ "$manifest_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          runtime_image="socrates/task-runtime-native@${manifest_digest}"
+          nerdctl tag "$source_ref" "$runtime_image"
+          nerdctl image inspect --platform linux/amd64 "$runtime_image" >/dev/null
+          echo "RUNTIME_IMAGE=${runtime_image}" >> "$GITHUB_ENV"
+          echo "Runtime image: ${runtime_image}"
+
       - name: Run native comparison
         if: ${{ inputs.run_comparison }}
         shell: bash
@@ -170,6 +209,14 @@ jobs:
           set -euo pipefail
           pnpm --filter @socrates/runner-local test:native -- \
             --image "$IMAGE"
+
+      - name: Validate admitted task runtime
+        if: ${{ inputs.validate_task_runtime }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @socrates/runner-local test:native-runtime -- \
+            --image "$RUNTIME_IMAGE"
 
       - name: Publish comparison summary
         if: always()

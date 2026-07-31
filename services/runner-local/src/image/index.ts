@@ -5,6 +5,7 @@ export {
   SandboxImageInspectionError,
 } from "./inspection";
 export { NerdctlImageHandshakeVerifier } from "./handshake";
+export { sandboxProfileProbe } from "./profile-probe";
 
 export type { AdmittedSandboxImage } from "./capability";
 export type {
