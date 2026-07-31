@@ -147,6 +147,26 @@ function decodeFrameBytes(
   );
 }
 
+function parseProof(
+  name: string,
+  bytes: Buffer,
+  execution: Readonly<{ status: string; frames: readonly RuntimeFrame[] }>,
+): Record<string, unknown> {
+  if (bytes.byteLength === 0) {
+    throw new Error(
+      `Native runtime ${name} proof is empty: ${JSON.stringify(execution)}`,
+    );
+  }
+  try {
+    return JSON.parse(bytes.toString("utf8")) as Record<string, unknown>;
+  } catch (cause) {
+    throw new Error(
+      `Native runtime ${name} proof is invalid JSON: ${JSON.stringify(execution)}`,
+      { cause },
+    );
+  }
+}
+
 const imageReference = argument("--image");
 if (!imageReferencePattern.test(imageReference)) {
   throw new Error("--image must be a bare SHA-256 manifest content address.");
@@ -282,21 +302,25 @@ try {
   } finally {
     await materializer.release(successfulSource);
   }
-  const actionProof = JSON.parse(
+  const actionProof = parseProof(
+    "action",
     decodeFrameBytes(
       successful.frames,
       (frame) =>
         frame.type === "command.output" &&
         frame.phase === "action" &&
         frame.stream === "stdout",
-    ).toString("utf8"),
-  ) as { source?: unknown; readOnly?: unknown };
-  const measurementProof = JSON.parse(
+    ),
+    successful,
+  );
+  const measurementProof = parseProof(
+    "measurement",
     decodeFrameBytes(
       successful.frames,
       (frame) => frame.type === "measurement.result",
-    ).toString("utf8"),
-  ) as { source?: unknown; result?: unknown; value?: unknown };
+    ),
+    successful,
+  );
   if (
     successful.status !== "succeeded" ||
     actionProof.source !== "socrates-source-ok" ||
