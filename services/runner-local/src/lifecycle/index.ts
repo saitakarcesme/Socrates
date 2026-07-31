@@ -1,5 +1,12 @@
 export { runnerEventDraft } from "./draft";
 export type { RunnerEventDraft } from "./draft";
+export { localFailureEvidence } from "./failure-policy";
+export type {
+  LocalFailureAmbiguityBoundary,
+  LocalFailureCode,
+  LocalFailureEvidenceDecision,
+  LocalFailureEvidenceInput,
+} from "./failure-policy";
 export {
   RuntimeLifecycleAdapterError,
   runtimeLifecycleDrafts,
