@@ -284,6 +284,7 @@ describe("LocalWorkJournal", () => {
           startedAt: "2026-07-31T12:00:00.000Z",
         }),
       ),
+      { mode: 0o600 },
     );
     await expect(
       identityJournal.inspect(delivery.deliveryId),
