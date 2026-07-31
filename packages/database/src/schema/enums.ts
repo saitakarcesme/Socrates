@@ -116,3 +116,7 @@ export const runnerAttemptStatus = pgEnum("runner_attempt_status", [
   "cancelled",
   "expired",
 ]);
+
+export const artifactRetentionClass = pgEnum("artifact_retention_class", [
+  "run_evidence",
+]);

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   foreignKey,
@@ -14,6 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import {
+  artifactRetentionClass,
   runnerAttemptStatus,
   runnerKind,
   runnerRegistrationStatus,
@@ -167,6 +169,12 @@ export const runnerTaskAttempts = pgTable(
       .defaultNow()
       .notNull(),
     lastEventSequence: integer("last_event_sequence").default(0).notNull(),
+    acceptedLogBytes: bigint("accepted_log_bytes", { mode: "number" })
+      .default(0)
+      .notNull(),
+    acceptedArtifactBytes: bigint("accepted_artifact_bytes", { mode: "number" })
+      .default(0)
+      .notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     failureClassification: text("failure_classification"),
@@ -208,6 +216,14 @@ export const runnerTaskAttempts = pgTable(
     nonNegativeCheck(
       "runner_task_attempts_sequence_non_negative",
       table.lastEventSequence,
+    ),
+    nonNegativeCheck(
+      "runner_task_attempts_log_bytes_non_negative",
+      table.acceptedLogBytes,
+    ),
+    nonNegativeCheck(
+      "runner_task_attempts_artifact_bytes_non_negative",
+      table.acceptedArtifactBytes,
     ),
     check(
       "runner_task_attempts_terminal_state",
@@ -268,6 +284,79 @@ export const runnerTaskEvents = pgTable(
     check(
       "runner_task_events_digest_sha256",
       sql`${table.envelopeDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
+export const artifactObjects = pgTable(
+  "artifact_objects",
+  {
+    digest: text("digest").primaryKey(),
+    sizeBytes: bigint("size_bytes", { mode: "number" }).notNull(),
+    firstVerifiedAt: timestamp("first_verified_at", {
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    nonNegativeCheck("artifact_objects_size_non_negative", table.sizeBytes),
+    check(
+      "artifact_objects_digest_sha256",
+      sql`${table.digest} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
+export const runnerTaskArtifacts = pgTable(
+  "runner_task_artifacts",
+  {
+    id: uuid("id").primaryKey(),
+    digest: text("digest")
+      .notNull()
+      .references(() => artifactObjects.digest),
+    taskId: uuid("task_id").notNull(),
+    attemptId: uuid("attempt_id").notNull(),
+    runnerId: uuid("runner_id").notNull(),
+    fence: integer("fence").notNull(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => runnerTaskEvents.id),
+    mediaType: text("media_type").notNull(),
+    role: text("role").notNull(),
+    retentionClass: artifactRetentionClass("retention_class")
+      .default("run_evidence")
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("runner_task_artifacts_event_unique").on(table.eventId),
+    index("runner_task_artifacts_task_created_id_idx").on(
+      table.taskId,
+      table.createdAt,
+      table.id,
+    ),
+    index("runner_task_artifacts_digest_idx").on(table.digest),
+    foreignKey({
+      name: "runner_task_artifacts_attempt_identity_fk",
+      columns: [table.attemptId, table.taskId, table.runnerId, table.fence],
+      foreignColumns: [
+        runnerTaskAttempts.id,
+        runnerTaskAttempts.taskId,
+        runnerTaskAttempts.runnerId,
+        runnerTaskAttempts.fence,
+      ],
+    }),
+    positiveCheck("runner_task_artifacts_fence_positive", table.fence),
+    check(
+      "runner_task_artifacts_media_type",
+      sql`${table.mediaType} ~ '^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$'`,
+    ),
+    check(
+      "runner_task_artifacts_role",
+      sql`${table.role} IN ('source_snapshot', 'patch', 'measurement', 'report', 'diagnostic')`,
     ),
   ],
 );

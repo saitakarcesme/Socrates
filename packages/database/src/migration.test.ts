@@ -4,6 +4,7 @@ import { getTableConfig } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
 import {
+  artifactObjects,
   constraintDefinitions,
   decisions,
   experiments,
@@ -19,6 +20,7 @@ import {
   runs,
   runnerRegistrations,
   runnerTaskAttempts,
+  runnerTaskArtifacts,
   runnerTaskCancellations,
   runnerTaskEvents,
   runnerTasks,
@@ -131,6 +133,8 @@ describe("Phase 2 scheduler migration", () => {
         runnerTaskAttempts,
         runnerTaskCancellations,
         runnerTaskEvents,
+        artifactObjects,
+        runnerTaskArtifacts,
         outboxMessages,
       ].map((table) => getTableConfig(table).name),
     ).toEqual([
@@ -139,6 +143,8 @@ describe("Phase 2 scheduler migration", () => {
       "runner_task_attempts",
       "runner_task_cancellations",
       "runner_task_events",
+      "artifact_objects",
+      "runner_task_artifacts",
       "outbox_messages",
     ]);
   });
@@ -206,6 +212,28 @@ describe("Phase 2 scheduler migration", () => {
       migration.indexOf(`"runner_task_attempts_identity_unique"`),
     ).toBeLessThan(
       migration.indexOf(`"runner_task_events_attempt_identity_fk"`),
+    );
+  });
+
+  it("adds bounded artifact metadata and quota counters before compatibility", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0008_bounded_runner_evidence.sql", import.meta.url),
+      "utf8",
+    );
+
+    for (const evidence of [
+      `CREATE TABLE "artifact_objects"`,
+      `CREATE TABLE "runner_task_artifacts"`,
+      `ADD COLUMN "accepted_log_bytes" bigint DEFAULT 0 NOT NULL`,
+      `ADD COLUMN "accepted_artifact_bytes" bigint DEFAULT 0 NOT NULL`,
+      `CONSTRAINT "runner_task_artifacts_attempt_identity_fk"`,
+      `CONSTRAINT "runner_task_artifacts_media_type"`,
+      `SET "version" = 5`,
+    ]) {
+      expect(migration).toContain(evidence);
+    }
+    expect(migration.indexOf(`CREATE TABLE "artifact_objects"`)).toBeLessThan(
+      migration.indexOf(`"runner_task_artifacts_digest_artifact_objects`),
     );
   });
 });
