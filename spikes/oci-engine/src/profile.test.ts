@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { ownedContainerFilter, secureRunArguments } from "./profile";
+import {
+  ownedContainerFilter,
+  sandboxAppArmorProfile,
+  secureRunArguments,
+} from "./profile";
 
 describe("OCI spike sandbox profile", () => {
   it.each(["docker", "podman", "nerdctl"] as const)(
@@ -33,6 +37,9 @@ describe("OCI spike sandbox profile", () => {
       expect(args.includes("--pid")).toBe(engine === "podman");
       expect(args.includes("--read-only-tmpfs=false")).toBe(
         engine === "podman",
+      );
+      expect(args.includes(`apparmor=${sandboxAppArmorProfile}`)).toBe(
+        engine === "nerdctl",
       );
     },
   );

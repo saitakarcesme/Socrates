@@ -11,6 +11,8 @@ export const sandboxProfile = {
   rootFilesystem: "read-only" as const,
 };
 
+export const sandboxAppArmorProfile = "socrates-sandbox";
+
 type ContainerIdentity = {
   name: string;
   spikeId: string;
@@ -62,6 +64,9 @@ export function secureRunArguments(
     "ALL",
     "--security-opt",
     noNewPrivileges,
+    ...(engine === "nerdctl"
+      ? ["--security-opt", `apparmor=${sandboxAppArmorProfile}`]
+      : []),
     "--memory",
     String(sandboxProfile.memoryBytes),
     "--memory-swap",

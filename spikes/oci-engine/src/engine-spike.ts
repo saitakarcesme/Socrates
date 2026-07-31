@@ -5,6 +5,7 @@ import { readEngineFacts } from "./engine-adapter";
 import { readHostFacts } from "./host-facts";
 import {
   ownedContainerFilter,
+  sandboxAppArmorProfile,
   sandboxProfile,
   secureRunArguments,
 } from "./profile";
@@ -220,6 +221,35 @@ async function runAdversarialProbes(
   const gates: GateResult[] = [];
   const cleanup: GateResult[] = [];
 
+  const lsm = await runProbe(runtime, spikeId, image, "lsm", [
+    "/bin/sh",
+    "-c",
+    [
+      "set -eu",
+      'label="$(cat /proc/self/attr/current 2>/dev/null || true)"',
+      'printf "lsm=%s\\n" "$label"',
+      "if touch /tmp/socrates-lsm-probe 2>/dev/null; then exit 43; fi",
+      "printf lsm-denied",
+    ].join("; "),
+  ]);
+  const expectedLsmLabel = `${sandboxAppArmorProfile} (enforce)`;
+  const observedLsmLabel = lsm.result.stdout
+    .split(/\r?\n/)
+    .find((line) => line.startsWith("lsm="))
+    ?.slice("lsm=".length);
+  const lsmPassed =
+    lsm.result.exitCode === 0 &&
+    observedLsmLabel === expectedLsmLabel &&
+    lsm.result.stdout.includes("lsm-denied");
+  gates.push({
+    name: "sandbox LSM confinement",
+    passed: lsmPassed,
+    detail: lsmPassed
+      ? `${expectedLsmLabel} denied the profile-specific write probe`
+      : `expected ${expectedLsmLabel} with denied write; observed ${observedLsmLabel || "no label"}, exit=${lsm.result.exitCode}`,
+  });
+  cleanup.push(lsm.cleanup);
+
   const security = await runProbe(runtime, spikeId, image, "security", [
     "/bin/sh",
     "-c",
@@ -234,8 +264,6 @@ async function runAdversarialProbes(
       'controllers="$(cat /sys/fs/cgroup/cgroup.controllers)"',
       'for required in cpu memory pids; do echo "$controllers" | grep -qw "$required"; done',
       "printf '%s\\n' \"$controllers\"",
-      'lsm="$(cat /proc/self/attr/current 2>/dev/null || true)"',
-      'printf "lsm=%s\\n" "$lsm"',
       "mkdir /tmp/mount-target",
       "if mount -t tmpfs none /tmp/mount-target 2>/dev/null; then exit 41; fi",
       "if unshare -m true 2>/dev/null; then exit 42; fi",
@@ -252,23 +280,6 @@ async function runAdversarialProbes(
     detail:
       security.result.exitCode === 0
         ? "cpu, memory, and pids controllers are visible"
-        : `probe exited ${security.result.exitCode}`,
-  });
-  gates.push({
-    name: "sandbox LSM confinement",
-    passed:
-      security.result.exitCode === 0 &&
-      security.result.stdout
-        .split(/\r?\n/)
-        .some(
-          (line) =>
-            line.startsWith("lsm=") &&
-            line !== "lsm=" &&
-            !line.toLowerCase().includes("unconfined"),
-        ),
-    detail:
-      security.result.exitCode === 0
-        ? "workload security label is present and confined"
         : `probe exited ${security.result.exitCode}`,
   });
   gates.push({
