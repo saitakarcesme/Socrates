@@ -2638,6 +2638,19 @@ backing object-store read model are a later slice. This slice does not change
 task schemas, persist capabilities, materialize tar contents, admit images,
 prepare a full attempt, execute a sandbox, or enable the runner.
 
+Validation amendment, 2026-07-31: implementation commit `3033a0b` passed
+local formatting, TypeScript, ESLint, 290 runner-local tests, all workspace
+tests, Phase 1/2 dependency-boundary audits, and production builds. GitHub
+Actions run `30660344955` passed every PostgreSQL, authenticated API, and
+runner integration, both Linux native durability probes, the Chromium product
+journey, and all builds. Adversarial resolver tests proved exact attempt-bound
+transport input, one-shot source/signal authority, malformed descriptor and
+size rejection, streaming truncation/overflow/digest detection, pre/mid/post
+cancellation, no publication after interrupted writes, and rejection of
+forged artifact capabilities. This admits ADR-058 and closes Slice 2.21;
+authenticated HTTP source serving, backing object-store reads, attempt session
+composition, execution, and production enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

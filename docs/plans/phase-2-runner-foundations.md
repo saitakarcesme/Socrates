@@ -742,7 +742,7 @@ durability probes, Chromium, and production builds.
 
 ### Slice 2.21 — bounded source artifact resolution
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-058.
 
@@ -760,6 +760,10 @@ Detailed plan: `docs/plans/slice-2.21-source-artifact-resolution.md`.
 Exit: adversarial streaming tests prove forged descriptors, truncation,
 overflow, digest drift, cancellation, duplicate calls, and identity drift
 cannot produce a verified artifact capability.
+
+Evidence: implementation commit `3033a0b`; GitHub Actions run `30660344955`
+passed 290 runner-local tests, all PostgreSQL/API/runner integrations, native
+durability probes, Chromium, and production builds.
 
 ## Acceptance gates
 

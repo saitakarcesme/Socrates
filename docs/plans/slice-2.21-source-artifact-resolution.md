@@ -1,6 +1,6 @@
 # Slice 2.21 bounded source artifact resolution
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -82,3 +82,11 @@ events, or timers.
 5. Cancellation cannot return a verified capability.
 6. Task schemas, HTTP routes, extraction, and execution remain unchanged.
 7. Full repository, native durability, browser, build, and CI gates pass.
+
+## Evidence
+
+Implementation commit `3033a0b`; GitHub Actions run `30660344955` passed 290
+runner-local tests, all PostgreSQL/API/runner integrations, both native
+durability probes, the Chromium product journey, and production builds. Local
+format, type, lint, Phase 1/2 boundary audit, workspace test, and build gates
+also passed.
