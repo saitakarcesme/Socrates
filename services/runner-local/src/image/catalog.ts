@@ -268,6 +268,7 @@ export class SandboxImageCatalog {
       handshake = await this.handshake.verify({
         image: issueInspectedSandboxImage({
           reference: image.reference,
+          localName: inspection.localName,
           digest: image.manifestDigest,
           configurationDigest: image.configurationDigest,
           architecture: image.architecture,
@@ -296,6 +297,7 @@ export class SandboxImageCatalog {
     }
     return issueAdmittedSandboxImage({
       reference: image.reference,
+      localName: inspection.localName,
       digest: image.manifestDigest,
       configurationDigest: image.configurationDigest,
       architecture: image.architecture,

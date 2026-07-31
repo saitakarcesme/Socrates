@@ -98,6 +98,7 @@ describe("sandbox image inspection", () => {
       }),
     ).toEqual({
       reference,
+      localName: observedName,
       manifestDigest,
       manifestMediaType: "application/vnd.oci.image.manifest.v1+json",
       configurationDigest,

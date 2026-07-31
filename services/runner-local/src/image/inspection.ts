@@ -4,6 +4,7 @@ type JsonObject = Record<string, unknown>;
 
 export type SandboxImageInspection = Readonly<{
   reference: string;
+  localName: string;
   manifestDigest: string;
   manifestMediaType:
     | "application/vnd.docker.distribution.manifest.v2+json"
@@ -151,7 +152,7 @@ export function parseSandboxImageInspection(input: {
     native["ImageConfigDesc"],
     "ImageConfigDesc",
   );
-  string(image["Name"], "Image.Name");
+  const localName = string(image["Name"], "Image.Name");
   const manifestDigest = digest(target["digest"], "Image.Target.digest");
   const mediaType = string(target["mediaType"], "Image.Target.mediaType");
   if (!acceptedManifestMediaTypes.has(mediaType)) {
@@ -182,6 +183,7 @@ export function parseSandboxImageInspection(input: {
 
   return Object.freeze({
     reference: input.reference,
+    localName,
     manifestDigest,
     manifestMediaType: mediaType as SandboxImageInspection["manifestMediaType"],
     configurationDigest: digest(

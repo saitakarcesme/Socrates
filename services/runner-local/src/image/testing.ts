@@ -11,6 +11,7 @@ export function createAdmittedImageForTesting(
   const digest = reference.slice(reference.lastIndexOf("@") + 1);
   return issueAdmittedSandboxImage({
     reference: digest,
+    localName: reference.slice(0, reference.lastIndexOf("@")) || reference,
     digest,
     configurationDigest: configurationDigest ?? digest,
     architecture,

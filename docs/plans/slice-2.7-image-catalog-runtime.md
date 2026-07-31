@@ -54,8 +54,9 @@ process port. It never pulls. Docker-compatible inspection establishes the
 resolved local configuration; native inspection establishes the OCI manifest,
 configuration, platform, entrypoint, environment, volumes, and layer/config
 digests. The containerd-reported image name is audit context only: the bare
-manifest digest is the inspected and executed engine locator. Unknown or
-missing fields fail closed.
+manifest digest is the inspected and executed engine locator. The observed name
+is carried inside the opaque capability only so post-create container metadata
+can be checked for exact continuity. Unknown or missing fields fail closed.
 
 The image is then created under the guarded profile with the fixed
 `--handshake` runtime operation. One valid frame must match the catalog ABI and

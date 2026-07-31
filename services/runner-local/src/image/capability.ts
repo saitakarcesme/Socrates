@@ -2,6 +2,7 @@ import type { SandboxCommand } from "../oci/profile";
 
 export type AdmittedSandboxImage = Readonly<{
   reference: string;
+  localName: string;
   digest: string;
   configurationDigest: string;
   architecture: "amd64" | "arm64";
@@ -11,6 +12,7 @@ export type AdmittedSandboxImage = Readonly<{
 
 export type InspectedSandboxImage = Readonly<{
   reference: string;
+  localName: string;
   digest: string;
   configurationDigest: string;
   architecture: "amd64" | "arm64";
@@ -20,6 +22,8 @@ export type InspectedSandboxImage = Readonly<{
 const admittedImages = new WeakSet<object>();
 const inspectedImages = new WeakSet<object>();
 const digestPattern = /^sha256:[a-f0-9]{64}$/u;
+const validLocalName = (value: string) =>
+  value.length > 0 && value.length <= 512 && !value.includes("\0");
 const absoluteExecutablePattern =
   /^\/(?:[^/\0.][^/\0]*|\.(?!\.?\/)[^/\0]+)(?:\/[^/\0]+)*$/u;
 
@@ -44,6 +48,7 @@ export function assertAdmittedImage(
     !admittedImages.has(image) ||
     !digestPattern.test(image.digest) ||
     !digestPattern.test(image.configurationDigest) ||
+    !validLocalName(image.localName) ||
     image.reference !== image.digest
   ) {
     throw new TypeError("Image was not admitted by the trusted catalog.");
@@ -54,6 +59,7 @@ export function assertAdmittedImage(
 
 export function issueAdmittedSandboxImage(input: {
   reference: string;
+  localName: string;
   digest: string;
   configurationDigest: string;
   architecture: "amd64" | "arm64";
@@ -62,6 +68,7 @@ export function issueAdmittedSandboxImage(input: {
 }): AdmittedSandboxImage {
   const image: AdmittedSandboxImage = Object.freeze({
     reference: input.reference,
+    localName: input.localName,
     digest: input.digest,
     configurationDigest: input.configurationDigest,
     architecture: input.architecture,
@@ -86,6 +93,7 @@ export function assertInspectedImage(
     !inspectedImages.has(image) ||
     !digestPattern.test(image.digest) ||
     !digestPattern.test(image.configurationDigest) ||
+    !validLocalName(image.localName) ||
     image.reference !== image.digest
   ) {
     throw new TypeError("Image was not issued from verified local inspection.");
@@ -95,6 +103,7 @@ export function assertInspectedImage(
 
 export function issueInspectedSandboxImage(input: {
   reference: string;
+  localName: string;
   digest: string;
   configurationDigest: string;
   architecture: "amd64" | "arm64";
@@ -102,6 +111,7 @@ export function issueInspectedSandboxImage(input: {
 }): InspectedSandboxImage {
   const image: InspectedSandboxImage = Object.freeze({
     reference: input.reference,
+    localName: input.localName,
     digest: input.digest,
     configurationDigest: input.configurationDigest,
     architecture: input.architecture,

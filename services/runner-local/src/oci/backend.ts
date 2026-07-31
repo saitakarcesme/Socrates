@@ -150,16 +150,13 @@ function inspectOwnership(
         observedImage === image.digest ||
         observedImage === image.configurationDigest ||
         observedImage === image.reference ||
+        observedImage === image.localName ||
         observedImage.endsWith(`@${image.digest}`),
     )
   ) {
     throw new SandboxBackendError(
       "image_mismatch",
-      `Container image does not match the admitted identity: ${JSON.stringify({
-        expectedManifest: image.digest,
-        expectedConfiguration: image.configurationDigest,
-        observed: observedImages.map((value) => value.slice(0, 256)),
-      })}`,
+      "Container image does not match the admitted identity.",
     );
   }
 }

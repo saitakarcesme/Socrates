@@ -22,6 +22,7 @@ const manifestDigest = `sha256:${"a".repeat(64)}`;
 const buildDigest = `sha256:${"b".repeat(64)}`;
 const image = issueInspectedSandboxImage({
   reference: manifestDigest,
+  localName: "docker.io/socrates/runtime:admitted",
   digest: manifestDigest,
   configurationDigest: `sha256:${"b".repeat(64)}`,
   architecture: "amd64",

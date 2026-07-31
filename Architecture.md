@@ -1552,8 +1552,12 @@ already-present local manifest and, with pulls disabled, cannot cross a
 registry boundary. Native inspection must resolve that address to the same
 manifest digest; the image name reported by containerd is audit context only
 and cannot become identity or authority. The admitted opaque capability carries
-only this verified local content address. This preserves the stronger property
-that tag mutation between admission and creation cannot change executed bytes.
+the verified local content address, configuration digest, and the observed
+local name. Creation still uses only the bare digest with pulls disabled;
+post-create inspection may accept the observed name solely as an exact audit
+continuity check because nerdctl stores that name, rather than the requested
+bare address, in container metadata. This preserves the stronger property that
+tag mutation between admission and creation cannot change executed bytes.
 
 The catalog then executes a bounded handshake under the same guarded sandbox
 profile used for work. The fixed runtime entrypoint must emit one strictly

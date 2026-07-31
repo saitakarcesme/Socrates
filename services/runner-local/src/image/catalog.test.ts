@@ -49,6 +49,7 @@ function inspection(
 ): SandboxImageInspection {
   return {
     reference,
+    localName: "docker.io/socrates/task-runtime:admitted",
     manifestDigest,
     manifestMediaType: "application/vnd.oci.image.manifest.v1+json",
     configurationDigest,
@@ -210,6 +211,7 @@ describe("trusted sandbox image catalog", () => {
   it("rejects a structural capability lookalike", () => {
     const forged = {
       reference,
+      localName: "docker.io/socrates/task-runtime:admitted",
       digest: manifestDigest,
       configurationDigest,
       architecture: "amd64" as const,

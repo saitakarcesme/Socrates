@@ -242,6 +242,7 @@ describe("nerdctl sandbox backend", () => {
     const { value } = backend(processes);
     const inspected = issueInspectedSandboxImage({
       reference: fixtureImage.reference,
+      localName: fixtureImage.localName,
       digest: fixtureImage.digest,
       configurationDigest: fixtureImage.configurationDigest,
       architecture: fixtureImage.architecture,
@@ -274,6 +275,7 @@ describe("nerdctl sandbox backend", () => {
     const { value, readiness } = backend(processes);
     const forged = {
       reference: fixtureImage.reference,
+      localName: fixtureImage.localName,
       digest: fixtureImage.digest,
       configurationDigest: fixtureImage.configurationDigest,
       architecture: fixtureImage.architecture,
