@@ -816,6 +816,27 @@ Evidence: implementation commit `cb9bae3`, cross-platform fixture correction
 PostgreSQL/API/runner integrations, the Linux native work-journal v4 probe,
 Chromium, and production builds.
 
+### Slice 2.24 — indeterminate attempt reconciliation
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-061.
+
+Detailed plan: `docs/plans/slice-2.24-indeterminate-reconciliation.md`.
+
+- reconcile only the authenticated exact runner/task/attempt/fence identity;
+- serialize against heartbeat and completion by locking task and attempt;
+- keep an unexpired attempt current without renewing it;
+- apply existing expiry, retry-safety, cancellation, and outbox semantics when
+  the exact lease has expired;
+- durably retire the local started item before later acquisition can proceed;
+- keep polling, execution, invented terminal evidence, cleanup, and runner
+  enablement out of scope.
+
+Exit: PostgreSQL race tests and local fault injection prove that a started
+attempt is never replayed and is skipped only after an irreversible server
+retirement has been durably recorded.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

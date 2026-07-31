@@ -2756,6 +2756,48 @@ boundaries; recovery tests proved that durable started work returns
 and closes Slice 2.23; lease reconciliation, session scheduling, sandbox
 execution, evidence generation, and runner enablement remain disabled.
 
+### ADR-061: Indeterminate starts retire only through serialized lease truth
+
+An `execution_started` journal item proves that an attempt may have crossed an
+irreversible local boundary, but it cannot prove a runtime outcome. The runner
+must never replay it, infer failure from a missing sandbox, renew its lease, or
+discard it from a local clock comparison. Recovery needs an exact,
+database-clocked control-plane command.
+
+The authenticated runner may therefore reconcile only its exact
+`(runnerId, taskId, attemptId, fence)` identity. The scheduler locks the task
+and attempt together before classifying them. A current active attempt with an
+unexpired lease returns `current` without extending the lease or changing any
+row. An active attempt whose lease is expired is transitioned through the same
+attempt expiry, retry-safety, cancellation, task projection, and transactional
+outbox rules as the bounded expiry reconciler. A terminal attempt, terminal
+task, or superseded fence returns an immutable `retired` observation. Missing
+or foreign identity fails closed rather than revealing scheduler state.
+
+This cannot be implemented as a read-only expiry probe. A heartbeat that began
+before expiry could otherwise wait behind the probe and renew after the runner
+had treated the attempt as retired. Row locking plus an irreversible expiry
+transition makes retirement monotonic. A reconciliation that began before
+expiry may conservatively return `current`; it does not create an unsafe
+retirement.
+
+The runner persists a checksummed `execution-retirement.json` before allowing
+admission to move past the indeterminate item. It binds the delivery, durable
+execution digest, attempt key, server observation time, and closed retirement
+reason. Exact replay is byte-stable; conflict, retirement before execution
+start, or retirement after acknowledged completion fails closed. Public local
+state becomes `retired`, distinct from `completed`: retirement proves only
+that the old attempt can no longer write, not that terminal evidence was
+acknowledged.
+
+`WorkAdmissionCoordinator` performs at most one reconciliation per call. A
+`current` response remains `indeterminate`; a `retired` response commits the
+local retirement and returns it. Only a later admission call may skip retired
+work and acquire another delivery. Network ambiguity and malformed responses
+leave the item indeterminate. This slice adds no polling loop, heartbeat,
+terminal-event invention, sandbox execution, garbage collection, or production
+runner enablement.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
