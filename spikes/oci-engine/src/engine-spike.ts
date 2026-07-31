@@ -155,38 +155,57 @@ export function evaluateFixedProfile(
   inspection: ContainerInspection,
 ): GateResult {
   const host = inspection.HostConfig;
-  const passed =
-    host?.NetworkMode === "none" &&
-    host.ReadonlyRootfs === true &&
-    host.Privileged === false &&
-    host.Memory === sandboxProfile.memoryBytes &&
-    host.MemorySwap === sandboxProfile.memoryBytes &&
-    host.PidsLimit === sandboxProfile.maximumPids &&
-    ((host.NanoCpus ?? 0) > 0 || (host.CpuQuota ?? 0) > 0) &&
-    host.CapDrop?.includes("ALL") === true &&
-    (host.CgroupnsMode === "private" || host.CgroupMode === "private") &&
-    host.IpcMode === "private" &&
-    ["", "private"].includes(host.PidMode ?? "") &&
-    (host.Devices?.length ?? 0) === 0 &&
-    host.LogConfig?.Type === "none" &&
-    host.Tmpfs?.["/workspace"]?.includes(
-      `size=${sandboxProfile.workspaceBytes}`,
-    ) === true &&
-    host.Tmpfs?.["/tmp"]?.includes(`size=${sandboxProfile.temporaryBytes}`) ===
-      true &&
-    (host.ShmSize === sandboxProfile.sharedMemoryBytes ||
-      host.Tmpfs?.["/dev/shm"]?.includes(
-        `size=${sandboxProfile.sharedMemoryBytes}`,
-      ) === true) &&
-    host.SecurityOpt?.some((option) =>
-      option.toLowerCase().includes("no-new-privileges"),
-    ) === true;
+  const checks = [
+    ["network namespace", host?.NetworkMode === "none"],
+    ["read-only rootfs", host?.ReadonlyRootfs === true],
+    ["privileged=false", host?.Privileged === false],
+    ["memory limit", host?.Memory === sandboxProfile.memoryBytes],
+    ["swap limit", host?.MemorySwap === sandboxProfile.memoryBytes],
+    ["PID limit", host?.PidsLimit === sandboxProfile.maximumPids],
+    ["CPU limit", (host?.NanoCpus ?? 0) > 0 || (host?.CpuQuota ?? 0) > 0],
+    ["capability drop", host?.CapDrop?.includes("ALL") === true],
+    [
+      "cgroup namespace",
+      host?.CgroupnsMode === "private" || host?.CgroupMode === "private",
+    ],
+    ["IPC namespace", host?.IpcMode === "private"],
+    ["PID namespace", ["", "private"].includes(host?.PidMode ?? "")],
+    ["device isolation", (host?.Devices?.length ?? 0) === 0],
+    ["daemon log storage", host?.LogConfig?.Type === "none"],
+    [
+      "workspace tmpfs",
+      host?.Tmpfs?.["/workspace"]?.includes(
+        `size=${sandboxProfile.workspaceBytes}`,
+      ) === true,
+    ],
+    [
+      "temporary tmpfs",
+      host?.Tmpfs?.["/tmp"]?.includes(
+        `size=${sandboxProfile.temporaryBytes}`,
+      ) === true,
+    ],
+    [
+      "shared memory limit",
+      host?.ShmSize === sandboxProfile.sharedMemoryBytes ||
+        host?.Tmpfs?.["/dev/shm"]?.includes(
+          `size=${sandboxProfile.sharedMemoryBytes}`,
+        ) === true,
+    ],
+    [
+      "no-new-privileges",
+      host?.SecurityOpt?.some((option) =>
+        option.toLowerCase().includes("no-new-privileges"),
+      ) === true,
+    ],
+  ] as const;
+  const failed = checks.filter(([, passed]) => !passed).map(([name]) => name);
+  const passed = failed.length === 0;
   return {
     name: "fixed sandbox profile",
     passed,
     detail: passed
       ? "inspect confirms network, rootfs, privilege, memory, PID, capability, and escalation controls"
-      : "one or more requested sandbox controls were not reported by inspect",
+      : `inspect mismatch: ${failed.join(", ")}`,
   };
 }
 

@@ -55,14 +55,15 @@ describe("engine inspection normalization", () => {
   });
 
   it("fails closed when a requested isolation field is absent", () => {
-    expect(
-      evaluateFixedProfile({
-        HostConfig: {
-          ...commonHostConfig,
-          CgroupnsMode: "private",
-          PidMode: "host",
-        },
-      }),
-    ).toMatchObject({ passed: false });
+    const result = evaluateFixedProfile({
+      HostConfig: {
+        ...commonHostConfig,
+        CgroupnsMode: "private",
+        PidMode: "host",
+      },
+    });
+
+    expect(result).toMatchObject({ passed: false });
+    expect(result.detail).toContain("PID namespace");
   });
 });
