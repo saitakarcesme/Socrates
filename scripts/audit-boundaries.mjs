@@ -53,12 +53,18 @@ async function filesBelow(directory, predicate) {
 }
 
 function isExecutionPlane(path) {
-  return path.startsWith(join("services", "runner-local"));
+  return [
+    join("services", "runner-local"),
+    join("services", "task-runtime"),
+  ].some((root) => path.startsWith(root));
 }
 
-function isAuthorizedOciProcessBoundary(path, source) {
+function isAuthorizedProcessBoundary(path, source) {
   return (
-    path === join("services", "runner-local", "src", "oci", "process.ts") &&
+    [
+      join("services", "runner-local", "src", "oci", "process.ts"),
+      join("services", "task-runtime", "src", "process.ts"),
+    ].includes(path) &&
     /import\s*\{\s*spawn\s*\}\s*from\s*["']node:child_process["']/.test(
       source,
     ) &&
@@ -157,7 +163,7 @@ export async function auditBoundaries(phase) {
           executionImports.some((moduleName) =>
             importsModule(source, moduleName),
           ) &&
-          !isAuthorizedOciProcessBoundary(sourcePath, source)
+          !isAuthorizedProcessBoundary(sourcePath, source)
         ) {
           violations.push(
             `${sourcePath}: unauthorized execution-plane process boundary`,
@@ -167,7 +173,7 @@ export async function auditBoundaries(phase) {
       }
       for (const moduleName of executionImports) {
         if (importsModule(source, moduleName)) {
-          if (isAuthorizedOciProcessBoundary(sourcePath, source)) {
+          if (isAuthorizedProcessBoundary(sourcePath, source)) {
             continue;
           }
           violations.push(
