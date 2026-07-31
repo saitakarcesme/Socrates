@@ -1818,7 +1818,7 @@ integration("PostgreSQL scheduler persistence", () => {
   it("catalogs immutable sources and authorizes only the live owning attempt", async () => {
     const taskId = randomUUID();
     const attemptId = randomUUID();
-    const sourceTask = task(taskId, experimentIds[21]!);
+    const sourceTask = task(taskId, experimentIds[22]!);
     const sourcePayload = experimentTaskV2Schema.parse(sourceTask.payload);
     const root = await mkdtemp(join(tmpdir(), "socrates-db-source-"));
 
@@ -1835,9 +1835,11 @@ integration("PostgreSQL scheduler persistence", () => {
       sourcePayload.source.digest = digest;
       sourceTask.payload = sourcePayload;
 
-      await persistence.transaction(({ scheduler }) =>
-        scheduler.createTask(sourceTask),
-      );
+      await expect(
+        persistence.transaction(({ scheduler }) =>
+          scheduler.createTask(sourceTask),
+        ),
+      ).resolves.toEqual({ state: "created" });
       const claim = await persistence.transaction(({ scheduler }) =>
         scheduler.claimTask({
           runnerId,
