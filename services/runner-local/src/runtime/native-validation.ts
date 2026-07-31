@@ -294,6 +294,7 @@ try {
     "try{fs.writeFileSync('/socrates/source/nested/probe.txt','changed')}catch(error){readOnly=['EACCES','EROFS'].includes(error?.code)}",
     "process.stdout.write(JSON.stringify({source,readOnly}))",
   ].join(";");
+  let successfulBarrierCrosses = 0;
   let successful;
   try {
     successful = await runtime.execute({
@@ -305,6 +306,11 @@ try {
       image,
       profile,
       source: successfulSource,
+      startBarrier: {
+        cross: async () => {
+          successfulBarrierCrosses += 1;
+        },
+      },
     });
   } finally {
     await materializer.release(successfulSource);
@@ -344,6 +350,7 @@ try {
     artifact,
     identity: cancellationIdentity,
   });
+  let cancellationBarrierCrosses = 0;
   const cancellationRun = runtime
     .execute({
       request: buildRequest({
@@ -355,6 +362,11 @@ try {
       image,
       profile,
       source: cancellationSource,
+      startBarrier: {
+        cross: async () => {
+          cancellationBarrierCrosses += 1;
+        },
+      },
     })
     .then(() => undefined)
     .catch((error: unknown) => error);
@@ -365,7 +377,12 @@ try {
   );
   const cancellationOutcome = await cancellationRun;
   await materializer.release(cancellationSource);
-  if (!cancellationAccepted || !(cancellationOutcome instanceof Error)) {
+  if (
+    !cancellationAccepted ||
+    !(cancellationOutcome instanceof Error) ||
+    successfulBarrierCrosses !== 1 ||
+    cancellationBarrierCrosses !== 1
+  ) {
     throw new Error("Native runtime cancellation did not interrupt execution.");
   }
 
@@ -381,7 +398,7 @@ try {
   }
 
   const evidence = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     recordedAt: new Date().toISOString(),
     image: {
       reference: image.reference,
@@ -399,6 +416,8 @@ try {
       guardedLiveHandshake: true,
       opaqueAdmittedCapability: true,
       canonicalBoundedRequestArtifact: true,
+      mandatoryRuntimeStartBarrier:
+        successfulBarrierCrosses === 1 && cancellationBarrierCrosses === 1,
       exactRuntimeEntrypoint: true,
       sourceCopiedToWorkspace: actionProof.source === "socrates-source-ok",
       recursiveReadOnlySourceBind: actionProof.readOnly === true,

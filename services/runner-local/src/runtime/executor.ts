@@ -34,6 +34,10 @@ export interface RuntimeRequestMaterializerPort {
   release(capability: MaterializedRuntimeRequest): Promise<void>;
 }
 
+export interface RuntimeExecutionStartBarrier {
+  cross(): Promise<void>;
+}
+
 export type RuntimeSandboxExecutorOptions = Readonly<{
   maximumProtocolBytes: number;
   maximumChildOutputBytes: number;
@@ -47,7 +51,11 @@ export type RuntimeSandboxResult = Readonly<{
 
 export class RuntimeSandboxError extends Error {
   constructor(
-    readonly code: "invalid_request" | "protocol" | "runtime_mismatch",
+    readonly code:
+      | "invalid_request"
+      | "protocol"
+      | "request_release_failed"
+      | "runtime_mismatch",
     message: string,
     options?: ErrorOptions,
   ) {
@@ -90,6 +98,7 @@ export class RuntimeSandboxExecutor {
     image: AdmittedSandboxImage;
     profile: SandboxResourceProfile;
     source: MaterializedSourceSnapshot;
+    startBarrier: RuntimeExecutionStartBarrier;
     signal?: AbortSignal;
   }): Promise<RuntimeSandboxResult> {
     const parsed = runtimeRequestSchema.safeParse(input.request);
@@ -125,6 +134,7 @@ export class RuntimeSandboxExecutor {
       );
     }
 
+    input.signal?.throwIfAborted();
     const envelope = await this.requests.materialize({
       bytes: encodedRequest,
       identity: request.identity,
@@ -133,9 +143,13 @@ export class RuntimeSandboxExecutor {
     const expectedRequestDigest = `sha256:${createHash("sha256")
       .update(encodedRequest)
       .digest("hex")}`;
-    let result: SandboxExecutionResult;
+    let executionOutcome:
+      | Readonly<{ state: "failed"; cause: unknown }>
+      | Readonly<{ state: "succeeded"; result: SandboxExecutionResult }>;
     try {
-      result = await this.backend.executeRuntime({
+      input.signal?.throwIfAborted();
+      await input.startBarrier.cross();
+      const execution = this.backend.executeRuntime({
         identity: request.identity,
         image: input.image,
         profile: input.profile,
@@ -146,9 +160,26 @@ export class RuntimeSandboxExecutor {
         request: { envelope, expectedDigest: expectedRequestDigest },
         signal: input.signal,
       });
-    } finally {
-      await this.requests.release(envelope);
+      executionOutcome = { state: "succeeded", result: await execution };
+    } catch (cause) {
+      executionOutcome = { state: "failed", cause };
     }
+    try {
+      await this.requests.release(envelope);
+    } catch (releaseFailure) {
+      throw new RuntimeSandboxError(
+        "request_release_failed",
+        "The materialized runtime request could not be released.",
+        {
+          cause:
+            executionOutcome.state === "succeeded"
+              ? releaseFailure
+              : new AggregateError([executionOutcome.cause, releaseFailure]),
+        },
+      );
+    }
+    if (executionOutcome.state === "failed") throw executionOutcome.cause;
+    const { result } = executionOutcome;
     if (result.stderr !== "" || result.stderrBytes.byteLength !== 0) {
       throw new RuntimeSandboxError(
         "protocol",
