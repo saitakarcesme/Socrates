@@ -617,16 +617,20 @@ integration("PostgreSQL scheduler persistence", () => {
         );
       }
     });
-    const batchOffers = await Promise.all(
-      [firstDeliveryRunner, secondDeliveryRunner].map((candidateRunnerId) =>
-        persistence.transaction(({ scheduler }) =>
+    const batchOffers = [];
+    for (const candidateRunnerId of [
+      firstDeliveryRunner,
+      secondDeliveryRunner,
+    ]) {
+      batchOffers.push(
+        await persistence.transaction(({ scheduler }) =>
           scheduler.acquireTaskDelivery({
             runnerId: candidateRunnerId,
             offerDurationMs: 60_000,
           }),
         ),
-      ),
-    );
+      );
+    }
     expect(batchOffers.every((offer) => offer.state === "acquired")).toBe(true);
     const batchDeliveryIds = batchOffers.flatMap((offer) =>
       offer.state === "acquired" ? [offer.delivery.deliveryId] : [],
