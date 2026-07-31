@@ -454,7 +454,7 @@ measurement evidence, closed failure mapping, and terminal contradictions.
 
 ### Slice 2.9 — durable local event spool
 
-Status: Approved for implementation.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-046.
 
@@ -472,6 +472,10 @@ Detailed plan: `docs/plans/slice-2.9-durable-event-spool.md`.
 Exit: restart and injected-crash tests prove that a closed lifecycle batch is
 either absent or wholly durable, and that acknowledged evidence is never lost
 or regenerated with different envelope identity.
+
+Validation: GitHub Actions run `30644887440` passed the isolated database, API,
+runner, browser, build, and native Linux spool gates. Immutable evidence is at
+`services/runner-local/evidence/native/1785513485110-bbef45b2-ef4d-4bdd-a8cf-7358b8622bb4-spool.json`.
 
 ## Acceptance gates
 

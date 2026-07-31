@@ -1,6 +1,6 @@
 # Slice 2.9 durable local event spool plan
 
-Status: Approved for implementation
+Status: Complete
 
 Date: 2026-07-31
 
@@ -178,3 +178,20 @@ is the exact durable acknowledgement, proving authorized post-ack cleanup.
 7. The spool imports no transport, database, engine, or control-plane module.
 8. `LocalRunnerNotEnabledError` remains the production behavior.
 9. Full workspace and native Linux durability gates pass.
+
+## Validation
+
+Completed on 2026-07-31.
+
+- local formatting, typecheck, lint, unit/adversarial tests, Phase 1 and Phase 2
+  dependency audits, production builds, and low-severity dependency audit
+  passed with no known vulnerabilities;
+- runner-local passed 150 unit/adversarial tests locally, with three
+  database-gated tests skipped;
+- GitHub Actions run `30644887440` passed all 153 runner-local tests against
+  PostgreSQL, the full repository pipeline, and the browser journey;
+- the native Ubuntu probe passed all ten durability, permission, restart,
+  acknowledgement, cleanup, and corruption gates;
+- immutable native evidence is stored at
+  `services/runner-local/evidence/native/1785513485110-bbef45b2-ef4d-4bdd-a8cf-7358b8622bb4-spool.json`;
+- production runner enablement and transport remain explicitly out of scope.

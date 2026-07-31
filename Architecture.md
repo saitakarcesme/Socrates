@@ -1833,6 +1833,20 @@ modes and directory synchronization. `LocalRunnerNotEnabledError` remains in
 force through Slice 2.9; transport, heartbeat coordination, cancellation
 delivery, and the executable runner service are later slices.
 
+Validation amendment, 2026-07-31: GitHub Actions run `30644887440` passed the
+complete Ubuntu quality pipeline, including isolated PostgreSQL integration
+suites, the browser journey, production builds, and the native spool probe on
+Node v22.23.1 as uid 1001. The probe admitted directory synchronization,
+private `0700` directories, private `0600` segment and commit records,
+single-link immutable publication, byte-identical restart replay, monotonic
+acknowledgement, terminal cleanup, and rejection of a missing committed
+segment. Immutable evidence is committed at
+`services/runner-local/evidence/native/1785513485110-bbef45b2-ef4d-4bdd-a8cf-7358b8622bb4-spool.json`.
+Local full-workspace formatting, typecheck, lint, unit/adversarial tests,
+dependency-boundary audits, production builds, and the low-severity dependency
+audit also passed with no known vulnerabilities. This admits ADR-046 and closes
+Slice 2.9. `LocalRunnerNotEnabledError` remains unchanged.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

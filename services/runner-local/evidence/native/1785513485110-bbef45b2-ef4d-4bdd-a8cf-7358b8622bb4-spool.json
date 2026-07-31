@@ -1,0 +1,22 @@
+{
+  "schema": "socrates.runner-spool.native.v1",
+  "recordedAt": "2026-07-31T15:58:05.110Z",
+  "host": {
+    "platform": "linux",
+    "architecture": "x64",
+    "node": "v22.23.1",
+    "uid": 1001
+  },
+  "gates": {
+    "directorySync": true,
+    "rootMode0700": true,
+    "attemptMode0700": true,
+    "segmentMode0600": true,
+    "commitMode0600": true,
+    "segmentSingleLink": true,
+    "exactRestartReplay": true,
+    "monotonicAcknowledgement": true,
+    "terminalCleanup": true,
+    "missingSegmentRejected": true
+  }
+}
