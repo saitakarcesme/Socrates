@@ -66,6 +66,12 @@ mapping tests.
 
 ## Phase 2.1 status
 
-Complete. The next planned work is Slice 2.2's deterministic fake-runner
-vertical slice. Public runner transport remains intentionally absent until its
+Complete. Public runner transport remains intentionally absent until its
 deployment authentication adapter is defined.
+
+## Slice 2.2 fake-runner evidence
+
+The test-only execution-plane adapter passed five tests, including three real
+PostgreSQL vertical journeys: successful claim-to-terminal execution with
+restart replay, sequence-gap recovery, and durable cancellation with restart
+replay. The adapter performed no external execution or I/O.

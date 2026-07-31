@@ -286,7 +286,7 @@ Completed:
 
 Exit: the complete control-plane journey passes without spawning a process.
 
-Implementation status: In progress.
+Implementation status: Complete on 2026-07-31.
 
 Current sub-slice:
 
@@ -294,6 +294,15 @@ Current sub-slice:
 - full claim-to-terminal PostgreSQL journey through scheduler ports
 - explicit synthetic measurement fixture
 - cancellation and restart/replay proofs without process execution
+
+Completed:
+
+- deterministic event IDs and explicit synthetic measurement fixtures
+- full PostgreSQL claim-to-terminal lifecycle through public scheduler ports
+- terminal restart replay without duplicate evidence
+- out-of-order delivery rejection followed by ordered spool recovery
+- durable cancellation observation and cancellation replay after restart
+- no process, filesystem, network, container, browser, or model execution
 
 ### Slice 2.3 — artifact and log boundary
 

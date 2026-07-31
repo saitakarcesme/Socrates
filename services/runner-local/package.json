@@ -13,6 +13,7 @@
     "@socrates/contracts": "workspace:*"
   },
   "devDependencies": {
+    "@socrates/database": "workspace:*",
     "vitest": "^3.2.7"
   }
 }
