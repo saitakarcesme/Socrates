@@ -623,7 +623,7 @@ v3 work-journal completion durability, browser tests, and production builds.
 
 ### Slice 2.16 — durable cancellation policy and one-step lease supervision
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-053.
 
@@ -639,6 +639,10 @@ Detailed plan: `docs/plans/slice-2.16-lease-supervision.md`.
 Exit: migration, PostgreSQL, transport, and runner tests prove cancel policy is
 stable across replay, cannot be runner-selected, and is applied only to the
 exact execution identity returned by the durable claim.
+
+Evidence: implementation commit `0e84b3b`; GitHub Actions run `30655485955`
+passed schema compatibility 9 migration, all PostgreSQL/API/runner
+integrations, native durability probes, Chromium, and production builds.
 
 ## Acceptance gates
 

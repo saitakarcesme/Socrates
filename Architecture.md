@@ -2379,6 +2379,19 @@ loop must treat `stale` as loss of authority and will require its own fail-stop
 design before execution can be enabled. `LocalRunnerNotEnabledError` remains
 unchanged.
 
+Validation amendment, 2026-07-31: implementation commit `0e84b3b` passed
+local formatting, TypeScript, ESLint, all workspace unit tests, Phase 1/2
+dependency-boundary audits, and production builds. GitHub Actions run
+`30655485955` passed schema compatibility 9 migration on PostgreSQL 17, every
+database/API/runner integration, 209 runner-local tests, both Linux native
+durability probes, the Chromium product journey, and all production builds.
+The authenticated transport journey proved that the database-frozen reason,
+grace period, and timestamp reach the exact fenced heartbeat; supervisor tests
+proved exact identity mapping, cancel-only invocation, explicit stale
+classification, error propagation, and serialized calls. This admits ADR-053
+and closes Slice 2.16; heartbeat scheduling, execution, terminal event
+generation, and production runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

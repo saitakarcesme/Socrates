@@ -1,6 +1,6 @@
 # Slice 2.16 durable cancellation policy and lease supervision plan
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -86,3 +86,11 @@ lease duration. It cannot supply or override cancellation policy.
 7. No timer, loop, execution, event generation, or production enablement lands.
 8. Schema migration and all repository, native, browser, build, and CI gates
    pass.
+
+## Evidence
+
+Implementation commit `0e84b3b`; GitHub Actions run `30655485955` passed
+schema compatibility 9 migration on PostgreSQL 17, all database, authenticated
+API, and runner integrations, 209 runner-local tests, native spool and journal
+durability, the Chromium product journey, and production builds. Local
+formatting, type, lint, boundary audit, unit, and build gates also passed.
