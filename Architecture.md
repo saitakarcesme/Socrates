@@ -2277,6 +2277,53 @@ uploaded separate spool and journal evidence artifacts. This admits ADR-051
 and closes Slice 2.14; execution, lease supervision, timers, and cleanup remain
 disabled.
 
+### ADR-052: Only terminal control-plane acknowledgement completes local work
+
+Slice 2.15 closes the lifecycle gap left deliberately by ADR-051. A durable
+claim must block new acquisition while execution or evidence delivery may
+still be outstanding, but it cannot block forever after the control plane has
+accepted the terminal event. Local runtime exit, terminal draft creation,
+spool commit, or an HTTP response observed before durable acknowledgement are
+insufficient completion authority. The only admitted proof is the local event
+spool's recovered terminal state with zero pending events and an
+acknowledgement cursor equal to the committed final sequence.
+
+The work journal gains an immutable completion record after its claim:
+
+```text
+pending_claim -> claimed -> completed
+pending_claim -> rejected(control_plane_conflict)
+```
+
+Completion and rejection remain mutually exclusive. Completion stores the
+delivery key, execution digest, spool attempt key, acknowledged terminal
+sequence, and commit timestamp. It does not copy event payloads or delete the
+claim. The journal validates that the supplied execution is byte-equivalent to
+the durable claim before publishing completion. A second identical completion
+is a replay; conflicting evidence fails closed.
+
+A one-shot `WorkCompletionCoordinator` reads the spool through a narrow port,
+requires `terminal=true`, `pendingEvents=0`, a positive final sequence, and
+`acknowledgedSequence=lastSequence`, then commits completion. The real
+`LocalEventSpool.inspect(execution)` already validates manifest execution
+digest, attempt identity, segment/commit integrity, terminal event position,
+and acknowledgement identity before exposing that state. Incomplete or
+unacknowledged evidence returns an explicit not-ready result and never mutates
+the journal.
+
+`WorkAdmissionCoordinator` treats completed and rejected entries as retained
+history, while pending and claimed entries remain actionable blockers ordered
+by admission time and delivery ID. Therefore a later call may acquire new work
+only after the previous claim has durable terminal acknowledgement and durable
+completion. A crash before completion publication re-evaluates the same
+spool proof; a crash after publication replays local completion without
+network traffic or deletion.
+
+Slice 2.15 does not execute a task, generate lifecycle drafts, send events,
+schedule heartbeats, observe cancellation, delete spool or journal evidence,
+compact retention, or enable a process loop. It only joins two already durable
+truths. `LocalRunnerNotEnabledError` remains unchanged.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

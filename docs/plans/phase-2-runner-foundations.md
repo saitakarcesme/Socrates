@@ -598,6 +598,25 @@ passed 194 runner-local tests, all database/API integrations, native v2 work
 journal rejection durability, native spool durability, browser tests, and
 production builds.
 
+### Slice 2.15 — terminal acknowledgement completion
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-052.
+
+Detailed plan: `docs/plans/slice-2.15-terminal-ack-completion.md`.
+
+- complete claimed work only from recovered terminal spool acknowledgement;
+- append completion without deleting claim, spool, or journal history;
+- keep incomplete evidence blocking new acquisition;
+- let completed/rejected history coexist with later work;
+- keep execution, heartbeat scheduling, cancellation, and cleanup out of
+  scope.
+
+Exit: fault and restart tests prove a claimed item becomes completed only
+after exact terminal acknowledgement, and restart-first admission cannot
+acquire early or remain blocked after durable completion.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
