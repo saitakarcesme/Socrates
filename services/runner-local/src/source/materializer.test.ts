@@ -316,6 +316,23 @@ describe("SourceSnapshotMaterializer", () => {
     await expect(readdir(sourceRoot)).rejects.toThrow();
   });
 
+  it("rejects an aborted attempt before creating source state", async () => {
+    const { artifact, materializer, sourceRoot } = await fixture([]);
+    const controller = new AbortController();
+    controller.abort(new Error("lease lost"));
+
+    await expect(
+      materializer.materialize({
+        artifact,
+        identity,
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject<Partial<SourceSnapshotError>>({
+      code: "cancelled",
+    });
+    await expect(readdir(sourceRoot)).rejects.toThrow();
+  });
+
   it("refuses a populated root without an ownership marker", async () => {
     const { artifact, materializer, sourceRoot } = await fixture([]);
     await mkdir(sourceRoot);

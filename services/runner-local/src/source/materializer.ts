@@ -47,6 +47,7 @@ export type SourceSnapshotLimits = SourcePathLimits &
 export type MaterializeSourceSnapshotInput = Readonly<{
   artifact: VerifiedArtifact;
   identity: SandboxAttemptIdentity;
+  signal?: AbortSignal;
 }>;
 
 export type SourceSnapshotMaterializerOptions = Readonly<{
@@ -80,6 +81,7 @@ export class SourceSnapshotError extends Error {
     readonly code:
       | "archive_invalid"
       | "archive_limit"
+      | "cancelled"
       | "conflict"
       | "filesystem"
       | "identity_mismatch",
@@ -157,6 +159,7 @@ export class SourceSnapshotMaterializer {
   async materialize(
     input: MaterializeSourceSnapshotInput,
   ): Promise<MaterializedSourceSnapshot> {
+    this.#throwIfCancelled(input.signal);
     if (input.identity.runnerId !== this.#runnerId) {
       throw new SourceSnapshotError(
         "identity_mismatch",
@@ -170,6 +173,7 @@ export class SourceSnapshotMaterializer {
       );
     }
     await this.#ensureRoot();
+    this.#throwIfCancelled(input.signal);
     const attemptKey = sandboxAttemptKey(input.identity);
     if (this.#attempts.has(attemptKey)) {
       throw new SourceSnapshotError(
@@ -188,7 +192,9 @@ export class SourceSnapshotMaterializer {
 
     try {
       await mkdir(treeRoot, { recursive: true, mode: 0o700 });
+      this.#throwIfCancelled(input.signal);
       const accounting = await this.#extract(input, treeRoot);
+      this.#throwIfCancelled(input.signal);
       const manifest: SnapshotManifest = Object.freeze({
         schemaVersion: 1,
         deployment: manifestDigest(this.#deploymentId),
@@ -212,7 +218,9 @@ export class SourceSnapshotMaterializer {
         await manifestHandle.close();
       }
       await chmod(treeRoot, 0o555);
+      this.#throwIfCancelled(input.signal);
       await rename(stagingRoot, publishedRoot);
+      this.#throwIfCancelled(input.signal);
       const capability = issueMaterializedSourceSnapshot({
         path: join(publishedRoot, "tree"),
         deploymentId: this.#deploymentId,
@@ -313,6 +321,13 @@ export class SourceSnapshotMaterializer {
     });
     const verifiedSource = async function* () {
       for await (const chunk of source) {
+        if (input.signal?.aborted) {
+          throw new SourceSnapshotError(
+            "cancelled",
+            "Source snapshot materialization was cancelled.",
+            { cause: input.signal.reason },
+          );
+        }
         archiveBytes += chunk.byteLength;
         if (archiveBytes > input.artifact.sizeBytes) {
           throw new SourceSnapshotError(
@@ -330,6 +345,7 @@ export class SourceSnapshotMaterializer {
 
     try {
       for await (const entry of parser) {
+        this.#throwIfCancelled(input.signal);
         entryCount += 1;
         if (entryCount > this.#limits.maximumEntries) {
           throw new SourceSnapshotError(
@@ -373,6 +389,7 @@ export class SourceSnapshotMaterializer {
           await this.#ensureDirectory(destination);
           directories.add(destination);
           for await (const chunk of entry) {
+            this.#throwIfCancelled(input.signal);
             if (chunk.byteLength !== 0) {
               throw new SourceSnapshotError(
                 "archive_invalid",
@@ -403,6 +420,7 @@ export class SourceSnapshotMaterializer {
         let written = 0;
         try {
           for await (const chunk of entry) {
+            this.#throwIfCancelled(input.signal);
             written += chunk.byteLength;
             if (written > size) {
               throw new SourceSnapshotError(
@@ -532,6 +550,15 @@ export class SourceSnapshotMaterializer {
       );
     }
     this.#rootReady = true;
+  }
+
+  #throwIfCancelled(signal?: AbortSignal): void {
+    if (!signal?.aborted) return;
+    throw new SourceSnapshotError(
+      "cancelled",
+      "Source snapshot materialization was cancelled.",
+      { cause: signal.reason },
+    );
   }
 
   async #ensureParents(
