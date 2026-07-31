@@ -842,6 +842,26 @@ correction `5c28746`; GitHub Actions run `30665390494` passed exact
 reconciliation/heartbeat races, authenticated API and runner integrations,
 Linux native work-journal v5, Chromium, and production builds.
 
+### Slice 2.25 — closed local failure evidence policy
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-062.
+
+Detailed plan: `docs/plans/slice-2.25-local-failure-evidence.md`.
+
+- define a closed runner-owned failure-code taxonomy;
+- map each code to fixed redacted terminal evidence;
+- require authenticated cancellation authority for cancellation drafts;
+- keep runtime-reported outcomes on the existing lifecycle adapter path;
+- prohibit transport, spool, acknowledgement, and journal ambiguity from
+  inventing terminal results;
+- keep session composition, execution, persistence, and runner enablement out
+  of scope.
+
+Exit: exhaustive table tests prove every supported local failure produces one
+stable valid draft and every ambiguous post-evidence failure produces none.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

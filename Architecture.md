@@ -2812,6 +2812,41 @@ new acquisition waits for a later call. This admits ADR-061 and closes Slice
 2.24; polling, sandbox execution, invented terminal evidence, cleanup, and
 production runner enablement remain disabled.
 
+### ADR-062: Local failures become evidence only through a closed policy
+
+The future attempt session must turn some locally observed failures into one
+terminal event batch, but arbitrary JavaScript errors are not evidence. Error
+messages may contain host paths, commands, credentials, or unstable library
+text; phase alone is also insufficient to distinguish a task failure from an
+ambiguous delivery outcome. The session must not serialize `Error.message`,
+`cause`, stack traces, or adapter-specific objects.
+
+A pure local failure policy therefore accepts only a closed runner-owned
+failure code, whether execution had durably started, and bounded provenance
+such as elapsed duration. It emits exactly one validated terminal draft with a
+fixed product-authored message and classification. Projection, source,
+image-admission, materialization, request-envelope, sandbox-backend, runtime
+protocol, cleanup, and unexpected local failures map to explicit stable codes.
+Budget classification is used only when a trusted bounded component identifies
+one exact frozen budget dimension. Runtime-reported action, evaluation, and
+budget outcomes continue through ADR-055's lifecycle adapter rather than this
+policy.
+
+Cancellation evidence requires an authenticated server cancellation directive;
+an `AbortSignal`, process shutdown, timeout exception, or missing local resource
+alone cannot authorize `task.cancelled`. The policy validates the directive and
+emits a bounded cancellation draft without retaining its operator-facing
+reason. Transport ambiguity, event rejection, spool corruption/capacity,
+terminal acknowledgement failure, and journal corruption emit no new terminal
+draft because the durable evidence or server outcome may already exist.
+
+The policy is deterministic and has no filesystem, network, clock, sandbox, or
+journal dependency. It does not append to the spool or complete work. A later
+session coordinator supplies its own monotonic duration, persists the returned
+draft through the existing one-segment spool, drains acknowledgements, and only
+then invokes work completion. This slice does not compose or enable that
+session.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
