@@ -719,7 +719,7 @@ durability probes, Chromium, and production builds.
 
 ### Slice 2.20 — startup owned-resource recovery barrier
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-057.
 
@@ -735,6 +735,10 @@ Detailed plan: `docs/plans/slice-2.20-startup-recovery-barrier.md`.
 Exit: ordering and failure-injection tests prove no source cleanup can race a
 stale sandbox mount and no work-facing caller can interpret partial cleanup as
 a successful startup gate.
+
+Evidence: implementation commit `0b7d64e`; GitHub Actions run `30659524149`
+passed 262 runner-local tests, all PostgreSQL/API/runner integrations, native
+durability probes, Chromium, and production builds.
 
 ## Acceptance gates
 

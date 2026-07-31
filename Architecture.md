@@ -2594,6 +2594,18 @@ item can be loaded from the journal and receive a fresh preparation
 coordinator. This slice does not open stores, acquire work, create sessions,
 start heartbeats, execute sandboxes, publish events, or enable the runner.
 
+Validation amendment, 2026-07-31: implementation commit `0b7d64e` passed
+local formatting, TypeScript, ESLint, 262 runner-local tests, all workspace
+tests, Phase 1/2 dependency-boundary audits, and production builds. GitHub
+Actions run `30659524149` passed every PostgreSQL, authenticated API, and
+runner integration, both Linux native durability probes, the Chromium product
+journey, and all builds. Deterministic barrier tests proved strict sandbox-
+before-source ordering, one-shot concurrent replay, retained stage-specific
+failure, rejection of every invalid count class, and immutable exact results.
+This admits ADR-057 and closes Slice 2.20; durable-store composition, work
+admission, attempt sessions, execution, events, and production enablement
+remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

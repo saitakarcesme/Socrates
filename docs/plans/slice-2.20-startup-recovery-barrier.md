@@ -1,6 +1,6 @@
 # Slice 2.20 startup owned-resource recovery barrier
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -76,3 +76,11 @@ mount a source tree. The operations are never parallelized.
 5. No durable state or attempt capability is deleted or reconstructed here.
 6. Work admission, execution, events, and production runner remain disabled.
 7. Full repository, native durability, browser, build, and CI gates pass.
+
+## Evidence
+
+Implementation commit `0b7d64e`; GitHub Actions run `30659524149` passed 262
+runner-local tests, all PostgreSQL/API/runner integrations, both native
+durability probes, the Chromium product journey, and production builds. Local
+format, type, lint, Phase 1/2 boundary audit, workspace test, and build gates
+also passed.
