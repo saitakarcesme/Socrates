@@ -88,6 +88,7 @@ jobs:
           sudo systemctl restart apparmor
           sudo apparmor_status --enabled
           sudo apparmor_status
+          sudo apparmor_parser --replace spikes/oci-engine/apparmor/socrates-sandbox
           if ! grep -q "^${USER}:" /etc/subuid; then
             sudo usermod --add-subuids 100000-165535 "$USER"
           fi
@@ -129,6 +130,21 @@ jobs:
           [[ "$IMAGE" =~ @sha256:[a-f0-9]{64}$ ]]
           docker pull "$IMAGE"
           podman pull "$IMAGE"
+
+      - name: Probe explicit Podman AppArmor confinement
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          podman run --rm \
+            --security-opt apparmor=socrates-sandbox \
+            "$IMAGE" \
+            sh -c '
+              label="$(cat /proc/self/attr/current)"
+              printf "label=%s\n" "$label"
+              test "$label" = "socrates-sandbox (enforce)"
+              ! touch /tmp/socrates-lsm-probe
+            '
 
       - name: Run native comparison
         shell: bash
