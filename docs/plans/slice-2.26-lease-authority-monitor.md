@@ -1,6 +1,6 @@
 # Slice 2.26 fail-stop lease authority monitor
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -75,3 +75,17 @@ directive and never authorizes `task.cancelled` evidence.
 6. No terminal evidence is invented by supervision failure.
 7. Session composition, execution, persistence, and runner enablement remain
    disabled.
+
+## Validation
+
+Implementation commit `c400b14` passed local formatting, TypeScript, ESLint,
+Phase 1/2 dependency-boundary audits, 364 runner-local tests, all workspace
+tests, production builds, and the low-severity dependency audit. Sixteen
+focused monitor tests covered invalid timing policy, immediate-first cadence,
+single-flight heartbeats, stop during wait and in-flight work, cancellation and
+stale races, every uncertainty path, redaction, revocation failure aggregation,
+and sealed replay. Expanded cancellation-scope tests covered bounded local
+policy, abort-before-backend ordering, duplicate joining, policy conflict, and
+authenticated/local termination races. GitHub Actions run `30666995698` passed
+every PostgreSQL, authenticated API, and runner integration, both Linux native
+durability probes, Chromium, and all production builds.

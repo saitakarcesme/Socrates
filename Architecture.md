@@ -2905,6 +2905,22 @@ or process loop. This slice adds the local revocation seam to the existing
 identity-bound cancellation scope and tests it with an injected deterministic
 scheduler, but does not compose or enable a production runner session.
 
+Validation amendment, 2026-07-31: implementation commit `c400b14` passed local
+formatting, TypeScript, ESLint, Phase 1/2 dependency-boundary audits, 364
+runner-local tests, all workspace tests, production builds, and the
+low-severity dependency audit. Sixteen focused monitor tests proved bounded
+configuration, immediate-first and non-overlapping cadence, owner stop during
+wait and in-flight heartbeat, cancellation/stale races, redacted uncertainty,
+revocation failure aggregation, and the absence of wall-clock authority. The
+expanded cancellation-scope suite proved abort-before-stop ordering,
+idempotent local revocation, and first-policy-wins behavior across local and
+authenticated termination. GitHub Actions run `30666995698` passed every
+PostgreSQL, authenticated API, and runner integration, both Linux native
+durability probes, the Chromium product journey, and all production builds.
+This admits ADR-063 and closes Slice 2.26; attempt-session composition,
+execution, evidence persistence, and production runner enablement remain
+disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

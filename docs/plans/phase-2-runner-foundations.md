@@ -869,7 +869,7 @@ durability probes, Chromium, and production builds.
 
 ### Slice 2.26 — fail-stop lease authority monitor
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-063.
 
@@ -889,6 +889,11 @@ Detailed plan: `docs/plans/slice-2.26-lease-authority-monitor.md`.
 Exit: deterministic timer and race tests prove heartbeat calls cannot overlap,
 normal stop cannot discard a response, and every stale or uncertain outcome
 fails local execution closed without producing lifecycle evidence.
+
+Evidence: implementation commit `c400b14`; 16 focused monitor tests and 364
+runner-local tests passed locally with every repository quality gate. GitHub
+Actions run `30666995698` passed every integration suite, both Linux native
+durability probes, Chromium, and production builds.
 
 ## Acceptance gates
 
