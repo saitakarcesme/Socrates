@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 
 import { NerdctlSandboxBackend } from "./backend";
 import { NodeProcessExecutor } from "./process";
@@ -130,7 +131,9 @@ const evidence = {
     durationMs: cancellationDurationMs,
   },
 };
-const evidenceDirectory = resolve("services/runner-local/evidence/native");
+const evidenceDirectory = fileURLToPath(
+  new URL("../../evidence/native/", import.meta.url),
+);
 await mkdir(evidenceDirectory, { recursive: true });
 const evidencePath = resolve(
   evidenceDirectory,
