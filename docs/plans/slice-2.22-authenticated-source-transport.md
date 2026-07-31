@@ -1,6 +1,6 @@
 # Slice 2.22 authenticated fenced source transport
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -99,3 +99,12 @@ Extend `RunnerHttpClient` with an ADR-058-compatible `open` operation. It:
 6. Task schemas and durable task JSON remain unchanged.
 7. Source upload, extraction, execution, and runner enablement remain off.
 8. Full PostgreSQL, API, runner, native, browser, build, and CI gates pass.
+
+## Validation
+
+Implementation commit `94e1a25` and integration-fixture correction `1fd11b8`
+passed local formatting, type, lint, dependency-boundary, workspace-test, and
+production-build gates. GitHub Actions run `30662277227` passed PostgreSQL 17
+migration and integration tests, authenticated API source streaming and
+cancellation revocation, 295 runner-local tests, both Linux native durability
+probes, the Chromium journey, and all production builds.

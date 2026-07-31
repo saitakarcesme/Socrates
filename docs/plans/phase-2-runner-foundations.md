@@ -767,7 +767,7 @@ durability probes, Chromium, and production builds.
 
 ### Slice 2.22 — authenticated fenced source transport
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-059.
 
@@ -784,6 +784,11 @@ Detailed plan: `docs/plans/slice-2.22-authenticated-source-transport.md`.
 Exit: PostgreSQL/API/client integration tests prove credentials alone cannot
 read bytes and stale, drifted, missing, oversized, truncated, or mutated
 sources cannot become resolver authority.
+
+Evidence: implementation commit `94e1a25`, integration-fixture correction
+`1fd11b8`; GitHub Actions run `30662277227` passed schema-version-10 migration,
+all PostgreSQL/API/runner integrations, 295 runner-local tests, native
+durability probes, Chromium, and production builds.
 
 ## Acceptance gates
 

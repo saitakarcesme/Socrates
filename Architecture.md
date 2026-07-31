@@ -2693,6 +2693,20 @@ task creation from repositories, source extraction, attempt sessions, sandbox
 execution, or runner enablement. A later ingestion slice must publish object
 bytes before inserting the immutable catalog row.
 
+Validation amendment, 2026-07-31: implementation commit `94e1a25` plus
+integration-fixture correction `1fd11b8` passed local formatting, TypeScript,
+ESLint, Phase 1/2 dependency-boundary audits, 295 runner-local tests, all
+workspace tests, and production builds. GitHub Actions run `30662277227`
+passed the schema-version-10 PostgreSQL migration, source catalog and
+current-lease authorization integrations, authenticated API byte streaming,
+cancellation-time revocation, both Linux native durability probes, the
+Chromium product journey, and all builds. Adversarial client tests proved
+manual redirect handling, exact media type and length, configured and streamed
+byte limits, truncation/overflow rejection, single consumption, caller abort,
+timeout, and ADR-058 resolver composition. This admits ADR-059 and closes
+Slice 2.22; source ingestion, extraction, attempt-session composition,
+execution, and production runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
