@@ -6,6 +6,7 @@ import {
   eventCursorQuerySchema,
   experimentTaskV1Schema,
   recordObservationCommandSchema,
+  runnerEventAcknowledgementV1Schema,
 } from "./index";
 
 describe("canonical decimal contract", () => {
@@ -139,6 +140,37 @@ describe("event cursor contract", () => {
     expect(
       eventCursorQuerySchema.safeParse({
         after: "9007199254740992",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("runner event acknowledgement contract", () => {
+  const acknowledgement = {
+    version: "1",
+    eventId: "019c1170-8b7a-7a60-b7f8-f35c85d73746",
+    attemptId: "019c1170-8b7a-7a60-b7f8-f35c85d73747",
+    acknowledgedSequence: 4,
+    expectedSequence: 5,
+    receivedAt: "2026-07-31T00:00:10.000Z",
+  };
+
+  it("accepts an exact contiguous wire acknowledgement", () => {
+    expect(
+      runnerEventAcknowledgementV1Schema.safeParse(acknowledgement).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    { expectedSequence: 4 },
+    { acknowledgedSequence: 0, expectedSequence: 1 },
+    { receivedAt: "not-a-timestamp" },
+    { unexpected: true },
+  ])("rejects invalid acknowledgement fields %#", (override) => {
+    expect(
+      runnerEventAcknowledgementV1Schema.safeParse({
+        ...acknowledgement,
+        ...override,
       }).success,
     ).toBe(false);
   });

@@ -51,6 +51,11 @@ versioned JSON schema. It carries `eventId`, `attemptId`, acknowledged and
 expected sequences, and an RFC 3339 `receivedAt` string. This prevents the
 runner from importing the database port's internal `Date` representation.
 
+The append operation accepts one complete lifecycle result per attempt. The
+batch contains exactly one terminal draft in final position, and no later
+segment is permitted. Incremental producers are deferred until they have an
+independent idempotency-key contract.
+
 ## Durable layout
 
 All names below are internally generated beneath a trusted private root:
@@ -60,10 +65,10 @@ root/
   attempts/
     <sha256-attempt-key>/
       manifest.json
+      commit.json
       acknowledgement.json
       segments/
         0000000000000001-0000000000000007.json
-      temporary/
 ```
 
 - The attempt key hashes runner ID, task ID, attempt ID, and fence.
@@ -71,8 +76,11 @@ root/
   SHA-256 digest of canonical `RunnerExecutionV1` bytes.
 - Each segment stores a format version, attempt key, inclusive range, complete
   validated events, and a checksum over canonical segment contents.
+- The immutable commit marker binds the segment filename, checksum, range, and
+  terminal event ID. A successful append requires both segment and marker.
 - The acknowledgement stores the exact control-plane acknowledgement and its
-  corresponding durable event identity.
+  corresponding durable event identity, plus a locally derived terminal
+  tombstone that is not part of the wire contract.
 - Filenames are fixed-width and lexically sortable. Protocol strings never
   become path fragments.
 
@@ -86,13 +94,19 @@ root/
 5. Validate every full V2 envelope and canonicalize the complete segment.
 6. Enforce event-count, segment-byte, attempt-count, and root-byte limits.
 7. Open an exclusive same-directory temporary file, write all bytes, sync it,
-   close it, rename it to the range-derived final name, and sync the directory.
-8. Return only after the final directory entry is durable.
+   close it, publish the immutable final name with an exclusive hard link,
+   unlink the temporary name, and sync the directory.
+8. Publish and sync the immutable commit marker with the same protocol.
+9. Return only after both final directory entries are durable.
 
 An existing final name must contain exactly the same bytes; otherwise the spool
-is corrupt. A crash before rename leaves no segment. A crash after rename leaves
-the whole segment. Internally named temporary files are recoverable debris, not
-evidence.
+is corrupt. A crash before link publication leaves no segment. A crash after
+link publication leaves the whole segment. Internally named temporary files are
+recoverable debris, not evidence.
+
+Recovery publishes a missing marker when exactly one valid closed segment is
+present. A marker without that segment is corruption unless its terminal event
+is the exact durable acknowledgement, proving authorized post-ack cleanup.
 
 ## Acknowledgement protocol
 
@@ -159,7 +173,8 @@ evidence.
 3. Pending iteration is contiguous and begins after the durable cursor.
 4. An accepted or replay acknowledgement cannot delete unacknowledged evidence.
 5. Corruption, identity drift, concurrency, and capacity violations fail closed.
-6. No public API accepts or returns a host path.
+6. No protocol-facing attempt operation accepts or returns a host path; only
+   trusted spool bootstrap accepts the dedicated root.
 7. The spool imports no transport, database, engine, or control-plane module.
 8. `LocalRunnerNotEnabledError` remains the production behavior.
 9. Full workspace and native Linux durability gates pass.

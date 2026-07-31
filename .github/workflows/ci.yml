@@ -82,6 +82,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Validate native runner spool durability
+        run: pnpm --filter @socrates/runner-local test:native-spool
+
       - name: Install Chromium
         run: pnpm --filter @socrates/web exec playwright install --with-deps chromium
 
@@ -90,3 +93,12 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Upload native runner spool evidence
+        if: ${{ always() && hashFiles('services/runner-local/evidence/native/*-spool.json') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runner-spool-native-evidence
+          path: services/runner-local/evidence/native/*-spool.json
+          if-no-files-found: error
+          retention-days: 30

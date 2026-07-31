@@ -8,6 +8,7 @@
     "lint": "eslint src",
     "test:native": "tsx src/oci/native-validation.ts",
     "test:native-runtime": "tsx src/runtime/native-validation.ts",
+    "test:native-spool": "tsx src/spool/native-validation.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -16,7 +17,8 @@
     "@socrates/contracts": "workspace:*",
     "@socrates/evidence-policy": "workspace:*",
     "@socrates/runtime-protocol": "workspace:*",
-    "tar-stream": "3.2.0"
+    "tar-stream": "3.2.0",
+    "zod": "^4.0.10"
   },
   "devDependencies": {
     "@socrates/database": "workspace:*",

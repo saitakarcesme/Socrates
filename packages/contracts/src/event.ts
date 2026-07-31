@@ -232,6 +232,34 @@ export const runnerEventV2Schema = z.discriminatedUnion("type", [
 ]);
 export type RunnerEventV2 = z.infer<typeof runnerEventV2Schema>;
 
+export const runnerEventAcknowledgementV1Schema = z
+  .object({
+    version: z.literal("1"),
+    eventId: entityIdSchema,
+    attemptId: entityIdSchema,
+    acknowledgedSequence: positiveSafeIntegerSchema,
+    expectedSequence: positiveSafeIntegerSchema,
+    receivedAt: z.iso.datetime(),
+  })
+  .strict()
+  .superRefine((acknowledgement, context) => {
+    if (
+      acknowledgement.acknowledgedSequence >= Number.MAX_SAFE_INTEGER ||
+      acknowledgement.expectedSequence !==
+        acknowledgement.acknowledgedSequence + 1
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "expectedSequence must immediately follow acknowledgedSequence.",
+        path: ["expectedSequence"],
+      });
+    }
+  });
+export type RunnerEventAcknowledgementV1 = z.infer<
+  typeof runnerEventAcknowledgementV1Schema
+>;
+
 export const runEventResourceSchema = z
   .object({
     id: entityIdSchema,

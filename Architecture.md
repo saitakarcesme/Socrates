@@ -1772,20 +1772,35 @@ checksums, duplicate or gapped segments, invalid envelopes, and identity
 mismatches make that attempt unreadable; recovery never guesses or silently
 truncates evidence.
 
-Each attempt has an immutable manifest, immutable segment files, a mutable
-acknowledgement record, and an internal temporary directory. The manifest binds
+Each attempt has an immutable manifest, one immutable segment, one immutable
+commit marker, and a mutable acknowledgement record. The manifest binds
 the complete canonical execution digest to the attempt key. A segment contains
 one or more contiguous full envelopes, its inclusive sequence range, and a
 SHA-256 checksum over its canonical contents. A closed lifecycle result is one
 segment, so a crash exposes either the complete event batch or no batch; it
 cannot leave a durable prefix that would require unsafe experiment re-execution
-to reconstruct the missing suffix.
+to reconstruct the missing suffix. Slice 2.9 admits exactly one segment per
+attempt and requires its final draft to be exactly one terminal event. Later
+incremental event producers require a new idempotency key and architecture
+revision; they cannot reuse this batch API implicitly.
 
-Commit writes canonical bytes to a same-directory exclusive temporary file,
-synchronizes the file, atomically renames it to the range-derived final name,
-and synchronizes the parent directory before reporting success. Existing final
-names are compared byte-for-byte and never overwritten. Temporary files left
-before rename are ignored and removed only after their internally generated
+The segment is published before `commit.json`. The commit marker binds the
+segment name, checksum, range, and terminal event ID. Restart repairs the valid
+segment-present/marker-absent state by publishing the derivable marker before
+replay. A marker without its segment is corruption unless the exact terminal
+event is durably acknowledged, in which case it proves intentional post-ack
+cleanup. Append does not report success until both records are durable. This
+distinguishes a never-committed attempt from evidence that disappeared after a
+successful commit.
+
+Immutable publication writes canonical bytes to a same-directory exclusive
+temporary file, synchronizes it, creates the final directory entry with an
+exclusive hard link, removes the temporary name, and synchronizes the parent
+directory before reporting success. Unlike POSIX rename, link publication
+cannot silently replace an existing final segment. Existing final names are
+compared byte-for-byte and never overwritten. The mutable acknowledgement uses
+same-directory temporary write, file sync, atomic rename, and directory sync.
+Temporary files are ignored and removed only after their internally generated
 name and containing attempt have been validated. Segment size, event count,
 attempt count, and total spool bytes are bounded by trusted configuration;
 capacity exhaustion fails before execution can treat evidence as durable.
@@ -1799,6 +1814,9 @@ replacement merely replays an already committed event, which the control plane
 acknowledges idempotently. A crash after it cannot resurrect an older event.
 Duplicate acknowledgements are accepted only when they match the durable
 record exactly; regression, jumps, or conflicting IDs fail closed.
+The local acknowledgement wrapper also records a derived terminal tombstone;
+this is not a wire field. It preserves the no-further-append invariant after a
+fully acknowledged terminal segment is safely removed.
 
 Pending iteration always starts after the durable acknowledgement cursor and
 returns immutable envelopes in strict sequence. A fully acknowledged segment
