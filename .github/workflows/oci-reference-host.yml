@@ -180,6 +180,36 @@ jobs:
               ! touch /tmp/socrates-lsm-probe
             '
 
+      - name: Capture nerdctl inspection semantics
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="socrates-inspect-diagnostic"
+          trap 'nerdctl rm --force "$name" >/dev/null 2>&1 || true' EXIT
+          nerdctl create \
+            --name "$name" \
+            --network none \
+            --ipc private \
+            --cgroupns private \
+            --pull never \
+            --log-driver none \
+            --read-only \
+            --tmpfs /workspace:rw,noexec,nosuid,nodev,size=1048576 \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=262144 \
+            --shm-size 65536 \
+            --user 65534:65534 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --security-opt apparmor=socrates-sandbox \
+            --memory 67108864 \
+            --memory-swap 67108864 \
+            --cpus 0.5 \
+            --pids-limit 32 \
+            "$IMAGE" true
+          nerdctl inspect --mode native "$name" | jq .
+          nerdctl inspect "$name" | jq '.[0].HostConfig'
+
       - name: Run native comparison
         shell: bash
         run: |
