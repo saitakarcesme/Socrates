@@ -15,6 +15,11 @@ export interface SandboxCancellationBackend {
   ): Promise<boolean>;
 }
 
+export type SandboxLocalRevocation = Readonly<{
+  reason: "lease_stale" | "lease_uncertain" | "scheduler_failure";
+  gracePeriodMs: number;
+}>;
+
 export class SandboxCancellationScopeError extends Error {
   constructor(
     readonly code: "identity_mismatch" | "policy_conflict",
@@ -58,11 +63,44 @@ function sameCommand(
   );
 }
 
+function localRevocation(
+  candidate: SandboxLocalRevocation,
+): SandboxLocalRevocation {
+  if (
+    candidate.reason !== "lease_stale" &&
+    candidate.reason !== "lease_uncertain" &&
+    candidate.reason !== "scheduler_failure"
+  ) {
+    throw new RangeError("Local revocation reason is not supported.");
+  }
+  if (
+    !Number.isSafeInteger(candidate.gracePeriodMs) ||
+    candidate.gracePeriodMs < 0 ||
+    candidate.gracePeriodMs > 60_000
+  ) {
+    throw new RangeError("Local revocation grace must be between 0 and 60000.");
+  }
+  return Object.freeze({ ...candidate });
+}
+
+function sameRevocation(
+  left: SandboxLocalRevocation,
+  right: SandboxLocalRevocation,
+): boolean {
+  return (
+    left.reason === right.reason && left.gracePeriodMs === right.gracePeriodMs
+  );
+}
+
+type Termination =
+  | Readonly<{ kind: "cancellation"; command: RunnerCancellationV1 }>
+  | Readonly<{ kind: "revocation"; revocation: SandboxLocalRevocation }>;
+
 export class SandboxCancellationScope implements RunnerCancellationTarget {
   readonly #backend: SandboxCancellationBackend;
   readonly #identity: SandboxAttemptIdentity;
   readonly #controller = new AbortController();
-  #command: RunnerCancellationV1 | undefined;
+  #termination: Termination | undefined;
   #operation: Promise<void> | undefined;
 
   constructor(
@@ -93,8 +131,11 @@ export class SandboxCancellationScope implements RunnerCancellationTarget {
         ),
       );
     }
-    if (this.#command) {
-      if (!sameCommand(command, this.#command)) {
+    if (this.#termination) {
+      if (
+        this.#termination.kind !== "cancellation" ||
+        !sameCommand(command, this.#termination.command)
+      ) {
         return Promise.reject(
           new SandboxCancellationScopeError(
             "policy_conflict",
@@ -105,10 +146,43 @@ export class SandboxCancellationScope implements RunnerCancellationTarget {
       return this.#operation!;
     }
 
-    this.#command = Object.freeze(command);
+    this.#termination = Object.freeze({
+      kind: "cancellation",
+      command: Object.freeze(command),
+    });
     this.#controller.abort();
     this.#operation = (async () => {
       await this.#backend.cancel(this.#identity, command.gracePeriodMs);
+    })();
+    return this.#operation;
+  }
+
+  revoke(candidate: SandboxLocalRevocation): Promise<void> {
+    let revocation: SandboxLocalRevocation;
+    try {
+      revocation = localRevocation(candidate);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    if (this.#termination) {
+      if (
+        this.#termination.kind !== "revocation" ||
+        !sameRevocation(revocation, this.#termination.revocation)
+      ) {
+        return Promise.reject(
+          new SandboxCancellationScopeError(
+            "policy_conflict",
+            "Local revocation conflicts with the first termination policy.",
+          ),
+        );
+      }
+      return this.#operation!;
+    }
+
+    this.#termination = Object.freeze({ kind: "revocation", revocation });
+    this.#controller.abort();
+    this.#operation = (async () => {
+      await this.#backend.cancel(this.#identity, revocation.gracePeriodMs);
     })();
     return this.#operation;
   }

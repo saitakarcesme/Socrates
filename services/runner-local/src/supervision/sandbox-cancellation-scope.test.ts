@@ -168,4 +168,93 @@ describe("SandboxCancellationScope", () => {
     await expect(replay).rejects.toBe(failure);
     expect(cancel).toHaveBeenCalledOnce();
   });
+
+  it("validates local revocation before aborting or touching the backend", async () => {
+    const cancel = vi.fn(async () => true);
+    const scope = new SandboxCancellationScope(execution, { cancel });
+
+    await expect(
+      scope.revoke({ reason: "lease_stale", gracePeriodMs: 60_001 }),
+    ).rejects.toThrow(RangeError);
+    await expect(
+      scope.revoke({
+        reason: "unsupported" as "lease_stale",
+        gracePeriodMs: 0,
+      }),
+    ).rejects.toThrow(RangeError);
+    expect(scope.signal.aborted).toBe(false);
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it("aborts before applying exact local revocation grace", async () => {
+    const observed: { scope?: SandboxCancellationScope } = {};
+    const cancel = vi.fn(async () => {
+      expect(observed.scope?.signal.aborted).toBe(true);
+      return true;
+    });
+    const scope = new SandboxCancellationScope(execution, { cancel });
+    observed.scope = scope;
+
+    await expect(
+      scope.revoke({ reason: "lease_uncertain", gracePeriodMs: 100 }),
+    ).resolves.toBeUndefined();
+    expect(cancel).toHaveBeenCalledWith(
+      {
+        runnerId: execution.lease.runnerId,
+        taskId: execution.lease.taskId,
+        attemptId: execution.lease.attemptId,
+        fence: execution.lease.fence,
+      },
+      100,
+    );
+  });
+
+  it("joins exact local revocation and rejects policy drift", async () => {
+    let settle = () => undefined;
+    const pending = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
+    const cancel = vi.fn(async () => {
+      await pending;
+      return true;
+    });
+    const scope = new SandboxCancellationScope(execution, { cancel });
+    const revocation = {
+      reason: "lease_stale" as const,
+      gracePeriodMs: 0,
+    };
+
+    const first = scope.revoke(revocation);
+    expect(scope.revoke({ ...revocation })).toBe(first);
+    await expect(
+      scope.revoke({ ...revocation, gracePeriodMs: 1 }),
+    ).rejects.toMatchObject({ code: "policy_conflict" });
+    settle();
+    await first;
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("allows only the first authenticated or local termination policy", async () => {
+    const cancellationFirst = new SandboxCancellationScope(execution, {
+      cancel: vi.fn(async () => true),
+    });
+    await cancellationFirst.cancel(command());
+    await expect(
+      cancellationFirst.revoke({
+        reason: "lease_uncertain",
+        gracePeriodMs: 0,
+      }),
+    ).rejects.toMatchObject({ code: "policy_conflict" });
+
+    const revocationFirst = new SandboxCancellationScope(execution, {
+      cancel: vi.fn(async () => true),
+    });
+    await revocationFirst.revoke({
+      reason: "scheduler_failure",
+      gracePeriodMs: 0,
+    });
+    await expect(revocationFirst.cancel(command())).rejects.toMatchObject({
+      code: "policy_conflict",
+    });
+  });
 });

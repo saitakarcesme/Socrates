@@ -27,7 +27,7 @@ export type LeaseSupervisionResult =
 export class LeaseSupervisor {
   readonly #client: RunnerControlPlaneClient;
   readonly #target: RunnerCancellationTarget;
-  readonly #leaseDurationMs: number;
+  readonly leaseDurationMs: number;
   #operationTail: Promise<void> = Promise.resolve();
 
   constructor(options: {
@@ -37,7 +37,7 @@ export class LeaseSupervisor {
   }) {
     this.#client = options.client;
     this.#target = options.target;
-    this.#leaseDurationMs = runnerTaskHeartbeatRequestV1Schema.parse({
+    this.leaseDurationMs = runnerTaskHeartbeatRequestV1Schema.parse({
       version: "1",
       fence: 1,
       leaseDurationMs: options.leaseDurationMs,
@@ -60,7 +60,7 @@ export class LeaseSupervisor {
             request: {
               version: "1",
               fence: lease.fence,
-              leaseDurationMs: this.#leaseDurationMs,
+              leaseDurationMs: this.leaseDurationMs,
             },
           },
           signal,
