@@ -691,6 +691,28 @@ Evidence: implementation commit `0c3a925`; GitHub Actions run `30657580224`
 passed 232 runner-local tests, all PostgreSQL/API/runner integrations, native
 durability probes, Chromium, and production builds.
 
+### Slice 2.19 — owned attempt preparation
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-056.
+
+Detailed plan: `docs/plans/slice-2.19-attempt-preparation.md`.
+
+- bind one coordinator to one frozen claimed execution;
+- project before I/O, then resolve the exact source artifact, admit the exact
+  image, and materialize the exact source identity;
+- share one preparation result/failure and one authoritative cancellation
+  signal across duplicate callers;
+- compensate every post-materialization failure and deduplicate explicit
+  release without hiding cleanup uncertainty;
+- keep runtime-request materialization, sandbox execution, global startup
+  recovery, events, completion, and runner enablement out of scope.
+
+Exit: adversarial tests prove no identity, image, source, cancellation, or
+cleanup drift can escape the coordinator and restart reconstruction relies
+only on durable execution identity, never serialized local capabilities.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

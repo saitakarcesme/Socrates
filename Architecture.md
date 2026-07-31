@@ -2498,6 +2498,52 @@ This admits ADR-055 and closes Slice 2.18; materialization coordination,
 execution, supervision timing, event generation, and production enablement
 remain disabled.
 
+### ADR-056: Attempt preparation is one owned, compensating session
+
+Slice 2.19 defines the first side-effecting consumer of the frozen execution
+plan. Image admission, source-artifact resolution, and source materialization
+cannot be left as unrelated calls in a future session loop: cancellation or a
+failure between those calls could leak a source tree, accept a capability for
+the wrong task, or allow a second caller to prepare the same attempt with
+different authority.
+
+An `AttemptPreparationCoordinator` is therefore bound at construction to one
+validated `RunnerExecutionV1`. It projects the execution before any I/O, then
+resolves the exact `(snapshotId, digest)` through a narrow trusted
+source-artifact port, admits the exact image digest and architecture, and
+materializes the source for the exact lease identity. Every returned opaque
+capability is revalidated against the frozen execution before it can leave the
+coordinator. The coordinator has no ambient configuration or fallback image,
+source, identity, or budget.
+
+Preparation is a one-shot process-local operation. Concurrent and later calls
+share the first preparation promise; a failure is retained rather than causing
+an implicit retry with potentially changed local state. The first caller's
+cancellation signal is authoritative. The signal is checked before I/O and at
+every awaited boundary. Cooperating ports receive that same signal, but a
+later caller cannot replace it. If cancellation or validation fails after a
+source capability has been issued, the coordinator releases that exact source
+before rejecting. Cleanup failure is surfaced as cleanup uncertainty and is
+never converted into successful preparation.
+
+The prepared result is immutable and owns exactly one materialized source.
+Release is explicit, idempotent, and concurrency-deduplicated; release failure
+is retained and replayed. Image admission remains catalog-owned and
+process-cached, so it has no per-attempt release. Runtime-request
+materialization remains executor-owned because its existing `finally` block is
+the narrowest correct lifetime. This slice does not start a sandbox, create a
+heartbeat timer, translate runtime frames, publish evidence, complete work, or
+enable the production runner.
+
+Opaque image, artifact, and source capabilities are intentionally not durable
+and are never serialized into the work journal. On runner startup, the global
+owner must recover stale sandbox and source resources before admitting session
+work. A claimed execution recovered from the durable journal receives a new
+preparation coordinator, which re-projects, re-resolves, re-admits, and
+re-materializes from the same frozen identities. Per-attempt preparation must
+not call global recovery because doing so could delete another live session's
+owned resources.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
