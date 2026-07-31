@@ -1328,6 +1328,16 @@ rootful daemon, load policy, pull an image, or fall back to Docker or Podman.
 A failed or stale attestation makes the backend unavailable and every
 execution request fails before container creation.
 
+The unprivileged runner is not assumed to have permission to enumerate the
+kernel's complete AppArmor profile set. Host discovery therefore proves that
+AppArmor is enabled, then the backend performs a deep attestation with the
+admitted image before starting task work: it creates the fixed sandbox,
+verifies its native OCI spec, starts a fixed no-shell probe, requires the exact
+`socrates-sandbox (enforce)` process label, and requires the profile-specific
+write denial. That proof is cached only for the same admitted image, resource
+profile, engine readiness interval, and runner process. Failure invalidates
+readiness and prevents the task sandbox from starting.
+
 Every sandbox has a runner-derived opaque execution key and exact ownership
 labels containing runner, task, attempt, and fence identity digests. Container
 names never contain raw protocol identifiers. Creation uses the digest-pinned

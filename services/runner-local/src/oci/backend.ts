@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   createSandboxOwnership,
   ownershipFilterArguments,
@@ -126,6 +128,7 @@ export class NerdctlSandboxBackend {
   private readonly maximumExecutionOutputBytes: number;
   private readonly now: () => number;
   private readonly active = new Map<string, ActiveSandbox>();
+  private readonly profileAttestations = new Map<string, number>();
   private readiness: { value: SandboxReadiness; expiresAt: number } | undefined;
 
   constructor(
@@ -150,6 +153,7 @@ export class NerdctlSandboxBackend {
 
   invalidateReadiness(): void {
     this.readiness = undefined;
+    this.profileAttestations.clear();
   }
 
   async attest(): Promise<SandboxReadiness> {
@@ -198,17 +202,10 @@ export class NerdctlSandboxBackend {
   }
 
   async execute(input: SandboxExecution): Promise<SandboxExecutionResult> {
-    const key = sandboxAttemptKey(input.identity);
     if (input.identity.runnerId !== this.options.runnerId) {
       throw new SandboxBackendError(
         "identity_mismatch",
         "Attempt runner does not own this backend.",
-      );
-    }
-    if (this.active.has(key)) {
-      throw new SandboxBackendError(
-        "conflict",
-        "This attempt already owns an active sandbox.",
       );
     }
     const readiness = await this.attest();
@@ -216,6 +213,73 @@ export class NerdctlSandboxBackend {
       throw new SandboxBackendError(
         "image_mismatch",
         "Admitted image architecture does not match the attested host.",
+      );
+    }
+    await this.ensureProfileAttested(input.image, input.profile);
+    return this.executePrepared(input);
+  }
+
+  private profileAttestationKey(
+    image: AdmittedSandboxImage,
+    profile: SandboxResourceProfile,
+  ): string {
+    return `${image.digest}:${JSON.stringify(profile)}`;
+  }
+
+  private async ensureProfileAttested(
+    image: AdmittedSandboxImage,
+    profile: SandboxResourceProfile,
+  ): Promise<void> {
+    const attestationKey = this.profileAttestationKey(image, profile);
+    if ((this.profileAttestations.get(attestationKey) ?? 0) > this.now())
+      return;
+
+    const result = await this.executePrepared({
+      identity: {
+        runnerId: this.options.runnerId,
+        taskId: randomUUID(),
+        attemptId: randomUUID(),
+        fence: 1,
+      },
+      image,
+      profile,
+      command: image.profileProbe,
+    });
+    let proof: JsonObject;
+    try {
+      proof = object(JSON.parse(result.stdout) as unknown);
+    } catch {
+      this.invalidateReadiness();
+      throw new SandboxBackendError(
+        "engine",
+        "AppArmor enforcement probe returned invalid JSON.",
+      );
+    }
+    if (
+      result.exitCode !== 0 ||
+      proof["label"] !== "socrates-sandbox (enforce)" ||
+      proof["denied"] !== true
+    ) {
+      this.invalidateReadiness();
+      throw new SandboxBackendError(
+        "engine",
+        "AppArmor enforcement probe did not prove the required label and denial.",
+      );
+    }
+    this.profileAttestations.set(
+      attestationKey,
+      this.now() + this.readinessTtlMs,
+    );
+  }
+
+  private async executePrepared(
+    input: SandboxExecution,
+  ): Promise<SandboxExecutionResult> {
+    const key = sandboxAttemptKey(input.identity);
+    if (this.active.has(key)) {
+      throw new SandboxBackendError(
+        "conflict",
+        "This attempt already owns an active sandbox.",
       );
     }
     const ownership = createSandboxOwnership(

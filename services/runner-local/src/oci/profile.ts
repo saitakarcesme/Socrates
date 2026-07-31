@@ -16,11 +16,16 @@ export type SandboxCommand = Readonly<{
   arguments: readonly string[];
 }>;
 
+const admittedSandboxImageBrand: unique symbol = Symbol(
+  "socrates.admittedSandboxImage",
+);
+
 export type AdmittedSandboxImage = Readonly<{
   reference: string;
   digest: string;
   architecture: "amd64" | "arm64";
-  readonly __admittedSandboxImage: unique symbol;
+  profileProbe: SandboxCommand;
+  [admittedSandboxImageBrand]: true;
 }>;
 
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
@@ -54,12 +59,14 @@ export function assertAdmittedImage(
   image: AdmittedSandboxImage,
 ): asserts image is AdmittedSandboxImage {
   if (
+    image[admittedSandboxImageBrand] !== true ||
     !digestPattern.test(image.digest) ||
     !imageReferencePattern.test(image.reference) ||
     !image.reference.endsWith(`@${image.digest}`)
   ) {
     throw new TypeError("Admitted image must be a digest-pinned reference.");
   }
+  commandArguments(image.profileProbe);
 }
 
 export function unsafeCreateAdmittedImageForTesting(
@@ -67,9 +74,27 @@ export function unsafeCreateAdmittedImageForTesting(
   architecture: "amd64" | "arm64",
 ): AdmittedSandboxImage {
   const digest = reference.slice(reference.lastIndexOf("@") + 1);
-  const image = { reference, digest, architecture };
-  assertAdmittedImage(image as AdmittedSandboxImage);
-  return Object.freeze(image) as AdmittedSandboxImage;
+  const image: AdmittedSandboxImage = {
+    reference,
+    digest,
+    architecture,
+    profileProbe: Object.freeze({
+      executable: "/usr/local/bin/node",
+      arguments: Object.freeze([
+        "-e",
+        [
+          "const fs=require('node:fs')",
+          "const label=fs.readFileSync('/proc/self/attr/current','utf8').trim()",
+          "let denied=false",
+          "try{fs.writeFileSync('/tmp/socrates-lsm-probe','probe')}catch(error){denied=error?.code==='EACCES'}",
+          "process.stdout.write(JSON.stringify({label,denied}))",
+        ].join(";"),
+      ]),
+    }),
+    [admittedSandboxImageBrand]: true,
+  };
+  assertAdmittedImage(image);
+  return Object.freeze(image);
 }
 
 function commandArguments(command: SandboxCommand): readonly string[] {

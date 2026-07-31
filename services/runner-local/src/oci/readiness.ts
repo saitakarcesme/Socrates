@@ -9,7 +9,6 @@ export type HostReadinessProbe = Readonly<{
   uid: number | undefined;
   cgroupControllers: readonly string[];
   appArmorEnabled: boolean;
-  appArmorProfiles: string;
 }>;
 
 export type SandboxReadiness = Readonly<{
@@ -82,17 +81,15 @@ async function readable(path: string): Promise<string> {
 
 export class NodeHostReadinessInspector implements HostReadinessInspector {
   async inspect(): Promise<HostReadinessProbe> {
-    const [controllers, appArmorEnabled, appArmorProfiles] = await Promise.all([
+    const [controllers, appArmorEnabled] = await Promise.all([
       readable("/sys/fs/cgroup/cgroup.controllers"),
       readable("/sys/module/apparmor/parameters/enabled"),
-      readable("/sys/kernel/security/apparmor/profiles"),
     ]);
     return {
       platform: process.platform,
       uid: process.getuid?.(),
       cgroupControllers: controllers.trim().split(/\s+/).filter(Boolean),
       appArmorEnabled: appArmorEnabled.trim().toLowerCase() === "y",
-      appArmorProfiles,
     };
   }
 }
@@ -152,7 +149,7 @@ export class NerdctlReadinessVerifier implements ReadinessVerifier {
     if (host.platform !== "linux") failures.push("host is not Linux");
     if (host.uid === undefined || host.uid === 0)
       failures.push("runner is not unprivileged");
-    if (!clientVersion || !/^2\.3\.\d+(?:[-+].*)?$/.test(clientVersion))
+    if (!clientVersion || !/^v?2\.3\.\d+(?:[-+].*)?$/.test(clientVersion))
       failures.push("nerdctl is not in the selected 2.3.x family");
     if (!serverVersion) failures.push("containerd server version is absent");
     if (!hostArchitecture) failures.push("host architecture is unsupported");
@@ -177,8 +174,6 @@ export class NerdctlReadinessVerifier implements ReadinessVerifier {
       failures.push("seccomp is absent");
     }
     if (!host.appArmorEnabled) failures.push("AppArmor is disabled");
-    if (!/^socrates-sandbox \(enforce\)$/m.test(host.appArmorProfiles))
-      failures.push("socrates-sandbox profile is not enforcing");
     if (
       inspectHelp.exitCode !== 0 ||
       !inspectHelp.stdout.includes("--mode") ||
@@ -190,7 +185,7 @@ export class NerdctlReadinessVerifier implements ReadinessVerifier {
 
     return Object.freeze({
       checkedAt: this.now().toISOString(),
-      nerdctlVersion: clientVersion!,
+      nerdctlVersion: clientVersion!.replace(/^v/, ""),
       serverVersion: serverVersion!,
       architecture: hostArchitecture!,
       cgroupVersion: "2",

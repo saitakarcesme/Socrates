@@ -62,15 +62,17 @@ Before any create operation, one attestation must prove:
 3. `nerdctl info` reports rootless containerd.
 4. cgroup v2 is active and CPU, memory, and PID controllers are delegated.
 5. seccomp and AppArmor are available.
-6. the `socrates-sandbox` profile is loaded in enforce mode.
-7. a harmless, already-present admitted fixture can be created and inspected
-   through `inspect --mode native` when the native workflow requests the deep
-   probe.
+6. a harmless, already-present admitted image can be created and inspected
+   through `inspect --mode native`.
+7. a fixed in-image probe observes `socrates-sandbox (enforce)` and the
+   profile-specific write denial before task work starts.
 
 The attestation result contains structured facts and a timestamp. It is valid
 only for a short trusted configuration interval and is invalidated by process
 errors that indicate loss of engine connectivity or enforcement support.
-Readiness never installs, starts, pulls, or modifies host policy.
+The unprivileged runner need not enumerate the kernel's full profile list;
+actual sandbox enforcement is the proof. Readiness never installs, pulls, or
+modifies host policy.
 
 ## Fixed sandbox construction
 

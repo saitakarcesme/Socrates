@@ -16,7 +16,7 @@ class ReadinessProcesses implements ProcessExecutor {
     if (request.arguments[0] === "version") {
       return successfulResult(
         JSON.stringify({
-          Client: { Version: "2.3.1" },
+          Client: { Version: "v2.3.1" },
           Server: { Version: "2.1.4" },
         }),
       );
@@ -50,7 +50,6 @@ const passingHost: HostReadinessProbe = {
   uid: 1_001,
   cgroupControllers: ["cpu", "memory", "pids"],
   appArmorEnabled: true,
-  appArmorProfiles: "socrates-sandbox (enforce)\n",
 };
 
 describe("nerdctl readiness", () => {
@@ -84,7 +83,6 @@ describe("nerdctl readiness", () => {
         uid: 0,
         cgroupControllers: [],
         appArmorEnabled: false,
-        appArmorProfiles: "",
       }),
     );
 
@@ -99,7 +97,6 @@ describe("nerdctl readiness", () => {
         "pids cgroup controller is absent",
         "containerd is not rootless",
         "AppArmor is disabled",
-        "socrates-sandbox profile is not enforcing",
       ]),
     );
   });

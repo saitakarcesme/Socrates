@@ -28,18 +28,44 @@ class PassingReadiness implements ReadinessVerifier {
 
 class LifecycleProcesses implements ProcessExecutor {
   readonly requests: ProcessRequest[] = [];
+  private compatibleInspection = "";
+  private starts = 0;
 
   async run(request: ProcessRequest): Promise<ProcessResult> {
     this.requests.push(request);
     const command = request.arguments[0];
-    if (command === "create") return successfulResult();
+    if (command === "create") {
+      const nameIndex = request.arguments.indexOf("--name");
+      const labels: Record<string, string> = {};
+      for (let index = 0; index < request.arguments.length; index += 1) {
+        if (request.arguments[index] !== "--label") continue;
+        const label = request.arguments[index + 1] ?? "";
+        const separator = label.indexOf("=");
+        labels[label.slice(0, separator)] = label.slice(separator + 1);
+      }
+      this.compatibleInspection = JSON.stringify({
+        Name: request.arguments[nameIndex + 1],
+        Image: fixtureImage.digest,
+        Config: { Image: fixtureImage.reference, Labels: labels },
+      });
+      return successfulResult();
+    }
     if (command === "inspect" && request.arguments.includes("--mode")) {
       return successfulResult(fixtureNativeInspection());
     }
     if (command === "inspect") {
-      return successfulResult(fixtureCompatibleInspection(deploymentId));
+      return successfulResult(this.compatibleInspection);
     }
     if (command === "start") {
+      this.starts += 1;
+      if (this.starts === 1) {
+        return successfulResult(
+          JSON.stringify({
+            label: "socrates-sandbox (enforce)",
+            denied: true,
+          }),
+        );
+      }
       return successfulResult("ok", { durationMs: 17 });
     }
     if (command === "rm") return successfulResult();
@@ -98,8 +124,13 @@ describe("nerdctl sandbox backend", () => {
       "inspect",
       "start",
       "rm",
+      "create",
+      "inspect",
+      "inspect",
+      "start",
+      "rm",
     ]);
-    expect(processes.requests[2]?.arguments).toEqual([
+    expect(processes.requests[7]?.arguments).toEqual([
       "inspect",
       "--mode",
       "native",
@@ -151,17 +182,43 @@ describe("nerdctl sandbox backend", () => {
     const started = deferred<void>();
     const execution = deferred<ProcessResult>();
     const requests: ProcessRequest[] = [];
+    let compatibleInspection = "";
+    let starts = 0;
     const processes: ProcessExecutor = {
       async run(request) {
         requests.push(request);
         const command = request.arguments[0];
-        if (command === "create") return successfulResult();
+        if (command === "create") {
+          const nameIndex = request.arguments.indexOf("--name");
+          const labels: Record<string, string> = {};
+          for (let index = 0; index < request.arguments.length; index += 1) {
+            if (request.arguments[index] !== "--label") continue;
+            const label = request.arguments[index + 1] ?? "";
+            const separator = label.indexOf("=");
+            labels[label.slice(0, separator)] = label.slice(separator + 1);
+          }
+          compatibleInspection = JSON.stringify({
+            Name: request.arguments[nameIndex + 1],
+            Image: fixtureImage.digest,
+            Config: { Image: fixtureImage.reference, Labels: labels },
+          });
+          return successfulResult();
+        }
         if (command === "inspect" && request.arguments.includes("--mode")) {
           return successfulResult(fixtureNativeInspection());
         }
         if (command === "inspect")
-          return successfulResult(fixtureCompatibleInspection(deploymentId));
+          return successfulResult(compatibleInspection);
         if (command === "start") {
+          starts += 1;
+          if (starts === 1) {
+            return successfulResult(
+              JSON.stringify({
+                label: "socrates-sandbox (enforce)",
+                denied: true,
+              }),
+            );
+          }
           started.resolve();
           return execution.promise;
         }
