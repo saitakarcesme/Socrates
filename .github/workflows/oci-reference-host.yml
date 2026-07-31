@@ -168,6 +168,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          trap 'status=$?; echo "Runtime image preparation failed at line ${LINENO}: ${BASH_COMMAND}" >&2; nerdctl images >&2 || true; exit "$status"' ERR
           pnpm --filter @socrates/task-runtime build
           manifest="services/task-runtime/dist/build-identity.json"
           runtime_build_digest="$(jq -er '.runtimeBuildDigest' "$manifest")"
