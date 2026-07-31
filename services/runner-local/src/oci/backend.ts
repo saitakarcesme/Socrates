@@ -439,16 +439,29 @@ export class NerdctlSandboxBackend {
         sourcePath,
       );
 
-      const result = await this.run(
-        ["start", "--attach", ownership.containerName],
-        {
+      let result: ProcessResult;
+      if (input.stdin) {
+        await this.requireSuccess(
+          ["start", ownership.containerName],
+          "nerdctl start",
+        );
+        result = await this.run(["attach", ownership.containerName], {
           timeoutMs: this.executionTimeoutMs,
           maximumOutputBytes: this.maximumExecutionOutputBytes,
           stdin: input.stdin,
           maximumInputBytes: input.maximumInputBytes,
           signal: input.signal,
-        },
-      );
+        });
+      } else {
+        result = await this.run(
+          ["start", "--attach", ownership.containerName],
+          {
+            timeoutMs: this.executionTimeoutMs,
+            maximumOutputBytes: this.maximumExecutionOutputBytes,
+            signal: input.signal,
+          },
+        );
+      }
       if (result.exitCode === null) {
         throw new SandboxBackendError(
           "engine",

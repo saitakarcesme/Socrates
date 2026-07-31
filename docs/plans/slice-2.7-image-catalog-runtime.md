@@ -82,6 +82,12 @@ close. A second frame or bytes following the first frame in the same delivered
 chunk fail closed. Later writes are outside the ABI and the guarded runner never
 performs them.
 
+After create and native-spec verification, stdin-bearing executions use a
+detached `nerdctl start` followed by a bounded `nerdctl attach`; nerdctl's
+`start --attach` path does not forward stdin. The fixed runtime remains inert
+and silent until the complete request frame arrives. Handshake and other
+stdin-free invocations keep the direct `start --attach` path.
+
 The maximum request is fixed and checked before create. The canonical request
 contains:
 

@@ -77,8 +77,11 @@ class LifecycleProcesses implements ProcessExecutor {
           }),
         );
       }
-      return successfulResult("ok", { durationMs: 17 });
+      return request.arguments.includes("--attach")
+        ? successfulResult("ok", { durationMs: 17 })
+        : successfulResult();
     }
+    if (command === "attach") return successfulResult("ok", { durationMs: 17 });
     if (command === "rm") return successfulResult();
     throw new Error(`Unexpected command ${String(command)}.`);
   }
@@ -209,7 +212,7 @@ describe("nerdctl sandbox backend", () => {
     ]);
   });
 
-  it("accepts bounded stdin only through an interactive attached sandbox", async () => {
+  it("starts an interactive sandbox before attaching bounded stdin", async () => {
     const processes = new LifecycleProcesses();
     const { value } = backend(processes);
     const stdin = Uint8Array.from([0, 1, 2, 255]);
@@ -228,10 +231,19 @@ describe("nerdctl sandbox backend", () => {
     const starts = processes.requests.filter(
       (request) => request.arguments[0] === "start",
     );
+    const attaches = processes.requests.filter(
+      (request) => request.arguments[0] === "attach",
+    );
     expect(creates[0]?.arguments).not.toContain("--interactive");
     expect(creates[1]?.arguments).toContain("--interactive");
     expect(starts[0]?.stdin).toBeUndefined();
-    expect(starts[1]).toMatchObject({
+    expect(starts[1]?.arguments).toEqual([
+      "start",
+      createSandboxOwnership(deploymentId, fixtureIdentity).containerName,
+    ]);
+    expect(starts[1]?.stdin).toBeUndefined();
+    expect(attaches).toHaveLength(1);
+    expect(attaches[0]).toMatchObject({
       stdin,
       maximumInputBytes: stdin.byteLength,
     });

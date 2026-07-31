@@ -1593,6 +1593,16 @@ exactly one buffer, and never forwards an untrusted stream. The runtime waits
 for that one complete frame, rejects any coalesced second frame or trailing
 bytes, and begins work immediately without waiting for attach-stream closure.
 
+Nerdctl does not forward stdin through `start --attach`. For a stdin-bearing
+runtime invocation, the guarded backend therefore completes create and native
+inspection, starts the container detached, and then invokes `nerdctl attach`
+with the bounded request. The fixed runtime emits no output and performs no
+work before the complete frame arrives, so this narrow start-to-attach window
+cannot lose protocol output. Invocations without stdin retain the single
+`start --attach` path. Cancellation continues to target the already-recorded
+container identity and causes the attach process to terminate with the
+container.
+
 For every guarded container invocation, the backend maps the authorized outer
 command executable to nerdctl's explicit `--entrypoint` option and places only
 its argument array after the image content address. Image configuration therefore
