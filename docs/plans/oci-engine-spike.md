@@ -166,6 +166,12 @@ therefore measures Docker rather than presuming it can pass; failure of its
 sandbox LSM gate is expected to eliminate it if no supported alternative LSM
 is active. The policy is not weakened to keep every candidate eligible.
 
+AppArmor discovery and enforcement are measured separately. Trusted host
+provisioning loads the repository's versioned `socrates-sandbox` profile before
+the unprivileged engines run. A candidate must accept that profile explicitly,
+report the exact workload label, and deny the profile-specific write probe.
+The runner itself never receives permission to load or replace host policy.
+
 ## Reference-host automation
 
 The manual-only GitHub Actions workflow uses a fresh `ubuntu-24.04` VM, runs

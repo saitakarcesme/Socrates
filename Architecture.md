@@ -1234,6 +1234,15 @@ unsupported in rootless mode, so rootless Docker is expected to fail the
 sandbox LSM gate unless a different supported host LSM is proven. This is a
 selection result, not permission to weaken the policy.
 
+Engine metadata is discovery evidence, not the final LSM proof. On an AppArmor
+host, the reference-host operator may preload the versioned
+`socrates-sandbox` profile before the unprivileged engine starts. A candidate
+still passes only when it accepts that profile explicitly, the workload reports
+that exact label, and an otherwise writable probe path is denied by the
+profile. A non-empty label alone is insufficient. The production host must
+load the reviewed profile during trusted provisioning; the runner process
+never receives profile-loading authority.
+
 A disposable, dedicated Ubuntu virtual machine is an acceptable reference-host
 class when the workflow runs directly on that VM, not inside a job container,
 and the harness observes its Linux kernel, systemd cgroup v2 delegation, user
