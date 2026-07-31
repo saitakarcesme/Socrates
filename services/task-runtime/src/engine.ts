@@ -44,6 +44,8 @@ type CommandExecution = Readonly<{
   stdout: Uint8Array;
 }>;
 
+export type RuntimeCompletionStatus = "failed" | "succeeded";
+
 export class TaskRuntimeEngine {
   readonly #workspace: RuntimeWorkspacePreparation;
   readonly #process: RuntimeProcessExecutor;
@@ -68,13 +70,16 @@ export class TaskRuntimeEngine {
     this.#now = options.now ?? performance.now.bind(performance);
   }
 
-  async execute(input: RuntimeRequest, sink: RuntimeFrameSink): Promise<void> {
+  async execute(
+    input: RuntimeRequest,
+    sink: RuntimeFrameSink,
+  ): Promise<RuntimeCompletionStatus> {
     let request: RuntimeRequest;
     try {
       request = runtimeRequestSchema.parse(input);
     } catch {
       this.#fail(sink, "invalid_request", "Runtime request is invalid.");
-      return;
+      return "failed";
     }
 
     const startedAt = this.#now();
@@ -89,7 +94,7 @@ export class TaskRuntimeEngine {
         "source_copy_failed",
         "Runtime source could not be prepared.",
       );
-      return;
+      return "failed";
     }
 
     let remainingOutputBytes = request.budget.outputBytes;
@@ -106,9 +111,11 @@ export class TaskRuntimeEngine {
           startedAt,
         ),
       });
-      if (!execution) return;
+      if (!execution) return "failed";
       remainingOutputBytes -= execution.result.outputBytes;
-      if (!this.#requireSuccess(execution.result, sink, "action")) return;
+      if (!this.#requireSuccess(execution.result, sink, "action")) {
+        return "failed";
+      }
     }
 
     const measurementOutputLimit = Math.min(
@@ -126,11 +133,14 @@ export class TaskRuntimeEngine {
         startedAt,
       ),
     });
-    if (!measurement) return;
-    if (!this.#requireSuccess(measurement.result, sink, "measurement")) return;
+    if (!measurement) return "failed";
+    if (!this.#requireSuccess(measurement.result, sink, "measurement")) {
+      return "failed";
+    }
 
     this.#writeMeasurementResult(sink, measurement.stdout);
     this.#write(sink, { type: "runtime.completed", status: "succeeded" });
+    return "succeeded";
   }
 
   async #executeCommand(input: {

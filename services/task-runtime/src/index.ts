@@ -1,5 +1,16 @@
 export { TaskRuntimeEngine } from "./engine";
-export type { RuntimeFrameSink, TaskRuntimeEngineOptions } from "./engine";
+export type {
+  RuntimeCompletionStatus,
+  RuntimeFrameSink,
+  TaskRuntimeEngineOptions,
+} from "./engine";
+export { runTaskRuntime } from "./main";
+export {
+  maximumRuntimeFrameBytes,
+  maximumRuntimeRequestBytes,
+  TaskRuntimeProgram,
+} from "./program";
+export { NodeRuntimeFrameWriter } from "./writer";
 export { NodeRuntimeProcessExecutor, RuntimeProcessError } from "./process";
 
 export type {

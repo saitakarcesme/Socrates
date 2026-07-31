@@ -109,6 +109,11 @@ opens a network control channel, or writes outside `/workspace` and `/tmp`.
 Outer cgroups, AppArmor, seccomp, wall timeout, cancellation, and cleanup remain
 authoritative.
 
+The production entrypoint is one deterministic bundle. A two-pass build hashes
+the placeholder-bearing bundle, embeds that digest into the final bundle, and
+emits a matching build manifest for image assembly. Runtime argv and environment
+cannot select or replace the handshake build identity.
+
 ## Runtime output
 
 Every frame is:

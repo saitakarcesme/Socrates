@@ -7,15 +7,16 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node build.mjs",
     "lint": "eslint src",
-    "test": "vitest run",
+    "test": "pnpm build && vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@socrates/runtime-protocol": "workspace:*"
   },
   "devDependencies": {
+    "esbuild": "^0.25.12",
     "vitest": "^3.2.7"
   }
 }

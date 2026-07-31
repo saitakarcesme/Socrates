@@ -1552,6 +1552,13 @@ process-local `AdmittedSandboxImage` capability. Only the catalog issues it;
 task protocol fields and structural lookalikes fail the OCI backend's runtime
 capability check.
 
+The runtime build identity is embedded, not accepted through argv or the
+environment. Its deterministic two-pass bundle build first produces bytes with
+a fixed digest placeholder, hashes those bytes, then rebuilds with that digest
+embedded and writes the same value to a build manifest used by image assembly.
+This is a reproducible ABI build cross-check, not image authorization: the
+catalog must still pin and verify the OCI manifest and configuration digests.
+
 `socrates.task-runtime.v1` is the only executable entrypoint for task work. The
 outer runner does not place a declared command directly in nerdctl argv. It
 creates the container with interactive stdin but no terminal, starts the fixed
