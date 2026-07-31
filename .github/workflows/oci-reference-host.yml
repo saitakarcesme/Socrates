@@ -141,7 +141,7 @@ jobs:
           systemctl --user is-active containerd
           CONTAINERD_NAMESPACE=default \
             containerd-rootless-setuptool.sh install-buildkit-containerd
-          systemctl --user is-active buildkit-default
+          systemctl --user is-active default-buildkit
 
       - name: Verify rootless engines
         shell: bash
