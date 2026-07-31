@@ -1,7 +1,7 @@
 # Socrates Architecture
 
 Status: Accepted for the product skeleton  
-Last updated: 2026-07-30  
+Last updated: 2026-07-31  
 Scope: Web application shell and the future autoresearch platform boundary
 
 ## 1. Product definition
@@ -1436,6 +1436,69 @@ the low-level OCI backend only. `LocalRunnerNotEnabledError` remains correct
 until the source materializer, image catalog/task-runtime ABI, lifecycle event
 adapter, durable spool, and authenticated outbound transport land in their
 planned slices.
+
+### ADR-043: Source snapshots cross two pathless, attempt-scoped capabilities
+
+An artifact identity is neither permission to read bytes nor permission to
+mount a host directory. Slice 2.6 separates those authorities. The
+content-addressed `ArtifactStore` may issue a process-local `VerifiedArtifact`
+capability after digest and size verification. Its read port accepts only that
+capability and returns a one-shot byte stream; it never returns an object path,
+file descriptor, URL, or caller-selected filesystem location.
+
+`SourceSnapshotMaterializer` consumes that stream for one exact runner, task,
+attempt, and lease fence. While parsing it independently recomputes the archive
+SHA-256 digest, counts the exact archive bytes, and enforces trusted limits for
+entry count, path depth and length, individual file size, and total expanded
+bytes. A previously verified object that changes before or during reading is
+rejected. Task protocol fields cannot mint either capability.
+
+The first source-snapshot media type is an uncompressed POSIX tar stream.
+Compression is deliberately unsupported so decompression ratios cannot bypass
+the artifact and expanded-byte budgets. `tar-stream` is used only as a
+streaming record parser; it has no filesystem authority. The materializer, not
+the parser, validates and writes every entry. It accepts only regular files and
+directories. Links, devices, FIFOs, sparse files, unknown entry kinds, absolute
+or drive-qualified names, traversal, backslashes, control characters,
+non-normalized Unicode, duplicate or case-fold-colliding paths, non-portable
+components, and file/directory ancestor conflicts fail the whole operation.
+Archive ownership and timestamps are ignored. Only the executable bit is
+retained; set-ID and sticky bits are forbidden.
+
+Materialization occurs beneath one configured, runner-owned root. The
+materializer creates a new private staging directory, opens regular files with
+exclusive and no-follow semantics, verifies every parent remains a real
+directory, and atomically publishes only after the entire stream and archive
+identity pass. Failure removes only the exact staging directory created by
+that invocation. Startup recovery enumerates only strictly named directories
+inside this root and deletes an object only after its private manifest proves
+the deployment, runner, attempt, fence, and digest ownership tuple.
+
+Success returns a frozen, process-local `MaterializedSourceSnapshot`
+capability. Public fields contain identity and bounded accounting only; no host
+path is exposed. Only the local OCI package can resolve the capability through
+an unexported `WeakMap` into the one source bind:
+
+```text
+verified artifact stream
+  -> guarded tar parser
+  -> private attempt directory
+  -> opaque materialized capability
+  -> /socrates/source (read-only, noexec, nosuid, nodev)
+```
+
+The OCI builder accepts no raw source path. Native-spec verification requires
+the exact resolved directory, destination, and read-only mount flags in
+addition to the existing sandbox policy. The in-image task runtime will later
+copy this read-only tree into bounded `/workspace`; it will never execute or
+modify the host staging tree. Materialization ownership must match the sandbox
+attempt identity, and release is idempotent.
+
+This ADR does not define source upload, snapshot resolution from durable
+metadata, an admitted image catalog, task-runtime ABI, command execution, or
+runner transport. Slice 2.6 tests the artifact read authority, adversarial tar
+policy, scoped recovery and OCI mount attestation; `LocalRunnerNotEnabledError`
+remains correct afterward.
 
 ## 19. Explicit non-goals for the first commit
 

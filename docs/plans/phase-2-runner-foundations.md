@@ -347,7 +347,7 @@ Exit: untrusted outputs cannot escape their storage or rendering boundaries.
 
 ### Slice 2.4 — OCI engine spike
 
-Status: Blocked on native Linux reference-host evidence.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-041.
 
@@ -367,6 +367,8 @@ default.
 
 ### Slice 2.5 — guarded local adapter
 
+Status: Complete on 2026-07-31.
+
 - implement the selected adapter without importing it into API or web
 - require explicit runner bootstrap and `LOCAL_RUNNER_ENABLED=true`
 - perform startup capability and policy self-checks
@@ -375,6 +377,31 @@ default.
 
 Exit: one manually authored experiment produces a measurement and full
 provenance inside a disposable sandbox.
+
+The exit remains split across delivery slices: Slice 2.5 admitted the guarded
+low-level OCI backend on the native reference host. Source materialization,
+image/runtime admission, lifecycle events, and transport are explicit
+prerequisites before a full experiment may execute.
+
+### Slice 2.6 — source snapshot materializer
+
+Status: In progress.
+
+Architecture decision: ADR-043.
+
+Detailed plan: `docs/plans/slice-2.6-source-snapshot-materializer.md`.
+
+- add a pathless verified-artifact read capability
+- parse uncompressed tar records without granting the parser filesystem access
+- enforce bounded, portable paths and regular-file/directory-only archives
+- publish private attempt-scoped source trees atomically
+- return an opaque capability instead of a host path
+- admit exactly one read-only source bind through the guarded OCI backend
+- prove failure cleanup, exact-owner recovery, release, and native mount
+  attestation
+
+Exit: a verified snapshot can be materialized for one fenced attempt and
+mounted read-only without any task or caller string becoming a host path.
 
 ## Acceptance gates
 
