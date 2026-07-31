@@ -717,6 +717,25 @@ Evidence: implementation commit `2645428`; GitHub Actions run `30658886159`
 passed 248 runner-local tests, all PostgreSQL/API/runner integrations, native
 durability probes, Chromium, and production builds.
 
+### Slice 2.20 — startup owned-resource recovery barrier
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-057.
+
+Detailed plan: `docs/plans/slice-2.20-startup-recovery-barrier.md`.
+
+- create one process-level barrier over fresh sandbox/source owners;
+- remove exact-owned sandboxes before exact-owned source directories;
+- share one immutable success or retained failure across concurrent callers;
+- reject invalid cleanup results and provide no retry or degraded mode;
+- keep durable-store opening, work admission, sessions, execution, events, and
+  runner enablement out of scope.
+
+Exit: ordering and failure-injection tests prove no source cleanup can race a
+stale sandbox mount and no work-facing caller can interpret partial cleanup as
+a successful startup gate.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

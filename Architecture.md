@@ -2561,6 +2561,39 @@ cleanup uncertainty, and idempotent release. This admits ADR-056 and closes
 Slice 2.19; startup recovery orchestration, runtime execution, lifecycle event
 publication, work completion, and production enablement remain disabled.
 
+### ADR-057: Startup recovery is a one-way gate before work admission
+
+Slice 2.20 defines the process-level recovery barrier required by ADR-056.
+Attempt preparation cannot safely begin while stale sandboxes or source trees
+from a previous runner process may still exist. Letting each session invoke
+global recovery would be worse: a live session could have its owned resources
+deleted by another session using the same deployment and runner identity.
+
+A fresh runner process therefore creates exactly one
+`RunnerStartupRecoveryBarrier` around fresh sandbox-backend and source-
+materializer instances. All callers share one recovery promise. Success
+returns an immutable count of removed sandbox and source resources; failure is
+retained and replayed. There is no in-process retry, partial-success
+conversion, timeout, cancellation signal, or degraded mode. The composition
+root must not construct work-admission/session services until the barrier has
+succeeded.
+
+Recovery is deliberately sequential. Exact-owned sandboxes are removed first
+because they may still mount exact-owned source directories. Only after
+sandbox recovery succeeds may source staging and published directories be
+removed. The two cleanup operations must not run in parallel. Each underlying
+owner remains responsible for deployment/runner ownership proofs and
+fail-closed removal; the barrier rejects invalid cleanup counts rather than
+inventing success.
+
+Durable work-journal and event-spool roots are not cleanup targets. Their
+existing `open()` paths validate ownership, checksums, and crash remnants and
+must succeed independently before later composition. Opaque capabilities are
+not reconstructed by the barrier. After successful recovery, a claimed work
+item can be loaded from the journal and receive a fresh preparation
+coordinator. This slice does not open stores, acquire work, create sessions,
+start heartbeats, execute sandboxes, publish events, or enable the runner.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
