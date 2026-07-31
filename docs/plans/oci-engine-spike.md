@@ -1,6 +1,6 @@
 # OCI engine spike plan
 
-Status: In progress
+Status: Blocked on native Linux reference-host evidence
 
 Date: 2026-07-31
 
@@ -131,3 +131,11 @@ stress the host outside the candidate's declared cgroup.
 
 The harness and its command builders are disposable. Slice 2.5 begins with a
 new plan and typed runner adapter after the engine decision is reviewed.
+
+## Current-host result
+
+The Docker Desktop development run passed all eight adversarial enforcement
+gates, hard cancellation, label-scoped cleanup, and 30 latency samples. It
+failed the native Linux, rootless, and host-LSM preflight gates exactly as
+expected. Podman and nerdctl are not installed. No engine is selected and Slice
+2.5 remains gated; see `docs/evidence/phase-2-oci-engine-spike.md`.

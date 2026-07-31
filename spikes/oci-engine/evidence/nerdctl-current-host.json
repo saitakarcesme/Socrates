@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1",
+  "spikeId": "89b879ac-a234-40d3-a1e5-0ba5a8a76d2e",
+  "recordedAt": "2026-07-31T00:52:43.542Z",
+  "image": "node@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32",
+  "profile": {
+    "memoryBytes": 67108864,
+    "cpuCount": 0.5,
+    "maximumPids": 32,
+    "workspaceBytes": 1048576,
+    "temporaryBytes": 262144,
+    "network": "none",
+    "rootFilesystem": "read-only"
+  },
+  "facts": {
+    "engine": "nerdctl",
+    "available": false,
+    "securityOptions": [],
+    "nativeLinux": false,
+    "rootless": false,
+    "desktopOrVm": false
+  },
+  "preflight": [
+    {
+      "name": "engine available",
+      "passed": false,
+      "detail": "nerdctl is not installed"
+    }
+  ],
+  "adversarial": [],
+  "cancellation": [],
+  "cleanup": [],
+  "eligibleForNativeSelection": false,
+  "limitations": [
+    "No evidence was executed for this candidate on the current host."
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1",
+  "spikeId": "d5ecd935-098c-4b65-bc7c-f026019c9d2e",
+  "recordedAt": "2026-07-31T00:52:42.823Z",
+  "image": "node@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32",
+  "profile": {
+    "memoryBytes": 67108864,
+    "cpuCount": 0.5,
+    "maximumPids": 32,
+    "workspaceBytes": 1048576,
+    "temporaryBytes": 262144,
+    "network": "none",
+    "rootFilesystem": "read-only"
+  },
+  "facts": {
+    "engine": "podman",
+    "available": false,
+    "securityOptions": [],
+    "nativeLinux": false,
+    "rootless": false,
+    "desktopOrVm": false
+  },
+  "preflight": [
+    {
+      "name": "engine available",
+      "passed": false,
+      "detail": "podman is not installed"
+    }
+  ],
+  "adversarial": [],
+  "cancellation": [],
+  "cleanup": [],
+  "eligibleForNativeSelection": false,
+  "limitations": [
+    "No evidence was executed for this candidate on the current host."
+  ]
+}

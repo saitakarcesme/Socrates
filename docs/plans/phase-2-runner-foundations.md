@@ -347,7 +347,7 @@ Exit: untrusted outputs cannot escape their storage or rendering boundaries.
 
 ### Slice 2.4 — OCI engine spike
 
-Status: In progress.
+Status: Blocked on native Linux reference-host evidence.
 
 Architecture decision: ADR-041.
 

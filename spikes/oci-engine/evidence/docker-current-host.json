@@ -1,0 +1,173 @@
+{
+  "schemaVersion": "1",
+  "spikeId": "8e4a366c-f3e0-4957-8c71-05e34943a8fa",
+  "recordedAt": "2026-07-31T00:52:10.513Z",
+  "image": "node@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32",
+  "profile": {
+    "memoryBytes": 67108864,
+    "cpuCount": 0.5,
+    "maximumPids": 32,
+    "workspaceBytes": 1048576,
+    "temporaryBytes": 262144,
+    "network": "none",
+    "rootFilesystem": "read-only"
+  },
+  "facts": {
+    "engine": "docker",
+    "available": true,
+    "clientVersion": "29.3.1",
+    "serverVersion": "29.3.1",
+    "operatingSystem": "Docker Desktop",
+    "architecture": "x86_64",
+    "kernelVersion": "6.6.87.2-microsoft-standard-WSL2",
+    "cgroupVersion": "2",
+    "cgroupDriver": "cgroupfs",
+    "storageDriver": "overlayfs",
+    "securityOptions": ["name=seccomp,profile=builtin", "name=cgroupns"],
+    "nativeLinux": false,
+    "rootless": false,
+    "desktopOrVm": true
+  },
+  "preflight": [
+    {
+      "name": "engine available",
+      "passed": true,
+      "detail": "docker client and daemon responded"
+    },
+    {
+      "name": "image pinned by digest",
+      "passed": true,
+      "detail": "immutable digest supplied"
+    },
+    {
+      "name": "native Linux host",
+      "passed": false,
+      "detail": "Desktop, WSL, VM, or non-Linux host observed"
+    },
+    {
+      "name": "rootless engine",
+      "passed": false,
+      "detail": "rootless security option not reported"
+    },
+    {
+      "name": "cgroup v2",
+      "passed": true,
+      "detail": "reported cgroup version 2"
+    },
+    {
+      "name": "seccomp",
+      "passed": true,
+      "detail": "seccomp security option reported"
+    },
+    {
+      "name": "host LSM",
+      "passed": false,
+      "detail": "requires AppArmor or SELinux on the native reference host"
+    }
+  ],
+  "adversarial": [
+    {
+      "name": "delegated cgroup controllers",
+      "passed": true,
+      "detail": "cpu, memory, and pids controllers are visible"
+    },
+    {
+      "name": "host mount and privilege denial",
+      "passed": true,
+      "detail": "non-root identity, empty effective capabilities, absent sockets, mount denial, and namespace denial observed"
+    },
+    {
+      "name": "fixed sandbox profile",
+      "passed": true,
+      "detail": "inspect confirms network, rootfs, privilege, memory, PID, capability, and escalation controls"
+    },
+    {
+      "name": "network denial",
+      "passed": true,
+      "detail": "direct-IP HTTP and DNS probes both failed"
+    },
+    {
+      "name": "host secret absence",
+      "passed": true,
+      "detail": "host sentinel and standard credential files were absent"
+    },
+    {
+      "name": "workspace writable-byte limit",
+      "passed": true,
+      "detail": "workspace tmpfs returned ENOSPC within its declared bound"
+    },
+    {
+      "name": "PID limit",
+      "passed": true,
+      "detail": "bounded child fan-out encountered cgroup rejection below the requested cap"
+    },
+    {
+      "name": "memory limit",
+      "passed": true,
+      "detail": "engine reported OOMKilled"
+    }
+  ],
+  "cancellation": [
+    {
+      "name": "hard cancellation",
+      "passed": true,
+      "detail": "TERM-resistant workload stopped in 1104.89 ms",
+      "durationMs": 1104.89
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 1 owned container(s)"
+    },
+    {
+      "name": "owned container cleanup",
+      "passed": true,
+      "detail": "removed 0 owned container(s)"
+    }
+  ],
+  "latency": {
+    "runAndRemove": {
+      "samples": 30,
+      "medianMs": 256.92,
+      "p95Ms": 284.24,
+      "maximumMs": 296.57
+    }
+  },
+  "eligibleForNativeSelection": false,
+  "limitations": [
+    "Development-host evidence cannot select the production engine.",
+    "The observed engine is not rootless and fails the production preflight."
+  ]
+}
