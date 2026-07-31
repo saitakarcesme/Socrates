@@ -403,6 +403,28 @@ Detailed plan: `docs/plans/slice-2.6-source-snapshot-materializer.md`.
 Exit: a verified snapshot can be materialized for one fenced attempt and
 mounted read-only without any task or caller string becoming a host path.
 
+### Slice 2.7 — admitted image catalog and task-runtime ABI
+
+Status: In progress.
+
+Architecture decision: ADR-044.
+
+Detailed plan: `docs/plans/slice-2.7-image-catalog-runtime.md`.
+
+- admit only preconfigured platform-specific image digests already present in
+  rootless containerd
+- inspect OCI manifest/config identity without pulling or trusting labels as
+  authorization
+- issue an opaque catalog-backed image capability
+- define `socrates.task-runtime.v1` bounded stdin and framed output protocols
+- copy the admitted source into the bounded no-exec workspace
+- invoke ordered commands with exact argv, cwd, timeout, and fixed environment
+- frame binary child output and measurement bytes as untrusted data
+- prove the catalog handshake and runtime protocol on the native reference host
+
+Exit: one catalog-admitted image can consume a source capability and execute a
+fixed ABI request without raw task commands becoming container-engine argv.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

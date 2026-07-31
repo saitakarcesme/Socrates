@@ -1522,6 +1522,70 @@ capability, and guarded source bind. Durable snapshot resolution, the image
 catalog/task-runtime ABI, lifecycle adapter, spool, transport, and autonomous
 research loop remain later slices.
 
+### ADR-044: Image admission is a trusted catalog decision with a probed ABI
+
+An OCI digest proves content identity; image labels, configuration, and
+process output remain claims made by that content. Slice 2.7 introduces a
+`SandboxImageCatalog` whose trusted configuration pins the complete
+platform-specific image reference, manifest digest, Linux architecture,
+`socrates.task-runtime.v1` ABI revision, runtime entrypoint, and build identity.
+The initial catalog is deployment configuration readable only by the runner.
+A later signed control-plane distribution mechanism may replace that source,
+but an image can never add itself to the catalog.
+
+Admission is pathless and pull-free. For an exact task digest and architecture,
+the catalog requires a matching trusted entry, proves the content already
+exists in rootless containerd, and inspects its OCI manifest and configuration.
+The observed platform, resolved manifest digest, rootfs configuration, fixed
+runtime entrypoint, and ABI metadata must match the catalog. Mutable tags,
+implicit platform selection, unrecognized media types, missing content,
+volumes, healthcheck side effects, credential-like environment names, and
+configuration drift fail before container creation. OCI configuration is
+content-addressed evidence, not the authorization source.
+
+The catalog then executes a bounded handshake under the same guarded sandbox
+profile used for work. The fixed runtime entrypoint must emit one strictly
+parsed handshake frame containing the ABI revision and build identity pinned by
+the catalog. No other stdout, stderr, filesystem marker, label, or exit code can
+upgrade an untrusted image. Successful admission returns a frozen,
+process-local `AdmittedSandboxImage` capability. Only the catalog issues it;
+task protocol fields and structural lookalikes fail the OCI backend's runtime
+capability check.
+
+`socrates.task-runtime.v1` is the only executable entrypoint for task work. The
+outer runner does not place a declared command directly in nerdctl argv. It
+creates the container with interactive stdin but no terminal, starts the fixed
+runtime, and sends one bounded, length-prefixed canonical JSON request. The
+request carries the exact fenced attempt identity, ordered action commands,
+measurement command and protocol, fixed source destination, and already-capped
+budgets. Attempt identity and image digest are compared again before input is
+written. Request data is never stored in image metadata, environment, or a host
+bind.
+
+The runtime copies `/socrates/source` into the bounded `/workspace` tmpfs,
+retaining the Slice 2.7 no-exec workspace policy, and invokes each absolute
+executable with an argument array, `shell: false`, an exact workspace working
+directory, and a minimal fixed environment. ABI v1 supports image-baked tools;
+workspace executables, implicit shells, network allowlists, credentials, and
+package installation remain unsupported capabilities. Runtime timeouts are
+defense in depth; the outer backend remains authoritative for wall time,
+cgroups, cancellation, output bytes, and cleanup.
+
+Child stdout and stderr never share the runtime control channel verbatim. The
+runtime converts them into bounded binary-safe frames carrying command index,
+stream, sequence, and base64 payload. It emits explicit command-start,
+command-exit, measurement-result, runtime-error, and completion frames. Frames
+use a four-byte big-endian length followed by strict UTF-8 JSON, have a small
+fixed maximum, and reject unknown fields, sequence gaps, trailing bytes, or
+output after completion. Measurement bytes remain untrusted data and are
+validated by the outer lifecycle adapter in Slice 2.8.
+
+Slice 2.7 admits the catalog capability, runtime protocol implementation, and
+native handshake/execution proof. It does not enable task leasing, translate
+frames into runner events, persist a spool, acknowledge events, or connect a
+runner transport. `LocalRunnerNotEnabledError` remains correct until those
+Slice 2.8 and 2.9 responsibilities land.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
