@@ -1,5 +1,5 @@
 # Manual-only disposable reference-host validation.
-name: OCI reference-host spike
+name: OCI reference host
 
 on:
   workflow_dispatch:
@@ -158,6 +158,13 @@ jobs:
             --image "$IMAGE" \
             --latency-samples "$LATENCY_SAMPLES"
 
+      - name: Validate guarded production backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @socrates/runner-local test:native -- \
+            --image "$IMAGE"
+
       - name: Publish comparison summary
         if: always()
         shell: bash
@@ -174,11 +181,36 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      - name: Publish guarded backend summary
+        if: always()
+        shell: bash
+        run: |
+          evidence="$(find services/runner-local/evidence/native -name '*.json' -print -quit 2>/dev/null || true)"
+          if [[ -n "$evidence" ]]; then
+            jq . "$evidence"
+            {
+              echo "## Guarded OCI backend"
+              echo
+              echo '```json'
+              jq . "$evidence"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Upload immutable evidence
         if: ${{ always() && hashFiles('spikes/oci-engine/evidence/native/**') != '' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: oci-reference-host-evidence
           path: spikes/oci-engine/evidence/native/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload guarded backend evidence
+        if: ${{ always() && hashFiles('services/runner-local/evidence/native/**') != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: guarded-oci-backend-evidence
+          path: services/runner-local/evidence/native/
           if-no-files-found: error
           retention-days: 30
