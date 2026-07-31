@@ -127,30 +127,42 @@ try {
     artifact,
     identity: successfulAttempt,
   });
-  const successful = await backend.execute({
-    identity: successfulAttempt,
-    image,
-    profile,
-    source,
-    command: {
-      executable: "/usr/local/bin/node",
-      arguments: [
-        "-e",
-        [
-          "const fs=require('node:fs')",
-          "const path='/socrates/source/nested/probe.txt'",
-          "const value=fs.readFileSync(path,'utf8')",
-          "let readOnly=false",
-          "try{fs.writeFileSync(path,'changed')}catch(error){readOnly=['EACCES','EROFS'].includes(error?.code)}",
-          "process.stdout.write(JSON.stringify({value,readOnly}))",
-        ].join(";"),
-      ],
-    },
-  });
-  const sourceProof = JSON.parse(successful.stdout) as {
-    value?: unknown;
-    readOnly?: unknown;
-  };
+  const { successful, sourceProof } = await (async () => {
+    try {
+      const result = await backend.execute({
+        identity: successfulAttempt,
+        image,
+        profile,
+        source: {
+          snapshot: source,
+          expectedDigest: artifact.digest,
+        },
+        command: {
+          executable: "/usr/local/bin/node",
+          arguments: [
+            "-e",
+            [
+              "const fs=require('node:fs')",
+              "const path='/socrates/source/nested/probe.txt'",
+              "const value=fs.readFileSync(path,'utf8')",
+              "let readOnly=false",
+              "try{fs.writeFileSync(path,'changed')}catch(error){readOnly=['EACCES','EROFS'].includes(error?.code)}",
+              "process.stdout.write(JSON.stringify({value,readOnly}))",
+            ].join(";"),
+          ],
+        },
+      });
+      return {
+        successful: result,
+        sourceProof: JSON.parse(result.stdout) as {
+          value?: unknown;
+          readOnly?: unknown;
+        },
+      };
+    } finally {
+      await materializer.release(source);
+    }
+  })();
   if (
     successful.exitCode !== 0 ||
     sourceProof.value !== "socrates-source-ok" ||
@@ -160,7 +172,6 @@ try {
       "Native source execution did not prove readable, read-only content.",
     );
   }
-  await materializer.release(source);
   const sourceDirectoriesAfterRelease = await readdir(
     join(sourceStateRoot, "materialized"),
   );

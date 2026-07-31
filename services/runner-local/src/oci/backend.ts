@@ -29,7 +29,10 @@ export type SandboxExecution = Readonly<{
   image: AdmittedSandboxImage;
   profile: SandboxResourceProfile;
   command: SandboxCommand;
-  source?: MaterializedSourceSnapshot;
+  source?: Readonly<{
+    snapshot: MaterializedSourceSnapshot;
+    expectedDigest: string;
+  }>;
   signal?: AbortSignal;
 }>;
 
@@ -242,8 +245,14 @@ export class NerdctlSandboxBackend {
       );
     }
     if (input.source) {
+      if (input.source.snapshot.digest !== input.source.expectedDigest) {
+        throw new SandboxBackendError(
+          "identity_mismatch",
+          "Materialized source digest does not match the execution snapshot.",
+        );
+      }
       resolveMaterializedSourceSnapshot(
-        input.source,
+        input.source.snapshot,
         this.options.deploymentId,
         input.identity,
       );
@@ -330,7 +339,7 @@ export class NerdctlSandboxBackend {
     );
     const sourcePath = input.source
       ? resolveMaterializedSourceSnapshot(
-          input.source,
+          input.source.snapshot,
           this.options.deploymentId,
           input.identity,
         )
@@ -343,7 +352,7 @@ export class NerdctlSandboxBackend {
           image: input.image,
           profile: input.profile,
           command: input.command,
-          source: input.source,
+          source: input.source?.snapshot,
           deploymentId: this.options.deploymentId,
           identity: input.identity,
         }),

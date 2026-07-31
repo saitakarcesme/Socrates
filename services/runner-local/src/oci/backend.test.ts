@@ -11,6 +11,7 @@ import {
   fixtureReadiness,
   successfulResult,
 } from "./test-fixtures";
+import { issueMaterializedSourceSnapshot } from "../source/capability";
 
 import type { ProcessExecutor, ProcessRequest, ProcessResult } from "./process";
 import type { ReadinessVerifier } from "./readiness";
@@ -116,14 +117,49 @@ describe("nerdctl sandbox backend", () => {
         profile: fixtureProfile,
         command: { executable: "/bin/true", arguments: [] },
         source: {
-          attemptKey: "forged",
-          digest: `sha256:${"0".repeat(64)}`,
-          archiveBytes: 1,
-          expandedBytes: 1,
-          entryCount: 1,
-        } as unknown as MaterializedSourceSnapshot,
+          snapshot: {
+            attemptKey: "forged",
+            digest: `sha256:${"0".repeat(64)}`,
+            archiveBytes: 1,
+            expandedBytes: 1,
+            entryCount: 1,
+          } as unknown as MaterializedSourceSnapshot,
+          expectedDigest: `sha256:${"0".repeat(64)}`,
+        },
       }),
     ).rejects.toThrow("does not belong");
+    expect(readiness.calls).toBe(0);
+    expect(processes.requests).toEqual([]);
+  });
+
+  it("rejects a genuine source capability with the wrong task digest", async () => {
+    const processes = new LifecycleProcesses();
+    const { value, readiness } = backend(processes);
+    const snapshot = issueMaterializedSourceSnapshot({
+      path: "/runner/sources/source-owned/tree",
+      deploymentId,
+      identity: fixtureIdentity,
+      digest: `sha256:${"a".repeat(64)}`,
+      archiveBytes: 1_024,
+      expandedBytes: 12,
+      entryCount: 2,
+    });
+
+    await expect(
+      value.execute({
+        identity: fixtureIdentity,
+        image: fixtureImage,
+        profile: fixtureProfile,
+        command: { executable: "/bin/true", arguments: [] },
+        source: {
+          snapshot,
+          expectedDigest: `sha256:${"b".repeat(64)}`,
+        },
+      }),
+    ).rejects.toMatchObject<Partial<Error>>({
+      message:
+        "Materialized source digest does not match the execution snapshot.",
+    });
     expect(readiness.calls).toBe(0);
     expect(processes.requests).toEqual([]);
   });
