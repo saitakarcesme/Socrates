@@ -5,7 +5,10 @@ import {
   runnerEventAcknowledgementV1Schema,
   runnerEventV2Schema,
 } from "./event";
-import { runnerExecutionV1Schema } from "./runner";
+import {
+  runnerCancellationPolicyV1Schema,
+  runnerExecutionV1Schema,
+} from "./runner";
 import { runnerTaskDeliveryV1Schema } from "./runner-delivery";
 
 export const maximumRunnerLeaseDurationMs = 15 * 60 * 1_000;
@@ -100,13 +103,26 @@ export type RunnerTaskHeartbeatRequestV1 = z.infer<
   typeof runnerTaskHeartbeatRequestV1Schema
 >;
 
-export const runnerTaskHeartbeatResponseV1Schema = z
-  .object({
-    version: z.literal("1"),
-    leaseExpiresAt: z.iso.datetime(),
-    directive: z.enum(["continue", "cancel"]),
-  })
-  .strict();
+export const runnerTaskHeartbeatResponseV1Schema = z.discriminatedUnion(
+  "directive",
+  [
+    z
+      .object({
+        version: z.literal("1"),
+        leaseExpiresAt: z.iso.datetime(),
+        directive: z.literal("continue"),
+      })
+      .strict(),
+    z
+      .object({
+        version: z.literal("1"),
+        leaseExpiresAt: z.iso.datetime(),
+        directive: z.literal("cancel"),
+        cancellation: runnerCancellationPolicyV1Schema,
+      })
+      .strict(),
+  ],
+);
 export type RunnerTaskHeartbeatResponseV1 = z.infer<
   typeof runnerTaskHeartbeatResponseV1Schema
 >;

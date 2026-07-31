@@ -58,8 +58,44 @@ describe("runner transport contracts", () => {
         version: "1",
         leaseExpiresAt: "2026-07-31T12:00:00.000Z",
         directive: "cancel",
+        cancellation: {
+          requestedAt: "2026-07-31T11:59:00.000Z",
+          gracePeriodMs: 5_000,
+          reason: "operator",
+        },
       }).directive,
     ).toBe("cancel");
+    expect(
+      runnerTaskHeartbeatResponseV1Schema.safeParse({
+        version: "1",
+        leaseExpiresAt: "2026-07-31T12:00:00.000Z",
+        directive: "cancel",
+      }).success,
+    ).toBe(false);
+    expect(
+      runnerTaskHeartbeatResponseV1Schema.safeParse({
+        version: "1",
+        leaseExpiresAt: "2026-07-31T12:00:00.000Z",
+        directive: "cancel",
+        cancellation: {
+          requestedAt: "2026-07-31T11:59:00.000Z",
+          gracePeriodMs: 60_001,
+          reason: "operator",
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      runnerTaskHeartbeatResponseV1Schema.safeParse({
+        version: "1",
+        leaseExpiresAt: "2026-07-31T12:00:00.000Z",
+        directive: "continue",
+        cancellation: {
+          requestedAt: "2026-07-31T11:59:00.000Z",
+          gracePeriodMs: 5_000,
+          reason: "operator",
+        },
+      }).success,
+    ).toBe(false);
     expect(
       runnerTaskHeartbeatResponseV1Schema.safeParse({
         version: "1",

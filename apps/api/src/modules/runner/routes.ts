@@ -175,11 +175,23 @@ export function createRunnerRoutes(options: RunnerRouteOptions) {
       });
 
       return context.json(
-        runnerTaskHeartbeatResponseV1Schema.parse({
-          version: "1",
-          leaseExpiresAt: heartbeat.leaseExpiresAt.toISOString(),
-          directive: heartbeat.directive,
-        }),
+        runnerTaskHeartbeatResponseV1Schema.parse(
+          heartbeat.directive === "continue"
+            ? {
+                version: "1",
+                leaseExpiresAt: heartbeat.leaseExpiresAt.toISOString(),
+                directive: "continue",
+              }
+            : {
+                version: "1",
+                leaseExpiresAt: heartbeat.leaseExpiresAt.toISOString(),
+                directive: "cancel",
+                cancellation: {
+                  ...heartbeat.cancellation,
+                  requestedAt: heartbeat.cancellation.requestedAt.toISOString(),
+                },
+              },
+        ),
       );
     },
   );

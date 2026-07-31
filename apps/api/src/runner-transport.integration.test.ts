@@ -299,6 +299,8 @@ integration("authenticated runner transport with PostgreSQL", () => {
         requestId: crypto.randomUUID(),
         workspaceId,
         taskId,
+        gracePeriodMs: 2_500,
+        reason: "operator",
       }),
     );
     const cancelling = runnerTaskHeartbeatResponseV1Schema.parse(
@@ -310,6 +312,12 @@ integration("authenticated runner transport with PostgreSQL", () => {
       ).json(),
     );
     expect(cancelling.directive).toBe("cancel");
+    if (cancelling.directive === "cancel") {
+      expect(cancelling.cancellation).toMatchObject({
+        gracePeriodMs: 2_500,
+        reason: "operator",
+      });
+    }
 
     const eventId = crypto.randomUUID();
     const terminalEvent = {

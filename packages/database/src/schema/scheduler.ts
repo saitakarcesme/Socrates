@@ -501,12 +501,22 @@ export const runnerTaskCancellations = pgTable(
     requestedAt: timestamp("requested_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    reason: text("reason").notNull(),
+    gracePeriodMs: integer("grace_period_ms").notNull(),
   },
   (table) => [
     uniqueIndex("runner_task_cancellations_task_unique").on(table.taskId),
     check(
       "runner_task_cancellations_resulting_status",
       sql`${table.resultingTaskStatus} IN ('cancellation_requested', 'cancelled')`,
+    ),
+    check(
+      "runner_task_cancellations_reason",
+      sql`${table.reason} IN ('operator', 'budget', 'policy', 'runner_shutdown')`,
+    ),
+    check(
+      "runner_task_cancellations_grace_period",
+      sql`${table.gracePeriodMs} BETWEEN 0 AND 60000`,
     ),
   ],
 );

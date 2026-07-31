@@ -147,6 +147,11 @@ describe("runner HTTP routes", () => {
     const heartbeat = vi.fn(async () => ({
       leaseExpiresAt: new Date("2026-07-31T12:01:00.000Z"),
       directive: "cancel" as const,
+      cancellation: {
+        requestedAt: new Date("2026-07-31T12:00:30.000Z"),
+        gracePeriodMs: 2_500,
+        reason: "policy" as const,
+      },
     }));
     const taskId = randomUUID();
     const attemptId = randomUUID();
@@ -168,6 +173,11 @@ describe("runner HTTP routes", () => {
       version: "1",
       leaseExpiresAt: "2026-07-31T12:01:00.000Z",
       directive: "cancel",
+      cancellation: {
+        requestedAt: "2026-07-31T12:00:30.000Z",
+        gracePeriodMs: 2_500,
+        reason: "policy",
+      },
     });
     expect(heartbeat).toHaveBeenCalledWith({
       runnerId: principal.runnerId,

@@ -194,18 +194,32 @@ export class RunnerGatewayService {
     }
   }
 
-  async heartbeat(input: HeartbeatRunnerTaskInput): Promise<{
-    leaseExpiresAt: Date;
-    directive: "continue" | "cancel";
-  }> {
+  async heartbeat(input: HeartbeatRunnerTaskInput): Promise<
+    | { leaseExpiresAt: Date; directive: "continue" }
+    | {
+        leaseExpiresAt: Date;
+        directive: "cancel";
+        cancellation: {
+          requestedAt: Date;
+          gracePeriodMs: number;
+          reason: "operator" | "budget" | "policy" | "runner_shutdown";
+        };
+      }
+  > {
     const result = await this.persistence.transaction(({ scheduler }) =>
       scheduler.heartbeat(input),
     );
     if (result.state === "renewed") {
-      return {
-        leaseExpiresAt: result.leaseExpiresAt,
-        directive: result.directive,
-      };
+      return result.directive === "continue"
+        ? {
+            leaseExpiresAt: result.leaseExpiresAt,
+            directive: "continue",
+          }
+        : {
+            leaseExpiresAt: result.leaseExpiresAt,
+            directive: "cancel",
+            cancellation: result.cancellation,
+          };
     }
 
     return runnerConflict(

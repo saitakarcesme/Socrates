@@ -165,18 +165,28 @@ describe("RunnerGatewayService", () => {
 
   it("preserves the database-clocked lease and cancellation directive", async () => {
     const leaseExpiresAt = new Date("2026-07-31T00:01:00.000Z");
+    const requestedAt = new Date("2026-07-31T00:00:30.000Z");
     await expect(
       serviceReturning({
         heartbeat: {
           state: "renewed",
           leaseExpiresAt,
           directive: "cancel",
+          cancellation: {
+            requestedAt,
+            gracePeriodMs: 2_500,
+            reason: "budget",
+          },
         },
       }).heartbeat({
         ...claimInput,
         fence: 3,
       }),
-    ).resolves.toEqual({ leaseExpiresAt, directive: "cancel" });
+    ).resolves.toEqual({
+      leaseExpiresAt,
+      directive: "cancel",
+      cancellation: { requestedAt, gracePeriodMs: 2_500, reason: "budget" },
+    });
   });
 
   it("maps a stale heartbeat to a fenced resource conflict", async () => {

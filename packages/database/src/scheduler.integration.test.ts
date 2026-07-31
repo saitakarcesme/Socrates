@@ -793,6 +793,8 @@ integration("PostgreSQL scheduler persistence", () => {
         requestId: randomUUID(),
         workspaceId,
         taskId,
+        gracePeriodMs: 750,
+        reason: "budget",
       }),
     );
     await expect(
@@ -805,7 +807,11 @@ integration("PostgreSQL scheduler persistence", () => {
           leaseDurationMs: 60_000,
         }),
       ),
-    ).resolves.toMatchObject({ state: "renewed", directive: "cancel" });
+    ).resolves.toMatchObject({
+      state: "renewed",
+      directive: "cancel",
+      cancellation: { gracePeriodMs: 750, reason: "budget" },
+    });
     await expect(
       persistence.transaction(({ scheduler }) =>
         scheduler.heartbeat({
@@ -948,11 +954,23 @@ integration("PostgreSQL scheduler persistence", () => {
     );
 
     const accepted = await persistence.transaction(({ scheduler }) =>
-      scheduler.requestCancellation({ requestId, workspaceId, taskId }),
+      scheduler.requestCancellation({
+        requestId,
+        workspaceId,
+        taskId,
+        gracePeriodMs: 5_000,
+        reason: "operator",
+      }),
     );
     expect(accepted).toMatchObject({
       state: "accepted",
-      cancellation: { requestId, taskId, taskStatus: "cancelled" },
+      cancellation: {
+        requestId,
+        taskId,
+        taskStatus: "cancelled",
+        gracePeriodMs: 5_000,
+        reason: "operator",
+      },
     });
     await expect(
       persistence.transaction(({ scheduler }) =>
@@ -960,6 +978,8 @@ integration("PostgreSQL scheduler persistence", () => {
           requestId: randomUUID(),
           workspaceId,
           taskId,
+          gracePeriodMs: 1,
+          reason: "policy",
         }),
       ),
     ).resolves.toEqual(accepted);
@@ -985,6 +1005,10 @@ integration("PostgreSQL scheduler persistence", () => {
     expect(storedTask?.cancellationRequestedAt).toBeInstanceOf(Date);
     expect(storedTask?.terminalAt).toBeInstanceOf(Date);
     expect(cancellations).toHaveLength(1);
+    expect(cancellations[0]).toMatchObject({
+      gracePeriodMs: 5_000,
+      reason: "operator",
+    });
     expect(messages.map(({ topic }) => topic)).toEqual([
       "runner.task.queued",
       "runner.task.cancelled",
@@ -1014,6 +1038,8 @@ integration("PostgreSQL scheduler persistence", () => {
         requestId: randomUUID(),
         workspaceId,
         taskId,
+        gracePeriodMs: 5_000,
+        reason: "operator",
       }),
     );
 
@@ -1222,6 +1248,8 @@ integration("PostgreSQL scheduler persistence", () => {
         requestId: randomUUID(),
         workspaceId,
         taskId,
+        gracePeriodMs: 5_000,
+        reason: "operator",
       }),
     );
     await database
@@ -1251,6 +1279,8 @@ integration("PostgreSQL scheduler persistence", () => {
         requestId,
         workspaceId,
         taskId: firstTaskId,
+        gracePeriodMs: 5_000,
+        reason: "operator",
       }),
     );
 
@@ -1260,6 +1290,8 @@ integration("PostgreSQL scheduler persistence", () => {
           requestId,
           workspaceId,
           taskId: secondTaskId,
+          gracePeriodMs: 5_000,
+          reason: "operator",
         }),
       ),
     ).resolves.toEqual({ state: "request_conflict" });
@@ -1740,6 +1772,8 @@ integration("PostgreSQL scheduler persistence", () => {
         requestId: randomUUID(),
         workspaceId,
         taskId: claim.taskId,
+        gracePeriodMs: 5_000,
+        reason: "operator",
       }),
     );
     const cancelled = {

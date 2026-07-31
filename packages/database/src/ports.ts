@@ -195,7 +195,17 @@ export type HeartbeatRunnerTaskResult =
   | {
       state: "renewed";
       leaseExpiresAt: Date;
-      directive: "continue" | "cancel";
+      directive: "continue";
+    }
+  | {
+      state: "renewed";
+      leaseExpiresAt: Date;
+      directive: "cancel";
+      cancellation: {
+        requestedAt: Date;
+        gracePeriodMs: number;
+        reason: "operator" | "budget" | "policy" | "runner_shutdown";
+      };
     }
   | { state: "stale" };
 
@@ -203,6 +213,8 @@ export type RequestRunnerTaskCancellationInput = {
   requestId: string;
   workspaceId: string;
   taskId: string;
+  gracePeriodMs: number;
+  reason: "operator" | "budget" | "policy" | "runner_shutdown";
 };
 
 export type RunnerTaskCancellationAcceptance = {
@@ -210,6 +222,8 @@ export type RunnerTaskCancellationAcceptance = {
   taskId: string;
   taskStatus: "cancellation_requested" | "cancelled";
   requestedAt: Date;
+  gracePeriodMs: number;
+  reason: "operator" | "budget" | "policy" | "runner_shutdown";
 };
 
 export type RequestRunnerTaskCancellationResult =

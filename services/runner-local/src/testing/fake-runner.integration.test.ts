@@ -215,6 +215,8 @@ integration("deterministic fake runner vertical slice", () => {
         requestId: randomUUID(),
         workspaceId: developmentSeedIds.workspace,
         taskId: execution.lease.taskId,
+        gracePeriodMs: 5_000,
+        reason: "operator",
       }),
     );
     const cancellation = {

@@ -358,16 +358,34 @@ export const runnerExecutionV1Schema = z
   });
 export type RunnerExecutionV1 = z.infer<typeof runnerExecutionV1Schema>;
 
-export const runnerCancellationV1Schema = z
+export const runnerCancellationReasonSchema = z.enum([
+  "operator",
+  "budget",
+  "policy",
+  "runner_shutdown",
+]);
+export type RunnerCancellationReason = z.infer<
+  typeof runnerCancellationReasonSchema
+>;
+
+export const runnerCancellationPolicyV1Schema = z
   .object({
+    requestedAt: z.iso.datetime(),
+    gracePeriodMs: nonNegativeSafeIntegerSchema.max(60_000),
+    reason: runnerCancellationReasonSchema,
+  })
+  .strict();
+export type RunnerCancellationPolicyV1 = z.infer<
+  typeof runnerCancellationPolicyV1Schema
+>;
+
+export const runnerCancellationV1Schema = runnerCancellationPolicyV1Schema
+  .safeExtend({
     version: z.literal("1"),
     runnerId: entityIdSchema,
     taskId: entityIdSchema,
     attemptId: entityIdSchema,
     fence: positiveSafeIntegerSchema,
-    requestedAt: z.iso.datetime(),
-    gracePeriodMs: nonNegativeSafeIntegerSchema.max(60_000),
-    reason: z.enum(["operator", "budget", "policy", "runner_shutdown"]),
   })
   .strict();
 export type RunnerCancellationV1 = z.infer<typeof runnerCancellationV1Schema>;

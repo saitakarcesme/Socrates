@@ -61,6 +61,13 @@ const activeAttemptStatuses = [
 const maximumLeaseDurationMs = 15 * 60 * 1_000;
 const maximumReconciliationBatchSize = 100;
 const maximumFailureClassificationLength = 120;
+const maximumCancellationGracePeriodMs = 60_000;
+const cancellationReasons = [
+  "operator",
+  "budget",
+  "policy",
+  "runner_shutdown",
+] as const;
 const terminalTaskStatuses = ["succeeded", "failed", "cancelled"] as const;
 type PersistedRunnerAttemptStatus =
   (typeof schema.runnerAttemptStatus.enumValues)[number];
@@ -76,6 +83,23 @@ function assertLeaseDuration(value: number): void {
     throw new RangeError(
       `Lease duration must be between 1 and ${maximumLeaseDurationMs} ms.`,
     );
+  }
+}
+
+function assertCancellationPolicy(
+  input: RequestRunnerTaskCancellationInput,
+): void {
+  if (
+    !Number.isSafeInteger(input.gracePeriodMs) ||
+    input.gracePeriodMs < 0 ||
+    input.gracePeriodMs > maximumCancellationGracePeriodMs
+  ) {
+    throw new RangeError(
+      `Cancellation grace period must be between 0 and ${maximumCancellationGracePeriodMs} ms.`,
+    );
+  }
+  if (!cancellationReasons.includes(input.reason)) {
+    throw new RangeError("Cancellation reason is not supported.");
   }
 }
 
@@ -135,6 +159,15 @@ function cancellationStatus(
 ): "cancellation_requested" | "cancelled" {
   if (value === "cancellation_requested" || value === "cancelled") return value;
   throw new Error(`Invalid persisted cancellation status: ${value}.`);
+}
+
+function cancellationReason(
+  value: string,
+): (typeof cancellationReasons)[number] {
+  if (cancellationReasons.includes(value as never)) {
+    return value as (typeof cancellationReasons)[number];
+  }
+  throw new Error(`Invalid persisted cancellation reason: ${value}.`);
 }
 
 function normalizedEventDigest(event: RunnerEventV2): string {
@@ -721,8 +754,17 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
       .where(eq(schema.runnerRegistrations.id, input.runnerId));
 
     const [task] = await this.transaction
-      .select({ status: schema.runnerTasks.status })
+      .select({
+        status: schema.runnerTasks.status,
+        requestedAt: schema.runnerTaskCancellations.requestedAt,
+        gracePeriodMs: schema.runnerTaskCancellations.gracePeriodMs,
+        reason: schema.runnerTaskCancellations.reason,
+      })
       .from(schema.runnerTasks)
+      .leftJoin(
+        schema.runnerTaskCancellations,
+        eq(schema.runnerTaskCancellations.taskId, schema.runnerTasks.id),
+      )
       .where(eq(schema.runnerTasks.id, input.taskId));
     if (!task) {
       throw new Error(
@@ -730,17 +772,37 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
       );
     }
 
+    if (task.status !== "cancellation_requested") {
+      return {
+        state: "renewed",
+        leaseExpiresAt: renewed.leaseExpiresAt,
+        directive: "continue",
+      };
+    }
+    if (
+      task.requestedAt === null ||
+      task.gracePeriodMs === null ||
+      task.reason === null ||
+      !cancellationReasons.includes(task.reason as never)
+    ) {
+      throw new Error("Cancellation-requested task has no durable policy.");
+    }
     return {
       state: "renewed",
       leaseExpiresAt: renewed.leaseExpiresAt,
-      directive:
-        task.status === "cancellation_requested" ? "cancel" : "continue",
+      directive: "cancel",
+      cancellation: {
+        requestedAt: task.requestedAt,
+        gracePeriodMs: task.gracePeriodMs,
+        reason: cancellationReason(task.reason),
+      },
     };
   }
 
   async requestCancellation(
     input: RequestRunnerTaskCancellationInput,
   ): Promise<RequestRunnerTaskCancellationResult> {
+    assertCancellationPolicy(input);
     await this.transaction.execute(
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.requestId}, 0))`,
     );
@@ -765,6 +827,8 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
         taskId: schema.runnerTaskCancellations.taskId,
         taskStatus: schema.runnerTaskCancellations.resultingTaskStatus,
         requestedAt: schema.runnerTaskCancellations.requestedAt,
+        gracePeriodMs: schema.runnerTaskCancellations.gracePeriodMs,
+        reason: schema.runnerTaskCancellations.reason,
       })
       .from(schema.runnerTaskCancellations)
       .where(eq(schema.runnerTaskCancellations.taskId, task.id))
@@ -776,6 +840,7 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
         cancellation: {
           ...existingCancellation,
           taskStatus: cancellationStatus(existingCancellation.taskStatus),
+          reason: cancellationReason(existingCancellation.reason),
         },
       };
     }
@@ -816,12 +881,16 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
         id: input.requestId,
         taskId: task.id,
         resultingTaskStatus: taskStatus,
+        gracePeriodMs: input.gracePeriodMs,
+        reason: input.reason,
       })
       .returning({
         requestId: schema.runnerTaskCancellations.id,
         taskId: schema.runnerTaskCancellations.taskId,
         taskStatus: schema.runnerTaskCancellations.resultingTaskStatus,
         requestedAt: schema.runnerTaskCancellations.requestedAt,
+        gracePeriodMs: schema.runnerTaskCancellations.gracePeriodMs,
+        reason: schema.runnerTaskCancellations.reason,
       });
     if (!cancellation) {
       throw new Error("Runner task cancellation insert returned no record.");
@@ -836,6 +905,8 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
         version: "1",
         taskId: task.id,
         requestId: input.requestId,
+        gracePeriodMs: input.gracePeriodMs,
+        reason: input.reason,
       },
     );
 
@@ -844,6 +915,7 @@ export class PostgresSchedulerRepository implements SchedulerRepository {
       cancellation: {
         ...cancellation,
         taskStatus: cancellationStatus(cancellation.taskStatus),
+        reason: cancellationReason(cancellation.reason),
       },
     };
   }

@@ -307,4 +307,31 @@ describe("Phase 2 scheduler migration", () => {
       expect(migration).toContain(evidence);
     }
   });
+
+  it("backfills durable cancellation policy before advancing compatibility", async () => {
+    const migration = await readFile(
+      new URL(
+        "../drizzle/0012_durable_cancellation_policy.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    for (const evidence of [
+      `ADD COLUMN "reason" text`,
+      `ADD COLUMN "grace_period_ms" integer`,
+      `SET "reason" = 'operator', "grace_period_ms" = 5000`,
+      `ALTER COLUMN "reason" SET NOT NULL`,
+      `ALTER COLUMN "grace_period_ms" SET NOT NULL`,
+      `"reason" IN ('operator', 'budget', 'policy', 'runner_shutdown')`,
+      `"grace_period_ms" BETWEEN 0 AND 60000`,
+      `SET "version" = 9`,
+    ]) {
+      expect(migration).toContain(evidence);
+    }
+    expect(migration.indexOf(`SET "reason" = 'operator'`)).toBeLessThan(
+      migration.indexOf(`ALTER COLUMN "reason" SET NOT NULL`),
+    );
+    expect(migration.trimEnd()).toMatch(/SET "version" = 9 WHERE "id" = 1;$/u);
+  });
 });
