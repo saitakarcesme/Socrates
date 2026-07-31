@@ -2606,6 +2606,38 @@ This admits ADR-057 and closes Slice 2.20; durable-store composition, work
 admission, attempt sessions, execution, events, and production enablement
 remain disabled.
 
+### ADR-058: Source transfer is attempt-bound, streamed, and verified locally
+
+Slice 2.21 resolves the abstract source-artifact port introduced by ADR-056
+without weakening the frozen task contract. `ExperimentTaskV2` intentionally
+freezes a source snapshot identifier and digest but not transport metadata.
+Adding required byte length or media type to that version would invalidate
+already durable tasks. Treating unknown-size response bytes as a verified
+artifact would instead remove the hard archive bound.
+
+A `BoundedSourceArtifactResolver` is therefore constructed for one exact lease
+identity and one trusted maximum archive size. It asks a narrow runner source
+transport for the exact `(identity, snapshotId, digest)` and accepts only the
+canonical source-snapshot media type, a positive safe declared length within
+the local bound, and a streamed body. The same attempt cancellation signal is
+forwarded and checked while iterating bytes. The stream is written through the
+existing `ArtifactStore.put`, which independently enforces declared length,
+maximum length, and SHA-256 identity before issuing an opaque
+`VerifiedArtifact`.
+
+Resolution is one-shot and process-local. Concurrent and later exact calls
+share the first result or retained failure. A different snapshot identifier,
+digest, or signal authority fails before transport I/O. Missing content,
+redirect interpretation, credentials, HTTP details, retries, and signed URL
+policy remain transport responsibilities; the resolver never accepts a path,
+URL, buffer, or forged artifact from that boundary.
+
+The future HTTP transport must authenticate the runner and authorize the
+exact active task/attempt/fence before returning bytes, but that route and its
+backing object-store read model are a later slice. This slice does not change
+task schemas, persist capabilities, materialize tar contents, admit images,
+prepare a full attempt, execute a sandbox, or enable the runner.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

@@ -740,6 +740,27 @@ Evidence: implementation commit `0b7d64e`; GitHub Actions run `30659524149`
 passed 262 runner-local tests, all PostgreSQL/API/runner integrations, native
 durability probes, Chromium, and production builds.
 
+### Slice 2.21 — bounded source artifact resolution
+
+Status: Planned on 2026-07-31.
+
+Architecture decision: ADR-058.
+
+Detailed plan: `docs/plans/slice-2.21-source-artifact-resolution.md`.
+
+- bind one resolver to one exact lease identity and archive-size policy;
+- request the exact snapshotId/digest through a narrow authenticated transport;
+- validate declared media type/length before streaming;
+- write through the content-addressed store with independent size/digest
+  verification and attempt cancellation;
+- retain one result/failure and reject authority drift before transport I/O;
+- keep HTTP routes, object-store serving, task schema changes,
+  materialization, sessions, and runner enablement out of scope.
+
+Exit: adversarial streaming tests prove forged descriptors, truncation,
+overflow, digest drift, cancellation, duplicate calls, and identity drift
+cannot produce a verified artifact capability.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
