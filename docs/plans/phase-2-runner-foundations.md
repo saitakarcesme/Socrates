@@ -923,7 +923,7 @@ durability probes, Chromium, and production builds.
 
 ### Slice 2.28 — terminal evidence recovery before retirement
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-065.
 
@@ -941,6 +941,13 @@ Detailed plan: `docs/plans/slice-2.28-terminal-evidence-recovery.md`.
 Exit: restart, transport ambiguity, acknowledgement, completion, and admission
 ordering tests prove durable terminal evidence is replayed before retirement
 and cannot be skipped or replaced by a new attempt.
+
+Evidence: implementation commit `c7f5f11`; 16 focused recovery tests and 398
+runner-local tests passed locally with every repository quality gate. A real
+filesystem restart replayed only the remaining event from a partially
+acknowledged terminal batch and committed durable work completion. GitHub
+Actions run `30668714816` passed every integration suite, both Linux native
+durability probes, Chromium, and production builds.
 
 ## Acceptance gates
 

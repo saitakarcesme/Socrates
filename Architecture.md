@@ -3026,6 +3026,20 @@ append, garbage collection, polling loop, or runner enablement. It establishes
 the restart ordering needed before a single-attempt session can safely publish
 terminal evidence.
 
+Validation amendment, 2026-07-31: implementation commit `c7f5f11` passed every
+local repository gate, including 398 runner-local tests and the low-severity
+dependency audit. Sixteen focused recovery tests proved bounded replay,
+identity and state validation, ambiguity preservation, completion ordering,
+and admission suppression. A non-creating inspection test proved that an
+absent attempt leaves no filesystem state, while a real restart test reopened
+both the durable journal and a partially acknowledged spool, replayed only the
+remaining event, and committed exact work completion. GitHub Actions run
+`30668714816` passed every PostgreSQL, authenticated API, and runner
+integration, both Linux native durability probes, the Chromium product
+journey, and all production builds. This admits ADR-065 and closes Slice 2.28;
+execution, fresh event creation, claimed pre-start evidence recovery, polling,
+and runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

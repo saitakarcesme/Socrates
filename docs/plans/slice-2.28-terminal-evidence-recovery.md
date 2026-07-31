@@ -1,6 +1,6 @@
 # Slice 2.28 terminal evidence recovery before retirement
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -76,3 +76,19 @@ Do not inspect or recover pre-start claimed evidence in this slice.
 6. Successful recovery prevents same-call acquisition.
 7. Execution, fresh event creation, polling, and runner enablement remain
    disabled.
+
+## Validation
+
+Implementation commit `c7f5f11` passed every local repository gate, including
+398 runner-local tests and the low-severity dependency audit. Sixteen focused
+recovery tests cover bounded replay, invalid and drifting state, ambiguity,
+completion, and admission ordering. Additional tests prove absent-attempt
+inspection performs no filesystem mutation and that a real journal/spool
+restart replays only the unacknowledged terminal event before durable work
+completion.
+
+GitHub Actions run `30668714816` passed every PostgreSQL, authenticated API,
+and runner integration, both Linux native durability probes, the Chromium
+product journey, and all production builds. ADR-065 is admitted; execution,
+fresh event creation, claimed pre-start evidence recovery, polling, and runner
+enablement remain disabled.
