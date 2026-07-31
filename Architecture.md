@@ -1101,6 +1101,28 @@ runner IDs on a public route would bypass ADR-031. The application service is
 therefore tested directly and becomes the only allowed entry point for a later
 authenticated transport adapter.
 
+### ADR-039: The first vertical runner is deterministic and test-only
+
+Slice 2.2 introduces a fake adapter under the execution-plane package's
+`testing` namespace. It implements the runner port but is not exported from the
+package's main entry point. Control-plane applications do not depend on
+`@socrates/runner-local`; the vertical integration test drives the persistence
+ports from the execution-plane package.
+
+The fake validates a frozen `RunnerExecutionV1` and emits a deterministic V2
+lifecycle: workspace preparation, ordered action start/completion pairs,
+measurement, and terminal success. Event IDs are derived reproducibly from the
+attempt identity and sequence. Durations and the synthetic measurement are
+explicit fixture inputs. It never opens a process, filesystem, socket, browser,
+container, or model provider, and it does not claim to measure real work.
+
+Cancellation is an in-memory test signal checked between yielded events. A
+cancelled fake execution emits one fenced terminal cancellation event at the
+next sequence. Restart tests create a new fake instance and replay its
+deterministic spool through the durable acknowledgement boundary. This adapter
+proves orchestration semantics only; it cannot satisfy or bypass the guarded
+OCI adapter gates.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

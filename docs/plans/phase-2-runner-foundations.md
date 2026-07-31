@@ -286,6 +286,15 @@ Completed:
 
 Exit: the complete control-plane journey passes without spawning a process.
 
+Implementation status: In progress.
+
+Current sub-slice:
+
+- test-only deterministic adapter under the execution-plane package
+- full claim-to-terminal PostgreSQL journey through scheduler ports
+- explicit synthetic measurement fixture
+- cancellation and restart/replay proofs without process execution
+
 ### Slice 2.3 — artifact and log boundary
 
 - implement content-addressed local artifact storage behind a port
