@@ -951,7 +951,7 @@ durability probes, Chromium, and production builds.
 
 ### Slice 2.29 — pre-start terminal evidence recovery
 
-Status: Planned on 2026-07-31.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-066.
 
@@ -966,6 +966,11 @@ Detailed plan: `docs/plans/slice-2.29-pre-start-evidence-recovery.md`.
 
 Exit: restart and ambiguity tests prove a claimed attempt with terminal
 evidence completes before it can be released for execution.
+
+Evidence: implementation commit `0fa3686`; focused claimed-recovery tests and
+400 runner-local tests passed locally with every repository quality gate.
+GitHub Actions run `30669383760` passed every integration suite, both Linux
+native durability probes, Chromium, and production builds.
 
 ## Acceptance gates
 

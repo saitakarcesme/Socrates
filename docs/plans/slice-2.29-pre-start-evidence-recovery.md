@@ -1,6 +1,6 @@
 # Slice 2.29 pre-start terminal evidence recovery
 
-Status: Planned
+Status: Complete
 
 Date: 2026-07-31
 
@@ -60,3 +60,17 @@ fails closed.
 4. Ready results retain exact durable delivery identity.
 5. Execution, fresh event creation, polling, and runner enablement remain
    disabled.
+
+## Validation
+
+Implementation commit `0fa3686` passed every local repository gate, including
+400 runner-local tests and the low-severity dependency audit. Focused
+admission tests prove claimed terminal completion precedes ready, recovery
+ambiguity suppresses execution and acquisition, and both new and recovered
+ready results carry the exact journal-owned delivery identity. ADR-065's
+existing real-restart and bounded-replay suites remained green.
+
+GitHub Actions run `30669383760` passed every PostgreSQL, authenticated API,
+and runner integration, both Linux native durability probes, the Chromium
+product journey, and all production builds. ADR-066 is admitted; execution,
+fresh event creation, polling, and runner enablement remain disabled.

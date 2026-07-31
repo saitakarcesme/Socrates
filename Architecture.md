@@ -3078,6 +3078,18 @@ event append, failure mapping, polling loop, or runner enablement. It closes
 the final admission-side evidence gap before a terminal publication
 coordinator can be composed.
 
+Validation amendment, 2026-07-31: implementation commit `0fa3686` passed every
+local repository gate, including 400 runner-local tests and the low-severity
+dependency audit. Focused admission tests proved that claimed terminal
+evidence completes before ready, recovery ambiguity suppresses execution and
+acquisition, and fresh plus recovered ready results retain the exact durable
+delivery identity. The existing restart and bounded-replay suites continued
+to prove byte-stable terminal recovery. GitHub Actions run `30669383760`
+passed every PostgreSQL, authenticated API, and runner integration, both Linux
+native durability probes, the Chromium product journey, and all production
+builds. This admits ADR-066 and closes Slice 2.29; execution, fresh event
+creation, polling, and runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
