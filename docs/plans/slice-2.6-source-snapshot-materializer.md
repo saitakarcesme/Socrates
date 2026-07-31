@@ -1,6 +1,6 @@
 # Slice 2.6 source snapshot materializer plan
 
-Status: In progress
+Status: Complete
 
 Date: 2026-07-31
 
@@ -70,11 +70,12 @@ Production code belongs in `services/runner-local/src/source`:
   idempotent release, and scoped recovery;
 - `index.ts`: narrow public exports that omit path resolution.
 
-The configured root is resolved once and created privately. Each invocation
-uses a generated staging name unrelated to raw IDs. A root-private manifest
-records the ownership tuple and digest. The final directory is published only
-after all files close successfully and archive digest, archive size, expanded
-size, and terminator validation pass.
+The configured root is resolved once and created privately. A root ownership
+marker binds it to the deployment and runner; a populated unmarked root fails
+closed. Each invocation uses a generated staging name unrelated to raw IDs. A
+private snapshot manifest records the ownership tuple and digest. The final
+directory is published only after all files close successfully and archive
+digest, archive size, expanded size, and terminator validation pass.
 
 Every file is opened exclusively with no-follow semantics. Before each write,
 all parents are checked with `lstat` and must be directories inside the staging
@@ -164,3 +165,6 @@ Slice 2.6 is complete only when:
 6. cleanup and recovery cannot target a foreign attempt or directory;
 7. unit, property, full workspace, dependency, and native evidence gates pass;
 8. architecture and immutable evidence identify the admitted implementation.
+
+All criteria passed on 2026-07-31. Native evidence is recorded in
+`docs/evidence/slice-2.6-source-snapshot-materializer.md`.

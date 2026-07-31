@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 2,
+  "recordedAt": "2026-07-31T05:08:06.714Z",
+  "image": "node@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32",
+  "readiness": {
+    "checkedAt": "2026-07-31T05:08:03.926Z",
+    "nerdctlVersion": "2.3.1",
+    "serverVersion": "v2.3.1",
+    "architecture": "amd64",
+    "cgroupVersion": "2",
+    "securityOptions": [
+      "name=apparmor",
+      "name=seccomp,profile=builtin",
+      "name=cgroupns",
+      "name=rootless"
+    ]
+  },
+  "sourceSnapshot": {
+    "digest": "sha256:f2917deea5251566c6ed38719b4b8550507318b520e7e6cc26a1660d912f6920",
+    "archiveBytes": 2048,
+    "expandedBytes": 18,
+    "entryCount": 1
+  },
+  "gates": {
+    "scopedRecoveryBeforeRun": true,
+    "sourceRecoveryBeforeRun": true,
+    "sourceDigestAndSizeVerified": true,
+    "opaqueAttemptCapability": true,
+    "recursiveReadOnlySourceBind": true,
+    "sourceReleased": true,
+    "createBeforeNativeInspect": true,
+    "nativeSpecVerifiedBeforeStart": true,
+    "boundedExecution": true,
+    "exactFenceCancellation": true,
+    "cleanup": true
+  },
+  "successfulExecution": {
+    "exitCode": 0,
+    "durationMs": 224.07
+  },
+  "cancellation": {
+    "exitCode": 1,
+    "durationMs": 1209.65
+  }
+}

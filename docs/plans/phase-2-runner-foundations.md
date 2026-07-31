@@ -385,7 +385,7 @@ prerequisites before a full experiment may execute.
 
 ### Slice 2.6 — source snapshot materializer
 
-Status: In progress.
+Status: Complete on 2026-07-31.
 
 Architecture decision: ADR-043.
 

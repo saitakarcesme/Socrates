@@ -1504,6 +1504,24 @@ runner transport. Slice 2.6 tests the artifact read authority, adversarial tar
 policy, scoped recovery and OCI mount attestation; `LocalRunnerNotEnabledError`
 remains correct afterward.
 
+#### ADR-043 validation amendment: source materializer admitted
+
+GitHub Actions run `30605900587` on the provisioned Ubuntu 24.04 reference-host
+class admits Slice 2.6. Rootless nerdctl/containerd v2.3.1 materialized a
+verified 2,048-byte tar into an 18-byte nested source tree, bound it through the
+opaque same-attempt capability, and passed create-before-start native OCI
+inspection. The sandbox read the expected nested content, a write attempt
+failed on the recursive read-only mount, and exact release left only the
+runner-owned root marker. The successful sandbox completed in `224.07 ms`;
+exact-fence cancellation and cleanup completed in `1209.65 ms`.
+
+The immutable result is stored at
+`services/runner-local/evidence/native/30605900587.json`. This amendment admits
+only the pathless artifact read boundary, source archive materializer, opaque
+capability, and guarded source bind. Durable snapshot resolution, the image
+catalog/task-runtime ABI, lifecycle adapter, spool, transport, and autonomous
+research loop remain later slices.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
