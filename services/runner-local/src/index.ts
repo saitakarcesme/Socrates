@@ -22,3 +22,4 @@ export * from "./oci/index";
 export * from "./image/index";
 export * from "./runtime/index";
 export * from "./source/index";
+export * from "./request/index";

@@ -7,6 +7,7 @@ import {
   completeMaterializedSourceSnapshotRelease,
   issueMaterializedSourceSnapshot,
 } from "../source/capability";
+import { issueMaterializedRuntimeRequest } from "../request/capability";
 
 describe("sandbox create profile", () => {
   it("builds one closed, no-shell nerdctl argument vector", () => {
@@ -96,5 +97,35 @@ describe("sandbox create profile", () => {
 
     completeMaterializedSourceSnapshotRelease(source);
     expect(() => buildCreateArguments(input)).toThrow("does not belong");
+  });
+
+  it("resolves only a same-attempt request capability", () => {
+    const ownership = createSandboxOwnership("deployment-a", fixtureIdentity);
+    const request = issueMaterializedRuntimeRequest({
+      path: "/runner/sources/source-owned/request.bin",
+      deploymentId: "deployment-a",
+      identity: fixtureIdentity,
+      digest: `sha256:${"b".repeat(64)}`,
+      sizeBytes: 128,
+    });
+    const input = {
+      ownership,
+      image: fixtureImage,
+      profile: fixtureProfile,
+      command: { executable: "/bin/true", arguments: [] },
+      request,
+      deploymentId: "deployment-a",
+      identity: fixtureIdentity,
+    } as const;
+
+    expect(buildCreateArguments(input)).toContain(
+      "type=bind,src=/runner/sources/source-owned/request.bin,dst=/socrates/request.bin,rro,bind-propagation=rprivate",
+    );
+    expect(() =>
+      buildCreateArguments({
+        ...input,
+        identity: { ...fixtureIdentity, fence: fixtureIdentity.fence + 1 },
+      }),
+    ).toThrow("does not belong");
   });
 });

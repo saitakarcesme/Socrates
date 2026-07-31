@@ -416,7 +416,8 @@ Detailed plan: `docs/plans/slice-2.7-image-catalog-runtime.md`.
 - inspect OCI manifest/config identity without pulling or trusting labels as
   authorization
 - issue an opaque catalog-backed image capability
-- define `socrates.task-runtime.v1` bounded stdin and framed output protocols
+- define the `socrates.task-runtime.v1` bounded request-artifact and framed
+  output protocols
 - copy the admitted source into the bounded no-exec workspace
 - invoke ordered commands with exact argv, cwd, timeout, and fixed environment
 - frame binary child output and measurement bytes as untrusted data

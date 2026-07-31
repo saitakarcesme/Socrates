@@ -101,6 +101,28 @@ function isExpectedSourceBind(
   );
 }
 
+function isExpectedRequestBind(
+  mount: JsonObject,
+  expectedRequestPath: string | undefined,
+): boolean {
+  if (
+    !expectedRequestPath ||
+    mount["destination"] !== "/socrates/request.bin" ||
+    mount["source"] !== expectedRequestPath ||
+    mount["type"] !== "bind"
+  ) {
+    return false;
+  }
+  const options = strings(mount["options"]);
+  return (
+    options !== undefined &&
+    options.includes("rbind") &&
+    (options.includes("ro") || options.includes("rro")) &&
+    !options.includes("rw") &&
+    (options.includes("rprivate") || options.includes("private"))
+  );
+}
+
 function mountOption(mount: JsonObject | undefined, expected: string): boolean {
   return strings(mount?.["options"])?.includes(expected) === true;
 }
@@ -132,6 +154,7 @@ export function verifyNativeSpec(
   spec: JsonObject,
   profile: SandboxResourceProfile,
   expectedSourcePath?: string,
+  expectedRequestPath?: string,
 ): void {
   validateSandboxProfile(profile);
   const failures: string[] = [];
@@ -199,7 +222,8 @@ export function verifyNativeSpec(
         return (
           bind &&
           !isOwnedMetadataBind(mount) &&
-          !isExpectedSourceBind(mount, expectedSourcePath)
+          !isExpectedSourceBind(mount, expectedSourcePath) &&
+          !isExpectedRequestBind(mount, expectedRequestPath)
         );
       })
     ) {
@@ -215,6 +239,17 @@ export function verifyNativeSpec(
       (expectedSourcePath === undefined && sourceMounts.length !== 0)
     ) {
       failures.push("mounts./socrates/source");
+    }
+    const requestMounts = mounts.filter(
+      (mount) => mount["destination"] === "/socrates/request.bin",
+    );
+    if (
+      (expectedRequestPath !== undefined &&
+        (requestMounts.length !== 1 ||
+          !isExpectedRequestBind(requestMounts[0]!, expectedRequestPath))) ||
+      (expectedRequestPath === undefined && requestMounts.length !== 0)
+    ) {
+      failures.push("mounts./socrates/request.bin");
     }
     for (const [destination, size] of [
       ["/workspace", profile.workspaceBytes],

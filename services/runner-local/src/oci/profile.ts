@@ -6,6 +6,10 @@ import {
 } from "../source/capability";
 import type { SandboxAttemptIdentity } from "./identity";
 import type { SandboxImageAuthority } from "../image/capability";
+import {
+  resolveMaterializedRuntimeRequest,
+  type MaterializedRuntimeRequest,
+} from "../request/capability";
 
 export type { AdmittedSandboxImage } from "../image/capability";
 
@@ -76,9 +80,9 @@ export function buildCreateArguments(input: {
   profile: SandboxResourceProfile;
   command: SandboxCommand;
   source?: MaterializedSourceSnapshot;
+  request?: MaterializedRuntimeRequest;
   deploymentId?: string;
   identity?: SandboxAttemptIdentity;
-  interactive?: boolean;
 }): readonly string[] {
   assertSandboxImageAuthority(input.image);
   validateSandboxProfile(input.profile);
@@ -87,6 +91,9 @@ export function buildCreateArguments(input: {
     .flatMap(([name, value]) => ["--label", `${name}=${value}`]);
   const sourceArguments = input.source
     ? sourceMountArguments(input.source, input.deploymentId, input.identity)
+    : [];
+  const requestArguments = input.request
+    ? requestMountArguments(input.request, input.deploymentId, input.identity)
     : [];
 
   return [
@@ -104,9 +111,9 @@ export function buildCreateArguments(input: {
     "never",
     "--log-driver",
     "none",
-    ...(input.interactive ? ["--interactive"] : []),
     "--read-only",
     ...sourceArguments,
+    ...requestArguments,
     "--tmpfs",
     `/workspace:rw,noexec,nosuid,nodev,size=${input.profile.workspaceBytes}`,
     "--tmpfs",
@@ -137,6 +144,30 @@ export function buildCreateArguments(input: {
     input.command.executable,
     input.image.reference,
     ...commandArguments(input.command).slice(1),
+  ];
+}
+
+function requestMountArguments(
+  request: MaterializedRuntimeRequest,
+  deploymentId: string | undefined,
+  identity: SandboxAttemptIdentity | undefined,
+): readonly string[] {
+  if (!deploymentId || !identity) {
+    throw new TypeError(
+      "A request capability requires deployment and attempt identity.",
+    );
+  }
+  const path = resolveMaterializedRuntimeRequest(
+    request,
+    deploymentId,
+    identity,
+  );
+  if (path.includes(",") || path.includes("\0")) {
+    throw new TypeError("Materialized request path is not mount-safe.");
+  }
+  return [
+    "--mount",
+    `type=bind,src=${path},dst=/socrates/request.bin,rro,bind-propagation=rprivate`,
   ];
 }
 

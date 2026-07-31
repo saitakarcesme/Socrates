@@ -65,8 +65,8 @@ catalog entry.
 
 ## Runtime request
 
-The container is created with stdin open, no terminal, and the fixed catalog
-entrypoint. The outer process boundary writes exactly one request:
+The container is created without a terminal and with the fixed catalog
+entrypoint. The outer process boundary supplies exactly one request:
 
 ```text
 uint32be payload length
@@ -75,18 +75,17 @@ strict UTF-8 JSON payload
 
 The length prefix, not transport EOF, terminates the request. The guarded outer
 runner validates and encodes the complete canonical request before container
-creation, writes that exact single buffer, and never exposes the runtime stdin
-to an untrusted producer. The in-image runtime begins only after that complete
-frame has arrived; it does not wait for an engine-specific attach stream to
-close. A second frame or bytes following the first frame in the same delivered
-chunk fail closed. Later writes are outside the ABI and the guarded runner never
-performs them.
+creation and exposes that exact single buffer. The in-image runtime begins only
+after that complete frame is available. A second frame or bytes following the
+first frame fail closed.
 
-After create and native-spec verification, stdin-bearing executions use a
-detached `nerdctl start` followed by a bounded `nerdctl attach`; nerdctl's
-`start --attach` path does not forward stdin. The fixed runtime remains inert
-and silent until the complete request frame arrives. Handshake and other
-stdin-free invocations keep the direct `start --attach` path.
+Native validation proved that nerdctl's `start --attach` path does not forward
+stdin and its documented attach path cannot attach after a detached start. The
+guarded runner therefore materializes the validated frame behind an opaque
+attempt capability, mounts the exact owned file recursively read-only at
+`/socrates/request.bin`, verifies that mount in the native OCI spec, and removes
+the file on every terminal path. Request content never enters argv,
+environment, labels, image metadata, or a caller-selected bind.
 
 The maximum request is fixed and checked before create. The canonical request
 contains:
@@ -166,7 +165,8 @@ Runtime stderr must remain empty.
 3. Add a deterministic runtime image recipe for native validation.
 4. Implement strict local OCI image inspection and the catalog capability.
 5. Replace the test-only image issuer in production paths.
-6. Extend the guarded backend with bounded stdin and fixed runtime invocation.
+6. Extend the guarded backend with an owned bounded request artifact and fixed
+   runtime invocation.
 7. Run adversarial unit tests and the native reference-host proof.
 
 ## Adversarial matrix
@@ -211,8 +211,8 @@ Slice 2.7 is complete only when:
    inspected into authority;
 2. local OCI content and live handshake match every pinned catalog field;
 3. only a genuine process-local image capability reaches the OCI backend;
-4. task commands are delivered to the fixed runtime over bounded stdin rather
-   than engine argv or environment;
+4. task commands are delivered to the fixed runtime through an owned bounded
+   request artifact rather than engine argv or environment;
 5. runtime child output cannot forge control frames;
 6. source copying and command execution remain inside bounded sandbox paths;
 7. unit, property, dependency, full workspace, and native gates pass;

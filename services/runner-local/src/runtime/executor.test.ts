@@ -16,12 +16,14 @@ import {
   fixtureProfile,
 } from "../oci/test-fixtures";
 import { issueMaterializedSourceSnapshot } from "../source/capability";
+import { issueMaterializedRuntimeRequest } from "../request/capability";
 
 import type {
   SandboxExecutionResult,
   SandboxRuntimeExecution,
 } from "../oci/backend";
 import type { RuntimeSandboxBackend } from "./executor";
+import type { RuntimeRequestMaterializerPort } from "./executor";
 
 const sourceDigest = `sha256:${"a".repeat(64)}`;
 const source = issueMaterializedSourceSnapshot({
@@ -128,6 +130,28 @@ class FakeBackend implements RuntimeSandboxBackend {
   }
 }
 
+class FakeRequestMaterializer implements RuntimeRequestMaterializerPort {
+  bytes: Uint8Array[] = [];
+  releases = 0;
+
+  async materialize(
+    input: Parameters<RuntimeRequestMaterializerPort["materialize"]>[0],
+  ) {
+    this.bytes.push(input.bytes);
+    return issueMaterializedRuntimeRequest({
+      path: "/runner/sources/runtime/request.bin",
+      deploymentId: "test-deployment",
+      identity: input.identity,
+      digest: `sha256:${"b".repeat(64)}`,
+      sizeBytes: input.bytes.byteLength,
+    });
+  }
+
+  async release() {
+    this.releases += 1;
+  }
+}
+
 function outcome(
   stdoutBytes: Uint8Array,
   overrides: Partial<SandboxExecutionResult> = {},
@@ -143,20 +167,24 @@ function outcome(
   };
 }
 
-function executor(backend: RuntimeSandboxBackend) {
-  return new RuntimeSandboxExecutor(backend, {
+function executor(
+  backend: RuntimeSandboxBackend,
+  requests = new FakeRequestMaterializer(),
+) {
+  return new RuntimeSandboxExecutor(backend, requests, {
     maximumProtocolBytes: 512 * 1_024,
     maximumChildOutputBytes: 256 * 1_024,
   });
 }
 
 describe("runtime sandbox executor", () => {
-  it("sends one canonical request over stdin and validates the response sequence", async () => {
+  it("materializes one canonical request and validates the response sequence", async () => {
     const backend = new FakeBackend(outcome(framed(successfulFrames())));
+    const materialized = new FakeRequestMaterializer();
     const input = request();
 
     await expect(
-      executor(backend).execute({
+      executor(backend, materialized).execute({
         request: input,
         image: fixtureImage,
         profile: fixtureProfile,
@@ -170,15 +198,14 @@ describe("runtime sandbox executor", () => {
 
     expect(backend.calls).toHaveLength(1);
     expect(backend.calls[0]?.image.runtime).toEqual(fixtureImage.runtime);
-    expect(backend.calls[0]?.maximumInputBytes).toBe(
-      runtimeProtocolLimits.maximumRequestBytes + 4,
-    );
+    expect(backend.calls[0]?.request?.envelope).toBeDefined();
+    expect(materialized.releases).toBe(1);
     const decoder = new RuntimeMessageDecoder(runtimeRequestSchema, {
       maximumFrameBytes: runtimeProtocolLimits.maximumRequestBytes,
       maximumAggregateBytes: runtimeProtocolLimits.maximumRequestBytes + 4,
       maximumFrames: 1,
     });
-    expect(decoder.push(backend.calls[0]?.stdin ?? new Uint8Array())).toEqual([
+    expect(decoder.push(materialized.bytes[0] ?? new Uint8Array())).toEqual([
       input,
     ]);
     expect(() => decoder.finish()).not.toThrow();

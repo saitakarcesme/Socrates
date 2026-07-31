@@ -1,6 +1,7 @@
 import { LocalContentAddressedArtifactStore } from "@socrates/artifact-store/local";
 import {
   runtimeAbi,
+  runtimeProtocolLimits,
   runtimeRequestSchema,
   type RuntimeFrame,
   type RuntimeRequest,
@@ -31,6 +32,7 @@ import {
 } from "../oci/readiness";
 import { RuntimeSandboxExecutor } from "./executor";
 import { SourceSnapshotMaterializer } from "../source/materializer";
+import { RuntimeRequestMaterializer } from "../request/materializer";
 
 import type { SandboxAttemptIdentity } from "../oci/identity";
 import type { SandboxResourceProfile } from "../oci/profile";
@@ -237,10 +239,6 @@ const image = await catalog.admit(
   pipelineInspection.manifestDigest,
   architectureName,
 );
-const runtime = new RuntimeSandboxExecutor(backend, {
-  maximumProtocolBytes: 1 * 1_024 * 1_024,
-  maximumChildOutputBytes: 256 * 1_024,
-});
 const sourceStateRoot = await mkdtemp(
   join(tmpdir(), "socrates-runtime-native-"),
 );
@@ -262,6 +260,15 @@ try {
       maximumComponentBytes: 128,
       maximumPathDepth: 16,
     },
+  });
+  const requestMaterializer = new RuntimeRequestMaterializer({
+    deploymentId: "native-task-runtime",
+    runnerId,
+    maximumBytes: runtimeProtocolLimits.maximumRequestBytes + 4,
+  });
+  const runtime = new RuntimeSandboxExecutor(backend, requestMaterializer, {
+    maximumProtocolBytes: 1 * 1_024 * 1_024,
+    maximumChildOutputBytes: 256 * 1_024,
   });
   const archive = await sourceArchive();
   const archiveDigest = `sha256:${createHash("sha256").update(archive).digest("hex")}`;
@@ -374,7 +381,7 @@ try {
   }
 
   const evidence = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     recordedAt: new Date().toISOString(),
     image: {
       reference: image.reference,
@@ -391,7 +398,7 @@ try {
       opaqueInspectedCapability: true,
       guardedLiveHandshake: true,
       opaqueAdmittedCapability: true,
-      canonicalBoundedStdin: true,
+      canonicalBoundedRequestArtifact: true,
       exactRuntimeEntrypoint: true,
       sourceCopiedToWorkspace: actionProof.source === "socrates-source-ok",
       recursiveReadOnlySourceBind: actionProof.readOnly === true,

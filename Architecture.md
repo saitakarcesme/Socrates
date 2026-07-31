@@ -1577,31 +1577,30 @@ catalog must still pin and verify the OCI manifest and configuration digests.
 
 `socrates.task-runtime.v1` is the only executable entrypoint for task work. The
 outer runner does not place a declared command directly in nerdctl argv. It
-creates the container with interactive stdin but no terminal, starts the fixed
-runtime, and sends one bounded, length-prefixed canonical JSON request. The
+creates the container without a terminal, starts the fixed runtime, and supplies
+one bounded, length-prefixed canonical JSON request. The
 request carries the exact fenced attempt identity, ordered action commands,
 measurement command and protocol, fixed source destination, and already-capped
 budgets. Attempt identity and image digest are compared again before input is
-written. Request data is never stored in image metadata, environment, or a host
-bind.
+materialized. Request data is never stored in image metadata, environment, or
+a caller-selected host bind.
 
 The four-byte length prefix is the request terminator; transport EOF is not
-part of the ABI because an attached containerd stdin stream is not required to
-close when its client finishes writing. The guarded runner owns this boundary:
-it validates and encodes the entire canonical request before create, writes
-exactly one buffer, and never forwards an untrusted stream. The runtime waits
-for that one complete frame, rejects any coalesced second frame or trailing
-bytes, and begins work immediately without waiting for attach-stream closure.
+part of the ABI. The guarded runner owns this boundary: it validates and
+encodes the entire canonical request before create and exposes exactly one
+complete buffer. The runtime rejects any coalesced second frame or trailing
+bytes before work begins.
 
-Nerdctl does not forward stdin through `start --attach`. For a stdin-bearing
-runtime invocation, the guarded backend therefore completes create and native
-inspection, starts the container detached, and then invokes `nerdctl attach`
-with the bounded request. The fixed runtime emits no output and performs no
-work before the complete frame arrives, so this narrow start-to-attach window
-cannot lose protocol output. Invocations without stdin retain the single
-`start --attach` path. Cancellation continues to target the already-recorded
-container identity and causes the attach process to terminate with the
-container.
+Native validation established that nerdctl does not forward stdin through
+`start --attach`, while its documented attach implementation cannot attach to a
+container started without `--attach`. The create-before-start inspection gate
+therefore makes stdin unavailable in the admitted CLI backend. The guarded
+runner materializes the validated frame behind an opaque, attempt-scoped
+capability, mounts only that owned file recursively read-only at the fixed
+`/socrates/request.bin` ABI path, and removes it after every terminal path. The
+path cannot be supplied by a caller, and native OCI inspection checks the exact
+owned source and destination before start. The runtime reads the bounded file
+once and remains inert until the complete frame is available.
 
 For every guarded container invocation, the backend maps the authorized outer
 command executable to nerdctl's explicit `--entrypoint` option and places only

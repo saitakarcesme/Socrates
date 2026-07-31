@@ -8,6 +8,7 @@ import {
   type RuntimeFrame,
   type RuntimeRequest,
 } from "@socrates/runtime-protocol";
+import { createHash } from "node:crypto";
 
 import type { AdmittedSandboxImage } from "../image/capability";
 import type {
@@ -16,11 +17,21 @@ import type {
 } from "../oci/backend";
 import type { SandboxResourceProfile } from "../oci/profile";
 import type { MaterializedSourceSnapshot } from "../source/capability";
+import type { MaterializedRuntimeRequest } from "../request/capability";
 
 export interface RuntimeSandboxBackend {
   executeRuntime(
     input: SandboxRuntimeExecution,
   ): Promise<SandboxExecutionResult>;
+}
+
+export interface RuntimeRequestMaterializerPort {
+  materialize(input: {
+    bytes: Uint8Array;
+    identity: RuntimeRequest["identity"];
+    source: MaterializedSourceSnapshot;
+  }): Promise<MaterializedRuntimeRequest>;
+  release(capability: MaterializedRuntimeRequest): Promise<void>;
 }
 
 export type RuntimeSandboxExecutorOptions = Readonly<{
@@ -57,6 +68,7 @@ export class RuntimeSandboxExecutor {
 
   constructor(
     readonly backend: RuntimeSandboxBackend,
+    readonly requests: RuntimeRequestMaterializerPort,
     options: RuntimeSandboxExecutorOptions,
   ) {
     positiveLimit("maximumProtocolBytes", options.maximumProtocolBytes);
@@ -98,9 +110,9 @@ export class RuntimeSandboxExecutor {
         "Runtime request exceeds its bound source or runner policy.",
       );
     }
-    let stdin: Uint8Array;
+    let encodedRequest: Uint8Array;
     try {
-      stdin = encodeRuntimeMessage(
+      encodedRequest = encodeRuntimeMessage(
         runtimeRequestSchema,
         request,
         runtimeProtocolLimits.maximumRequestBytes,
@@ -113,15 +125,30 @@ export class RuntimeSandboxExecutor {
       );
     }
 
-    const result = await this.backend.executeRuntime({
+    const envelope = await this.requests.materialize({
+      bytes: encodedRequest,
       identity: request.identity,
-      image: input.image,
-      profile: input.profile,
-      source: { snapshot: input.source, expectedDigest: request.source.digest },
-      signal: input.signal,
-      stdin,
-      maximumInputBytes: runtimeProtocolLimits.maximumRequestBytes + 4,
+      source: input.source,
     });
+    const expectedRequestDigest = `sha256:${createHash("sha256")
+      .update(encodedRequest)
+      .digest("hex")}`;
+    let result: SandboxExecutionResult;
+    try {
+      result = await this.backend.executeRuntime({
+        identity: request.identity,
+        image: input.image,
+        profile: input.profile,
+        source: {
+          snapshot: input.source,
+          expectedDigest: request.source.digest,
+        },
+        request: { envelope, expectedDigest: expectedRequestDigest },
+        signal: input.signal,
+      });
+    } finally {
+      await this.requests.release(envelope);
+    }
     if (result.stderr !== "" || result.stderrBytes.byteLength !== 0) {
       throw new RuntimeSandboxError(
         "protocol",

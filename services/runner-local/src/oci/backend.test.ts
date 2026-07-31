@@ -13,6 +13,7 @@ import {
 } from "./test-fixtures";
 import { issueMaterializedSourceSnapshot } from "../source/capability";
 import { issueInspectedSandboxImage } from "../image/capability";
+import { issueMaterializedRuntimeRequest } from "../request/capability";
 
 import type { ProcessExecutor, ProcessRequest, ProcessResult } from "./process";
 import type { ReadinessVerifier } from "./readiness";
@@ -33,6 +34,7 @@ class LifecycleProcesses implements ProcessExecutor {
   readonly requests: ProcessRequest[] = [];
   private compatibleInspection = "";
   private starts = 0;
+  private requestPath: string | undefined;
 
   async run(request: ProcessRequest): Promise<ProcessResult> {
     this.requests.push(request);
@@ -51,10 +53,28 @@ class LifecycleProcesses implements ProcessExecutor {
         Image: fixtureImage.digest,
         Config: { Image: fixtureImage.reference, Labels: labels },
       });
+      const requestMount = request.arguments.find((argument) =>
+        argument.includes("dst=/socrates/request.bin"),
+      );
+      this.requestPath = requestMount
+        ?.split(",")
+        .find((entry) => entry.startsWith("src="))
+        ?.slice(4);
       return successfulResult();
     }
     if (command === "inspect" && request.arguments.includes("--mode")) {
-      return successfulResult(fixtureNativeInspection());
+      const native = JSON.parse(fixtureNativeInspection()) as Array<{
+        Spec: { mounts: Record<string, unknown>[] };
+      }>;
+      if (this.requestPath) {
+        native[0]?.Spec.mounts.push({
+          destination: "/socrates/request.bin",
+          source: this.requestPath,
+          type: "bind",
+          options: ["rbind", "rro", "rprivate"],
+        });
+      }
+      return successfulResult(JSON.stringify(native));
     }
     if (command === "inspect") {
       return successfulResult(this.compatibleInspection);
@@ -212,17 +232,22 @@ describe("nerdctl sandbox backend", () => {
     ]);
   });
 
-  it("starts an interactive sandbox before attaching bounded stdin", async () => {
+  it("mounts an owned runtime request before attached start", async () => {
     const processes = new LifecycleProcesses();
     const { value } = backend(processes);
-    const stdin = Uint8Array.from([0, 1, 2, 255]);
+    const request = issueMaterializedRuntimeRequest({
+      path: "/runner/sources/runtime/request.bin",
+      deploymentId,
+      identity: fixtureIdentity,
+      digest: `sha256:${"c".repeat(64)}`,
+      sizeBytes: 128,
+    });
 
     await value.executeRuntime({
       identity: fixtureIdentity,
       image: fixtureImage,
       profile: fixtureProfile,
-      stdin,
-      maximumInputBytes: stdin.byteLength,
+      request: { envelope: request, expectedDigest: request.digest },
     });
 
     const creates = processes.requests.filter(
@@ -231,22 +256,46 @@ describe("nerdctl sandbox backend", () => {
     const starts = processes.requests.filter(
       (request) => request.arguments[0] === "start",
     );
-    const attaches = processes.requests.filter(
-      (request) => request.arguments[0] === "attach",
-    );
     expect(creates[0]?.arguments).not.toContain("--interactive");
-    expect(creates[1]?.arguments).toContain("--interactive");
+    expect(creates[1]?.arguments).not.toContain("--interactive");
+    expect(creates[1]?.arguments).toContain(
+      "type=bind,src=/runner/sources/runtime/request.bin,dst=/socrates/request.bin,rro,bind-propagation=rprivate",
+    );
     expect(starts[0]?.stdin).toBeUndefined();
     expect(starts[1]?.arguments).toEqual([
       "start",
+      "--attach",
       createSandboxOwnership(deploymentId, fixtureIdentity).containerName,
     ]);
     expect(starts[1]?.stdin).toBeUndefined();
-    expect(attaches).toHaveLength(1);
-    expect(attaches[0]).toMatchObject({
-      stdin,
-      maximumInputBytes: stdin.byteLength,
+    expect(
+      processes.requests.some((entry) => entry.arguments[0] === "attach"),
+    ).toBe(false);
+  });
+
+  it("rejects a materialized request with a different expected digest", async () => {
+    const processes = new LifecycleProcesses();
+    const { value } = backend(processes);
+    const request = issueMaterializedRuntimeRequest({
+      path: "/runner/sources/runtime/request.bin",
+      deploymentId,
+      identity: fixtureIdentity,
+      digest: `sha256:${"c".repeat(64)}`,
+      sizeBytes: 128,
     });
+
+    await expect(
+      value.executeRuntime({
+        identity: fixtureIdentity,
+        image: fixtureImage,
+        profile: fixtureProfile,
+        request: {
+          envelope: request,
+          expectedDigest: `sha256:${"d".repeat(64)}`,
+        },
+      }),
+    ).rejects.toThrow(/request digest/u);
+    expect(processes.requests).toEqual([]);
   });
 
   it("allows inspected images only on the admission-probe path", async () => {

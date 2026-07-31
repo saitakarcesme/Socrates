@@ -13,6 +13,10 @@ import {
   resolveMaterializedSourceSnapshot,
   type MaterializedSourceSnapshot,
 } from "../source/capability";
+import {
+  resolveMaterializedRuntimeRequest,
+  type MaterializedRuntimeRequest,
+} from "../request/capability";
 
 import type { SandboxAttemptIdentity, SandboxOwnership } from "./identity";
 import type { ProcessExecutor, ProcessResult } from "./process";
@@ -38,9 +42,11 @@ export type SandboxExecution = Readonly<{
     snapshot: MaterializedSourceSnapshot;
     expectedDigest: string;
   }>;
+  request?: Readonly<{
+    envelope: MaterializedRuntimeRequest;
+    expectedDigest: string;
+  }>;
   signal?: AbortSignal;
-  stdin?: Uint8Array;
-  maximumInputBytes?: number;
 }>;
 
 export type SandboxImageProbeExecution = Readonly<{
@@ -68,9 +74,8 @@ type PreparedSandboxExecution = Readonly<{
   profile: SandboxResourceProfile;
   command: SandboxCommand;
   source?: SandboxExecution["source"];
+  request?: SandboxExecution["request"];
   signal?: AbortSignal;
-  stdin?: Uint8Array;
-  maximumInputBytes?: number;
 }>;
 
 export type NerdctlSandboxBackendOptions = Readonly<{
@@ -316,6 +321,19 @@ export class NerdctlSandboxBackend {
         input.identity,
       );
     }
+    if (input.request) {
+      if (input.request.envelope.digest !== input.request.expectedDigest) {
+        throw new SandboxBackendError(
+          "identity_mismatch",
+          "Materialized request digest does not match the execution request.",
+        );
+      }
+      resolveMaterializedRuntimeRequest(
+        input.request.envelope,
+        this.options.deploymentId,
+        input.identity,
+      );
+    }
     const readiness = await this.attest();
     if (readiness.architecture !== input.image.architecture) {
       throw new SandboxBackendError(
@@ -403,6 +421,22 @@ export class NerdctlSandboxBackend {
           input.identity,
         )
       : undefined;
+    const requestPath = input.request
+      ? resolveMaterializedRuntimeRequest(
+          input.request.envelope,
+          this.options.deploymentId,
+          input.identity,
+        )
+      : undefined;
+    if (
+      input.request &&
+      input.request.envelope.digest !== input.request.expectedDigest
+    ) {
+      throw new SandboxBackendError(
+        "identity_mismatch",
+        "Materialized request digest does not match the execution request.",
+      );
+    }
     let created = false;
     try {
       await this.requireSuccess(
@@ -412,9 +446,9 @@ export class NerdctlSandboxBackend {
           profile: input.profile,
           command: input.command,
           source: input.source?.snapshot,
+          request: input.request?.envelope,
           deploymentId: this.options.deploymentId,
           identity: input.identity,
-          interactive: input.stdin !== undefined,
         }),
         "nerdctl create",
       );
@@ -437,31 +471,17 @@ export class NerdctlSandboxBackend {
         parseNativeSpec(native.stdout),
         input.profile,
         sourcePath,
+        requestPath,
       );
 
-      let result: ProcessResult;
-      if (input.stdin) {
-        await this.requireSuccess(
-          ["start", ownership.containerName],
-          "nerdctl start",
-        );
-        result = await this.run(["attach", ownership.containerName], {
+      const result = await this.run(
+        ["start", "--attach", ownership.containerName],
+        {
           timeoutMs: this.executionTimeoutMs,
           maximumOutputBytes: this.maximumExecutionOutputBytes,
-          stdin: input.stdin,
-          maximumInputBytes: input.maximumInputBytes,
           signal: input.signal,
-        });
-      } else {
-        result = await this.run(
-          ["start", "--attach", ownership.containerName],
-          {
-            timeoutMs: this.executionTimeoutMs,
-            maximumOutputBytes: this.maximumExecutionOutputBytes,
-            signal: input.signal,
-          },
-        );
-      }
+        },
+      );
       if (result.exitCode === null) {
         throw new SandboxBackendError(
           "engine",
