@@ -156,6 +156,33 @@ describe("WorkAdmissionCoordinator", () => {
     expect(noNetworkClaim).not.toHaveBeenCalled();
   });
 
+  it("quarantines started execution before any claim or acquisition", async () => {
+    const rootPath = root();
+    const durable = await journal(rootPath);
+    await durable.admit(delivery);
+    await durable.commitClaim(delivery.deliveryId, execution);
+    const started = await durable.commitExecutionStart(
+      delivery.deliveryId,
+      execution,
+    );
+    const acquire = vi.fn();
+    const claim = vi.fn();
+    const recovered = new WorkAdmissionCoordinator({
+      journal: await journal(rootPath),
+      client: client({ acquire, claim }),
+      leaseDurationMs: 60_000,
+    });
+
+    await expect(recovered.prepareNext()).resolves.toEqual({
+      state: "indeterminate",
+      execution,
+      work: started,
+      recovered: true,
+    });
+    expect(acquire).not.toHaveBeenCalled();
+    expect(claim).not.toHaveBeenCalled();
+  });
+
   it("durably rejects only an authoritative conflict and then permits acquire", async () => {
     const rootPath = root();
     const durable = await journal(rootPath);

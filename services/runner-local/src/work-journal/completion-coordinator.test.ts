@@ -105,6 +105,7 @@ describe("WorkCompletionCoordinator", () => {
       state: "not_ready",
       reason: "terminal_acknowledgement_missing",
     });
+    await journal.commitExecutionStart(delivery.deliveryId, execution);
     const events = await spool.append(execution, [
       runnerEventDraft({
         type: "workspace.prepared",
@@ -143,6 +144,7 @@ describe("WorkCompletionCoordinator", () => {
       replay: false,
       work: {
         state: "completed",
+        executionStartedAt: "2026-07-31T12:00:00.000Z",
         completion: { acknowledgedSequence: 2 },
       },
     });

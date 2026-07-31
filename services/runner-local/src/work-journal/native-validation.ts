@@ -85,6 +85,7 @@ try {
     client,
     leaseDurationMs: 60_000,
   }).reconcile(delivery);
+  await journal.commitExecutionStart(delivery.deliveryId, execution);
   await journal.commitCompletion(delivery.deliveryId, execution, {
     attemptKey: "a".repeat(64),
     acknowledgedSequence: 1,
@@ -120,6 +121,7 @@ try {
     itemMetadata,
     manifestMetadata,
     claimMetadata,
+    executionStartMetadata,
     rejectionMetadata,
     completionMetadata,
   ] = await Promise.all([
@@ -128,13 +130,14 @@ try {
     stat(itemPath),
     stat(join(itemPath, "manifest.json")),
     stat(join(itemPath, "claim.json")),
+    stat(join(itemPath, "execution-start.json")),
     stat(join(rejectedItemPath, "rejection.json")),
     stat(join(itemPath, "completion.json")),
   ]);
   const privateMode = (mode: number, expected: number) =>
     (mode & 0o777) === expected;
   const evidence = {
-    schema: "socrates.runner-work-journal.native.v3",
+    schema: "socrates.runner-work-journal.native.v4",
     recordedAt: new Date().toISOString(),
     host: {
       platform: process.platform,
@@ -147,10 +150,12 @@ try {
       itemMode0700: privateMode(itemMetadata.mode, 0o700),
       manifestMode0600: privateMode(manifestMetadata.mode, 0o600),
       claimMode0600: privateMode(claimMetadata.mode, 0o600),
+      executionStartMode0600: privateMode(executionStartMetadata.mode, 0o600),
       rejectionMode0600: privateMode(rejectionMetadata.mode, 0o600),
       completionMode0600: privateMode(completionMetadata.mode, 0o600),
       manifestSingleLink: manifestMetadata.nlink === 1,
       claimSingleLink: claimMetadata.nlink === 1,
+      executionStartSingleLink: executionStartMetadata.nlink === 1,
       rejectionSingleLink: rejectionMetadata.nlink === 1,
       completionSingleLink: completionMetadata.nlink === 1,
       exactAttemptReplay: replay.lease.attemptId === attemptId,
@@ -160,6 +165,7 @@ try {
         rejectedState.rejection?.apiCode === "resource_conflict",
       completedAfterRestart:
         completedState?.state === "completed" &&
+        completedState.executionStartedAt === "2026-07-31T12:00:00.000Z" &&
         completedState.completion?.acknowledgedSequence === 1,
     },
   };

@@ -71,6 +71,24 @@ export const workClaimSchema = workClaimCoreSchema
   .strict();
 export type WorkClaim = z.infer<typeof workClaimSchema>;
 
+export const workExecutionStartCoreSchema = z
+  .object({
+    version: z.literal("1"),
+    deliveryKey: keySchema,
+    executionDigest: digestSchema,
+    attemptKey: keySchema,
+    startedAt: z.iso.datetime(),
+  })
+  .strict();
+export type WorkExecutionStartCore = z.infer<
+  typeof workExecutionStartCoreSchema
+>;
+
+export const workExecutionStartSchema = workExecutionStartCoreSchema
+  .safeExtend({ checksum: digestSchema })
+  .strict();
+export type WorkExecutionStart = z.infer<typeof workExecutionStartSchema>;
+
 export const workRejectionCoreSchema = z
   .object({
     version: z.literal("1"),
@@ -114,9 +132,15 @@ export type WorkJournalState = Readonly<{
   deliveryId: string;
   taskId: string;
   attemptId: string;
-  state: "pending_claim" | "claimed" | "completed" | "rejected";
+  state:
+    | "pending_claim"
+    | "claimed"
+    | "execution_started"
+    | "completed"
+    | "rejected";
   admittedAt: string;
   claimedAt?: string;
+  executionStartedAt?: string;
   rejectedAt?: string;
   rejection?: WorkRejectionCore["response"] & {
     reason: WorkRejectionCore["reason"];

@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,7 +9,11 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RunnerControlPlaneClient } from "../transport/client";
-import { deliveryKeyFor } from "./codec";
+import {
+  createWorkExecutionStart,
+  deliveryKeyFor,
+  encodeWorkRecord,
+} from "./codec";
 import { WorkJournalError, type WorkJournalLimits } from "./contracts";
 import { ExactClaimReconciler } from "./reconciler";
 import {
@@ -112,6 +116,179 @@ describe("LocalWorkJournal", () => {
       expect(await restarted.list()).toHaveLength(1);
     },
   );
+
+  it.each([
+    "before_temp_open",
+    "after_temp_write",
+    "after_temp_sync",
+    "after_immutable_publish",
+    "after_temp_unlink",
+    "after_directory_sync",
+  ] satisfies WorkJournalFaultPoint[])(
+    "recovers execution-start publication after the %s fault boundary",
+    async (faultPoint) => {
+      const rootPath = root();
+      const initial = await open(rootPath);
+      await initial.admit(delivery);
+      await initial.commitClaim(delivery.deliveryId, execution);
+      let injected = false;
+      const faulting = await LocalWorkJournal.open({
+        rootPath,
+        limits,
+        identitySource: identities(),
+        directorySync: { sync: async () => undefined },
+        injectFault: (point) => {
+          if (!injected && point === faultPoint) {
+            injected = true;
+            throw new Error(`fault:${point}`);
+          }
+        },
+      });
+      await expect(
+        faulting.commitExecutionStart(delivery.deliveryId, execution),
+      ).rejects.toThrow(`fault:${faultPoint}`);
+
+      const restarted = await open(rootPath);
+      const recovered = await restarted.inspect(delivery.deliveryId);
+      if (recovered?.state === "execution_started") {
+        expect(recovered.executionStartedAt).toBe("2026-07-31T12:00:00.000Z");
+      } else {
+        expect(recovered?.state).toBe("claimed");
+        await expect(
+          restarted.commitExecutionStart(delivery.deliveryId, execution),
+        ).resolves.toMatchObject({ state: "execution_started" });
+      }
+    },
+  );
+
+  it("commits one exact execution start and permits completion", async () => {
+    const rootPath = root();
+    const journal = await open(rootPath);
+    await journal.admit(delivery);
+    await journal.commitClaim(delivery.deliveryId, execution);
+    const first = await journal.commitExecutionStart(
+      delivery.deliveryId,
+      execution,
+    );
+    expect(first).toMatchObject({
+      state: "execution_started",
+      executionStartedAt: "2026-07-31T12:00:00.000Z",
+    });
+    await expect(
+      journal.commitExecutionStart(delivery.deliveryId, execution),
+    ).resolves.toEqual(first);
+    await expect(
+      journal.commitCompletion(delivery.deliveryId, execution, {
+        attemptKey: "a".repeat(64),
+        acknowledgedSequence: 1,
+      }),
+    ).resolves.toMatchObject({
+      state: "completed",
+      executionStartedAt: "2026-07-31T12:00:00.000Z",
+    });
+    await expect(
+      journal.commitExecutionStart(delivery.deliveryId, execution),
+    ).rejects.toMatchObject({ code: "identity_conflict" });
+  });
+
+  it("rejects execution start without the exact active claim", async () => {
+    const pending = await open(root());
+    await pending.admit(delivery);
+    await expect(
+      pending.commitExecutionStart(delivery.deliveryId, execution),
+    ).rejects.toMatchObject({ code: "identity_conflict" });
+
+    const claimed = await open(root());
+    await claimed.admit(delivery);
+    await claimed.commitClaim(delivery.deliveryId, execution);
+    const drifted = runnerExecutionV1Schema.parse({
+      ...execution,
+      lease: { ...execution.lease, fence: 2 },
+    });
+    await expect(
+      claimed.commitExecutionStart(delivery.deliveryId, drifted),
+    ).rejects.toMatchObject({ code: "identity_conflict" });
+
+    const rejected = await open(root());
+    await rejected.admit(delivery);
+    await rejected.commitRejection(delivery.deliveryId, {
+      status: 409,
+      apiCode: "resource_conflict",
+      requestId: "request-1",
+    });
+    await expect(
+      rejected.commitExecutionStart(delivery.deliveryId, execution),
+    ).rejects.toMatchObject({ code: "identity_conflict" });
+  });
+
+  it("fails closed on an execution start without its durable claim", async () => {
+    const rootPath = root();
+    const journal = await open(rootPath);
+    await journal.admit(delivery);
+    const key = deliveryKeyFor(delivery);
+    await writeFile(
+      join(rootPath, "work", key, "execution-start.json"),
+      encodeWorkRecord(
+        createWorkExecutionStart({
+          deliveryKey: key,
+          execution,
+          startedAt: "2026-07-31T12:00:00.000Z",
+        }),
+      ),
+    );
+    await expect(journal.inspect(delivery.deliveryId)).rejects.toMatchObject({
+      code: "corrupt",
+    });
+  });
+
+  it("fails closed on execution-start checksum and identity drift", async () => {
+    const checksumRoot = root();
+    const checksumJournal = await open(checksumRoot);
+    await checksumJournal.admit(delivery);
+    await checksumJournal.commitClaim(delivery.deliveryId, execution);
+    await checksumJournal.commitExecutionStart(delivery.deliveryId, execution);
+    const checksumPath = join(
+      checksumRoot,
+      "work",
+      deliveryKeyFor(delivery),
+      "execution-start.json",
+    );
+    const checksumRecord = JSON.parse(
+      await readFile(checksumPath, "utf8"),
+    ) as Record<string, unknown>;
+    checksumRecord["checksum"] = `sha256:${"f".repeat(64)}`;
+    await writeFile(checksumPath, encodeWorkRecord(checksumRecord));
+    await expect(
+      checksumJournal.inspect(delivery.deliveryId),
+    ).rejects.toMatchObject({ code: "corrupt" });
+
+    const identityRoot = root();
+    const identityJournal = await open(identityRoot);
+    await identityJournal.admit(delivery);
+    await identityJournal.commitClaim(delivery.deliveryId, execution);
+    const drifted = runnerExecutionV1Schema.parse({
+      ...execution,
+      lease: { ...execution.lease, fence: 2 },
+    });
+    await writeFile(
+      join(
+        identityRoot,
+        "work",
+        deliveryKeyFor(delivery),
+        "execution-start.json",
+      ),
+      encodeWorkRecord(
+        createWorkExecutionStart({
+          deliveryKey: deliveryKeyFor(delivery),
+          execution: drifted,
+          startedAt: "2026-07-31T12:00:00.000Z",
+        }),
+      ),
+    );
+    await expect(
+      identityJournal.inspect(delivery.deliveryId),
+    ).rejects.toMatchObject({ code: "identity_conflict" });
+  });
 
   it.each([
     "before_temp_open",

@@ -8,11 +8,14 @@ import {
 } from "@socrates/contracts";
 import { canonicalJson } from "@socrates/runtime-protocol";
 
+import { attemptKeyFor } from "../spool/codec";
 import {
   workClaimCoreSchema,
   workClaimSchema,
   workCompletionCoreSchema,
   workCompletionSchema,
+  workExecutionStartCoreSchema,
+  workExecutionStartSchema,
   workManifestCoreSchema,
   workManifestSchema,
   workRejectionCoreSchema,
@@ -22,6 +25,8 @@ import {
   type WorkClaimCore,
   type WorkCompletion,
   type WorkCompletionCore,
+  type WorkExecutionStart,
+  type WorkExecutionStartCore,
   type WorkManifest,
   type WorkManifestCore,
   type WorkRejection,
@@ -161,6 +166,43 @@ export function decodeWorkClaim(bytes: Uint8Array): WorkClaim {
     );
   }
   return claim;
+}
+
+export function createWorkExecutionStart(input: {
+  deliveryKey: string;
+  execution: RunnerExecutionV1;
+  startedAt: string;
+}): WorkExecutionStart {
+  const core = workExecutionStartCoreSchema.parse({
+    version: "1",
+    deliveryKey: input.deliveryKey,
+    executionDigest: executionDigestFor(input.execution),
+    attemptKey: attemptKeyFor(input.execution),
+    startedAt: input.startedAt,
+  });
+  return freezeDeep(
+    workExecutionStartSchema.parse({ ...core, checksum: checksum(core) }),
+  );
+}
+
+export function decodeWorkExecutionStart(
+  bytes: Uint8Array,
+): WorkExecutionStart {
+  const start = decodeCanonical(
+    bytes,
+    (value) => workExecutionStartSchema.parse(value),
+    "Work execution start",
+  );
+  const { checksum: actual, ...rawCore } = start;
+  const core: WorkExecutionStartCore =
+    workExecutionStartCoreSchema.parse(rawCore);
+  if (actual !== checksum(core)) {
+    throw new WorkJournalError(
+      "corrupt",
+      "Work execution start checksum does not match.",
+    );
+  }
+  return start;
 }
 
 export function createWorkCompletion(input: {

@@ -11,10 +11,12 @@ import { canonicalJson } from "@socrates/runtime-protocol";
 import {
   createWorkClaim,
   createWorkCompletion,
+  createWorkExecutionStart,
   createWorkManifest,
   createWorkRejection,
   decodeWorkClaim,
   decodeWorkCompletion,
+  decodeWorkExecutionStart,
   decodeWorkManifest,
   decodeWorkRejection,
   deliveryKeyFor,
@@ -22,6 +24,7 @@ import {
   executionDigestFor,
   immutableExecution,
 } from "./codec";
+import { attemptKeyFor } from "../spool/codec";
 import {
   workJournalLimitsSchema,
   workCompletionCoreSchema,
@@ -29,6 +32,7 @@ import {
   WorkJournalError,
   type WorkClaim,
   type WorkCompletion,
+  type WorkExecutionStart,
   type WorkJournalLimits,
   type WorkJournalState,
   type WorkManifest,
@@ -62,6 +66,7 @@ type LoadedWork = Readonly<{
   manifest: WorkManifest;
   claim: WorkClaim | null;
   completion: WorkCompletion | null;
+  executionStart: WorkExecutionStart | null;
   rejection: WorkRejection | null;
 }>;
 
@@ -128,6 +133,7 @@ export class LocalWorkJournal {
       if (!existing) {
         if (
           (await this.#filesystem.readClaim(key)) ||
+          (await this.#filesystem.readExecutionStart(key)) ||
           (await this.#filesystem.readRejection(key)) ||
           (await this.#filesystem.readCompletion(key))
         ) {
@@ -177,6 +183,7 @@ export class LocalWorkJournal {
         if (!(await this.#filesystem.readManifest(key))) {
           if (
             (await this.#filesystem.readClaim(key)) ||
+            (await this.#filesystem.readExecutionStart(key)) ||
             (await this.#filesystem.readRejection(key)) ||
             (await this.#filesystem.readCompletion(key))
           ) {
@@ -198,6 +205,65 @@ export class LocalWorkJournal {
   ): Promise<RunnerExecutionV1 | null> {
     const state = await this.#loadByDeliveryId(deliveryId);
     return state?.claim ? immutableExecution(state.claim.execution) : null;
+  }
+
+  async commitExecutionStart(
+    deliveryId: string,
+    executionInput: RunnerExecutionV1,
+  ): Promise<WorkJournalState> {
+    const execution = runnerExecutionV1Schema.parse(executionInput);
+    return this.#serialize(async () => {
+      const loaded = await this.#requireByDeliveryId(deliveryId);
+      if (!loaded.claim || loaded.rejection || loaded.completion) {
+        throw new WorkJournalError(
+          "identity_conflict",
+          "Execution can start only from an active durable claim.",
+        );
+      }
+      const executionDigest = executionDigestFor(execution);
+      const attemptKey = attemptKeyFor(execution);
+      if (loaded.claim.executionDigest !== executionDigest) {
+        throw new WorkJournalError(
+          "identity_conflict",
+          "Execution start does not match the durable work claim.",
+        );
+      }
+      if (loaded.executionStart) {
+        if (
+          loaded.executionStart.executionDigest !== executionDigest ||
+          loaded.executionStart.attemptKey !== attemptKey
+        ) {
+          throw new WorkJournalError(
+            "identity_conflict",
+            "A different execution conflicts with the durable start record.",
+          );
+        }
+        return this.#state(loaded);
+      }
+      const start = createWorkExecutionStart({
+        deliveryKey: loaded.manifest.deliveryKey,
+        execution,
+        startedAt: this.#instant(),
+      });
+      const bytes = encodeWorkRecord(start);
+      await this.#checkCapacity(
+        bytes.byteLength,
+        this.#limits.maximumClaimBytes,
+        "execution start",
+      );
+      await this.#filesystem.publishExecutionStart(
+        loaded.manifest.deliveryKey,
+        bytes,
+      );
+      const durable = await this.#load(loaded.manifest.deliveryKey);
+      if (!durable.executionStart) {
+        throw new WorkJournalError(
+          "corrupt",
+          "The durable execution start is missing after publication.",
+        );
+      }
+      return this.#state(durable);
+    });
   }
 
   async commitClaim(
@@ -404,6 +470,7 @@ export class LocalWorkJournal {
     if (!manifestBytes) {
       if (
         (await this.#filesystem.readClaim(key)) ||
+        (await this.#filesystem.readExecutionStart(key)) ||
         (await this.#filesystem.readRejection(key)) ||
         (await this.#filesystem.readCompletion(key))
       )
@@ -431,6 +498,10 @@ export class LocalWorkJournal {
       );
     const claimBytes = await this.#filesystem.readClaim(key);
     const claim = claimBytes ? decodeWorkClaim(claimBytes) : null;
+    const executionStartBytes = await this.#filesystem.readExecutionStart(key);
+    const executionStart = executionStartBytes
+      ? decodeWorkExecutionStart(executionStartBytes)
+      : null;
     const rejectionBytes = await this.#filesystem.readRejection(key);
     const rejection = rejectionBytes
       ? decodeWorkRejection(rejectionBytes)
@@ -443,6 +514,11 @@ export class LocalWorkJournal {
       throw new WorkJournalError(
         "corrupt",
         "A work item cannot contain both claim and rejection records.",
+      );
+    if (executionStart && (!claim || rejection))
+      throw new WorkJournalError(
+        "corrupt",
+        "Work execution start requires a claim and forbids rejection.",
       );
     if (completion && (!claim || rejection))
       throw new WorkJournalError(
@@ -465,6 +541,16 @@ export class LocalWorkJournal {
         "Work rejection identity does not match its manifest.",
       );
     if (
+      executionStart &&
+      (executionStart.deliveryKey !== key ||
+        executionStart.executionDigest !== claim?.executionDigest ||
+        executionStart.attemptKey !== attemptKeyFor(claim.execution))
+    )
+      throw new WorkJournalError(
+        "identity_conflict",
+        "Work execution start identity does not match its claim.",
+      );
+    if (
       completion &&
       (completion.deliveryKey !== key ||
         completion.executionDigest !== claim?.executionDigest)
@@ -473,7 +559,13 @@ export class LocalWorkJournal {
         "identity_conflict",
         "Work completion identity does not match its claim.",
       );
-    return Object.freeze({ manifest, claim, completion, rejection });
+    return Object.freeze({
+      manifest,
+      claim,
+      completion,
+      executionStart,
+      rejection,
+    });
   }
 
   #requireDelivery(
@@ -498,13 +590,18 @@ export class LocalWorkJournal {
       attemptId: loaded.manifest.identity.attemptId,
       state: loaded.completion
         ? "completed"
-        : loaded.claim
-          ? "claimed"
-          : loaded.rejection
-            ? "rejected"
-            : "pending_claim",
+        : loaded.executionStart
+          ? "execution_started"
+          : loaded.claim
+            ? "claimed"
+            : loaded.rejection
+              ? "rejected"
+              : "pending_claim",
       admittedAt: loaded.manifest.admittedAt,
       ...(loaded.claim ? { claimedAt: loaded.claim.committedAt } : {}),
+      ...(loaded.executionStart
+        ? { executionStartedAt: loaded.executionStart.startedAt }
+        : {}),
       ...(loaded.rejection
         ? {
             rejectedAt: loaded.rejection.committedAt,
@@ -564,6 +661,7 @@ export class LocalWorkJournal {
       if (!(await this.#filesystem.readManifest(key))) {
         if (
           (await this.#filesystem.readClaim(key)) ||
+          (await this.#filesystem.readExecutionStart(key)) ||
           (await this.#filesystem.readRejection(key)) ||
           (await this.#filesystem.readCompletion(key))
         ) {

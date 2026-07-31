@@ -22,6 +22,12 @@ export type WorkAdmissionResult =
       state: "rejected";
       work: WorkJournalState;
       recovered: boolean;
+    }>
+  | Readonly<{
+      state: "indeterminate";
+      execution: RunnerExecutionV1;
+      work: WorkJournalState;
+      recovered: boolean;
     }>;
 
 function deliveryFor(state: WorkJournalState): RunnerTaskDeliveryV1 {
@@ -60,7 +66,10 @@ export class WorkAdmissionCoordinator {
     return this.#serialize(async () => {
       const local = ordered(await this.#journal.list());
       const actionable = local.find(
-        (work) => work.state === "pending_claim" || work.state === "claimed",
+        (work) =>
+          work.state === "pending_claim" ||
+          work.state === "claimed" ||
+          work.state === "execution_started",
       );
       if (actionable) return this.#prepare(actionable, true, signal);
 
@@ -78,6 +87,21 @@ export class WorkAdmissionCoordinator {
   ): Promise<WorkAdmissionResult> {
     if (work.state === "rejected") {
       return Object.freeze({ state: "rejected", work, recovered });
+    }
+    if (work.state === "execution_started") {
+      const execution = await this.#journal.claimedExecution(work.deliveryId);
+      if (!execution) {
+        throw new WorkJournalError(
+          "corrupt",
+          "Started work has no durable execution.",
+        );
+      }
+      return Object.freeze({
+        state: "indeterminate",
+        execution,
+        work,
+        recovered,
+      });
     }
     if (work.state === "claimed") {
       const execution = await this.#journal.claimedExecution(work.deliveryId);

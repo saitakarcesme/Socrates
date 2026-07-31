@@ -35,10 +35,10 @@ export class WorkCompletionCoordinator {
       if (work.state === "completed") {
         return Object.freeze({ state: "completed", work, replay: true });
       }
-      if (work.state !== "claimed") {
+      if (work.state !== "claimed" && work.state !== "execution_started") {
         throw new WorkJournalError(
           "identity_conflict",
-          "Only claimed work can become completed.",
+          "Only active claimed or started work can become completed.",
         );
       }
       const execution = await this.journal.claimedExecution(deliveryId);
