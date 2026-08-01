@@ -3922,6 +3922,64 @@ durability, Chromium product-journey, production-build, and evidence-upload
 gate. This admits ADR-079 and closes Slice 2.42. Authority/session composition,
 publication wiring, polling, and runner enablement remain disabled.
 
+### ADR-080: Fresh execution and publication have one closed session owner
+
+An exact ADR-075 `ready` handoff now has every prerequisite required for one
+attempt: closed local observation, serialized authority checkpoints, pure
+outcome arbitration, durable publication with bounded recovery, explicit
+evidence-free release, and total timing-uncertainty classification. Leaving
+these as calls for a future polling loop would still permit execution before
+heartbeat startup, publication from cached authority, cancellation bound to a
+different sandbox scope, or a return while the monitor remains active.
+
+One `FreshAttemptSession` will therefore accept only an exact deeply frozen
+`ready` handoff and construct every execution-bound collaborator itself. The
+same frozen execution binds one `SandboxCancellationScope`, heartbeat-only
+`LeaseSupervisor`, `LeaseAuthorityMonitor`, durable execution-start and timing
+barriers, execution projector, preparation coordinator, runtime executor,
+attempt observer, terminal arbiter, publication coordinator, and bounded
+publication owner. The ready handoff may be fresh or a safely reconciled
+claimed restart, but its delivery and execution identities cannot drift.
+
+`settle()` is single-flight. It starts and observes the authority monitor before
+the observer may resolve source, image, request, or sandbox capabilities. The
+observer then runs to its closed ADR-071/079 result and releases local ownership.
+Only afterward does the session request one serialized ADR-070 checkpoint and
+pass that exact authority fact with the local observation to ADR-069. A renewed
+checkpoint is not cached permission: the monitor continues through append,
+remote acknowledgement, local completion, and owner release.
+
+An `evidence` decision constructs one fresh-publication operation with only the
+decided drafts and gives it to ADR-074. The session awaits both publication
+ownership and the already-observed monitor Promise. Success requires the
+owner's stopped, cancelled, or stale authority result to equal the monitor's
+terminal result exactly. Owner failure is returned only after authority has
+also settled through abandonment, cancellation, stale authority, or existing
+fail-stop uncertainty. Promise settlement order is never policy.
+
+A `no_evidence` decision never constructs or invokes publication. The session
+calls ADR-078 `releaseWithoutEvidence()` only with that exact frozen decision
+and awaits the original monitor operation. It may return a frozen no-evidence
+result only with `released`, authenticated `cancelled`, or `stale` authority.
+Renewed authority must close as `terminal_evidence_unavailable`; an in-flight
+cancellation or stale response keeps precedence. Heartbeat, scheduler, or
+revocation uncertainty rejects through a fixed session boundary after the
+monitor has completed its existing fail-stop revocation path.
+
+The composition accepts narrow capabilities rather than a prebuilt observer,
+monitor, arbiter, or publisher. One sandbox backend supplies both execution and
+exact-identity cancellation. One journal capability supplies durable start and
+publication identity. Publication receives the same spool and recovery ports
+used by its disposition policy. Configuration bounds remain validated by their
+own admitted components. Construction performs no heartbeat, filesystem,
+network, clock, journal, or sandbox effect.
+
+This slice composes one already-admitted attempt only. It does not open durable
+stores, run the ADR-057 startup barrier, acquire work, interpret lease
+timestamps, retry a session, poll, back off, schedule concurrency, or enable a
+runner entry point. Those root lifecycle decisions remain separate after the
+one-attempt ownership boundary is proven closed.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

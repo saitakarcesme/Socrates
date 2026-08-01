@@ -1326,6 +1326,28 @@ runner, Linux native durability, Chromium product-journey, production-build,
 and evidence-upload gates. ADR-079 is admitted; authority/session composition,
 publication wiring, polling, and runner enablement remain separate decisions.
 
+### Slice 2.43 — fresh attempt session ownership
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-080.
+
+Detailed plan: `docs/plans/slice-2.43-fresh-attempt-session-ownership.md`.
+
+- accept only an exact fresh or safely reconciled ADR-075 `ready` handoff;
+- construct one identity-bound authority, execution, arbitration, and
+  publication composition from narrow capabilities;
+- start authority before any local execution effect and checkpoint only after
+  local cleanup settlement;
+- publish only exact evidence decisions and release only exact no-evidence
+  decisions;
+- await and compare publication/no-evidence ownership with monitor settlement;
+- keep startup, acquisition, polling, concurrency, and enablement out of scope.
+
+Exit: adversarial ordering and durable-store tests prove every supported
+one-attempt result closes local capabilities, authority, and publication under
+one owner without promise-race policy or detached supervision.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
