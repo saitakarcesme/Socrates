@@ -1,17 +1,23 @@
-import {
-  runnerExecutionV1Schema,
-  type RunnerExecutionV1,
-  type RunnerTaskDeliveryV1,
+import type {
+  RunnerExecutionV1,
+  RunnerTaskDeliveryV1,
 } from "@socrates/contracts";
 
 import {
   RunnerTransportError,
   type RunnerControlPlaneClient,
 } from "../transport/client";
-import { attemptKeyFor } from "../spool/codec";
 import { WorkJournalError, type WorkJournalState } from "./contracts";
 import { ExactClaimReconciler } from "./reconciler";
 import { LocalWorkJournal } from "./store";
+import {
+  immutableEvidenceSnapshot,
+  terminalActiveWorkSnapshot,
+  terminalCompletedWorkSnapshot,
+  terminalDispositionSnapshot,
+  terminalExecutionSnapshot,
+  TerminalEvidenceConsistencyError,
+} from "./terminal-evidence-consistency";
 import type { TerminalEvidenceRecoveryResult } from "./terminal-evidence-recovery";
 import type { TerminalPublicationDisposition } from "./terminal-publication-disposition";
 
@@ -95,14 +101,6 @@ function ordered(states: readonly WorkJournalState[]): WorkJournalState[] {
   );
 }
 
-function deepFreeze<T>(value: T): T {
-  if (typeof value !== "object" || value === null || Object.isFrozen(value)) {
-    return value;
-  }
-  for (const child of Object.values(value)) deepFreeze(child);
-  return Object.freeze(value);
-}
-
 function inconsistent(): never {
   throw new WorkAdmissionError(
     "terminal_recovery_inconsistent",
@@ -110,111 +108,13 @@ function inconsistent(): never {
   );
 }
 
-function immutableCopy<T>(value: T): T {
+function consistent<T>(operation: () => T): T {
   try {
-    return deepFreeze(structuredClone(value));
-  } catch {
-    return inconsistent();
+    return operation();
+  } catch (cause) {
+    if (cause instanceof TerminalEvidenceConsistencyError) inconsistent();
+    throw cause;
   }
-}
-
-function immutableExecution(input: RunnerExecutionV1): RunnerExecutionV1 {
-  try {
-    return deepFreeze(runnerExecutionV1Schema.parse(input));
-  } catch {
-    return inconsistent();
-  }
-}
-
-function assertExecutionIdentity(
-  work: WorkJournalState,
-  execution: RunnerExecutionV1,
-): void {
-  if (
-    work.taskId !== execution.lease.taskId ||
-    work.attemptId !== execution.lease.attemptId
-  ) {
-    inconsistent();
-  }
-}
-
-function safeCounter(value: unknown): value is number {
-  return Number.isSafeInteger(value) && Number(value) >= 0;
-}
-
-function assertCompletedWork(
-  work: WorkJournalState,
-  execution: RunnerExecutionV1,
-  acknowledgedSequence: number,
-): void {
-  if (
-    work.state !== "completed" ||
-    typeof work.completedAt !== "string" ||
-    !work.completion ||
-    work.completion.attemptKey !== attemptKeyFor(execution) ||
-    work.completion.acknowledgedSequence !== acknowledgedSequence ||
-    acknowledgedSequence < 1
-  ) {
-    inconsistent();
-  }
-}
-
-function assertWorkContinuity(
-  source: WorkJournalState,
-  observed: WorkJournalState,
-): void {
-  if (
-    observed.deliveryId !== source.deliveryId ||
-    observed.taskId !== source.taskId ||
-    observed.attemptId !== source.attemptId ||
-    observed.admittedAt !== source.admittedAt ||
-    observed.claimedAt !== source.claimedAt ||
-    observed.executionStartedAt !== source.executionStartedAt
-  ) {
-    inconsistent();
-  }
-}
-
-function dispositionSnapshot(
-  input: TerminalPublicationDisposition,
-  source: WorkJournalState,
-  execution: RunnerExecutionV1,
-): TerminalPublicationDisposition {
-  const disposition = immutableCopy(input);
-  if (
-    !disposition ||
-    !["absent", "pending", "acknowledged", "completed"].includes(
-      disposition.state,
-    )
-  ) {
-    inconsistent();
-  }
-  const work = disposition.work;
-  if (!work) inconsistent();
-  assertWorkContinuity(source, work);
-  assertExecutionIdentity(work, execution);
-  if (disposition.state === "completed") {
-    assertCompletedWork(work, execution, disposition.acknowledgedSequence);
-  } else if (work.state !== source.state) {
-    inconsistent();
-  }
-  if (disposition.state !== "absent") {
-    const { acknowledgedSequence, lastSequence, pendingEvents } = disposition;
-    if (
-      !safeCounter(acknowledgedSequence) ||
-      !safeCounter(lastSequence) ||
-      !safeCounter(pendingEvents) ||
-      lastSequence < 1 ||
-      acknowledgedSequence > lastSequence ||
-      pendingEvents !== lastSequence - acknowledgedSequence ||
-      (disposition.state === "pending"
-        ? pendingEvents < 1
-        : pendingEvents !== 0)
-    ) {
-      inconsistent();
-    }
-  }
-  return disposition;
 }
 
 export class WorkAdmissionCoordinator {
@@ -308,8 +208,8 @@ export class WorkAdmissionCoordinator {
   ): Promise<RunnerExecutionV1> {
     const stored = await this.#journal.claimedExecution(work.deliveryId);
     if (!stored) throw new WorkJournalError("corrupt", missingMessage);
-    const execution = immutableExecution(stored);
-    assertExecutionIdentity(work, execution);
+    const execution = consistent(() => terminalExecutionSnapshot(stored));
+    consistent(() => terminalActiveWorkSnapshot(work, execution));
     return execution;
   }
 
@@ -320,13 +220,18 @@ export class WorkAdmissionCoordinator {
     signal?: AbortSignal,
   ): Promise<WorkAdmissionResult> {
     if (!recovered) inconsistent();
-    const disposition = dispositionSnapshot(
-      await this.#terminalEvidence.audit(source.deliveryId, execution),
-      source,
+    const baseline = consistent(() =>
+      terminalActiveWorkSnapshot(source, execution),
+    );
+    const audited = await this.#terminalEvidence.audit(
+      source.deliveryId,
       execution,
     );
+    const disposition = consistent(() =>
+      terminalDispositionSnapshot(audited, baseline, execution),
+    );
     if (disposition.state === "completed") {
-      return deepFreeze({
+      return immutableEvidenceSnapshot({
         state: "completed",
         execution,
         work: disposition.work,
@@ -334,22 +239,21 @@ export class WorkAdmissionCoordinator {
       });
     }
     if (disposition.state === "acknowledged") {
-      const terminal = immutableCopy(
-        await this.#terminalEvidence.recover(source.deliveryId, execution),
-      );
-      if (!terminal || terminal.state !== "completed") inconsistent();
-      const completed = terminal.work;
-      if (!completed || completed.state !== "completed") {
-        inconsistent();
-      }
-      assertWorkContinuity(source, completed);
-      assertExecutionIdentity(completed, execution);
-      assertCompletedWork(
-        completed,
+      const recovered = await this.#terminalEvidence.recover(
+        source.deliveryId,
         execution,
-        disposition.acknowledgedSequence,
       );
-      return deepFreeze({
+      const terminal = consistent(() => immutableEvidenceSnapshot(recovered));
+      if (!terminal || terminal.state !== "completed") inconsistent();
+      const completed = consistent(() =>
+        terminalCompletedWorkSnapshot(
+          terminal.work,
+          baseline,
+          execution,
+          disposition.acknowledgedSequence,
+        ),
+      );
+      return immutableEvidenceSnapshot({
         state: "completed",
         execution,
         work: completed,
@@ -376,28 +280,28 @@ export class WorkAdmissionCoordinator {
     );
     if (reconciliation.state === "current") {
       if (disposition === "pending") {
-        return deepFreeze({
+        return immutableEvidenceSnapshot({
           state: "recovery_pending",
           deliveryId: work.deliveryId,
           execution,
-          work: immutableCopy(work),
+          work,
           recovered: true,
           observedAt: reconciliation.observedAt,
           leaseExpiresAt: reconciliation.leaseExpiresAt,
         });
       }
       if (work.state === "claimed") {
-        return deepFreeze({
+        return immutableEvidenceSnapshot({
           state: "ready",
           deliveryId: work.deliveryId,
           execution,
           recovered: true,
         });
       }
-      return deepFreeze({
+      return immutableEvidenceSnapshot({
         state: "indeterminate",
         execution,
-        work: immutableCopy(work),
+        work,
         recovered: true,
         observedAt: reconciliation.observedAt,
         leaseExpiresAt: reconciliation.leaseExpiresAt,
@@ -411,10 +315,10 @@ export class WorkAdmissionCoordinator {
         reason: reconciliation.reason,
       },
     );
-    return deepFreeze({
+    return immutableEvidenceSnapshot({
       state: "retired",
       execution,
-      work: immutableCopy(retired),
+      work: retired,
       recovered: true,
     });
   }

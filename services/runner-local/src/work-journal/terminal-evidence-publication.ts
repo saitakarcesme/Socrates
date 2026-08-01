@@ -44,7 +44,10 @@ export type TerminalEvidencePublicationResult = Readonly<{
 }>;
 
 export type TerminalPublicationFailureBoundary =
-  "append" | "recovery_after_append" | "recovery_before_append";
+  | "append"
+  | "recovery_after_append"
+  | "recovery_before_append"
+  | "recovery_only";
 
 export class TerminalEvidencePublicationError extends Error {
   constructor(
