@@ -3317,6 +3317,66 @@ Chromium product-journey, and production-build gate. This admits ADR-070 and
 closes Slice 2.33; terminal publication, session composition, polling, and
 runner enablement remain disabled.
 
+### ADR-071: Local attempt execution closes into one deterministic observation
+
+A publication-owning one-shot session cannot yet be composed safely. If
+terminal publication becomes uncertain after local append, ADR-063 forbids the
+owner from stopping lease supervision before acknowledgement and durable work
+completion. Returning while a detached monitor continues would orphan
+authority ownership, while stopping it would weaken recovery. Session
+composition therefore first requires a smaller closed boundary that performs
+local work but neither observes authority nor publishes events.
+
+`AttemptExecutionObserver` owns exactly one frozen execution attempt. Repeated
+`observe()` calls join the same operation and receive the same deeply frozen
+result. It prepares the source and image, crosses the durable execution-start
+barrier immediately before sandbox invocation, executes the bounded runtime,
+adapts valid runtime frames into terminal drafts, and releases every acquired
+local capability before returning. It has no transport, spool, work-completion,
+lease-supervision, or polling dependency.
+
+The result contains only the ADR-069 arbitration inputs that can be known
+locally: `TerminalExecutionTiming` and `TerminalOutcomeCandidate`. Successful
+runtime evidence becomes a runtime candidate. A recognized local failure
+becomes one safe `task.failed` candidate through `localFailureEvidence`.
+Explicit authority-driven abort becomes `none`; cancellation, stale authority,
+or uncertainty remains the future arbiter's decision. Unknown caught failures
+after observation begins close to the redacted `unexpected_runner_failure`
+policy rather than leaking messages or exception shapes.
+
+Failure normalization is stage-aware and typed. Projection, artifact lookup,
+artifact identity, image admission, source materialization, request
+materialization, sandbox execution, runtime protocol, lifecycle adaptation,
+and cleanup map to the existing closed local failure codes. Preparation and
+runtime coordinators must wrap dependency failures at the boundary where their
+stage is still known. Abort is recognized only from an exact signal reason or a
+typed backend-aborted error; merely finding a signal aborted after another
+failure is not enough to erase already-observed evidence.
+
+`DurableExecutionTimingBarrier` wraps the existing durable start barrier and an
+injected monotonic time source. It records a baseline only after the durable
+barrier succeeds and before sandbox invocation. A snapshot before that point is
+`not_started`; afterward it is `started` with a rounded-up non-negative safe
+integer elapsed duration. Non-finite values, regression, overflow, or
+time-source failure reject the shared observation with a typed
+`timing_uncertain` error and do not manufacture terminal evidence. This clock
+is used only for event duration; it never interprets lease timestamps or grants
+authority.
+
+Cleanup has precedence over an otherwise successful or failed runtime
+candidate: if source, request, or sandbox cleanup cannot be proven, the local
+observation becomes `cleanup_failed`. A preparation failure that already
+attempted compensating cleanup follows the same rule. Returning an observation
+proves that no prepared source or request capability remains owned by the
+observer; sandbox cleanup remains a typed backend obligation.
+
+This slice creates no executable runner entry point. The future session must
+start lease supervision, await this local observation without using Promise
+settlement order as policy, obtain the ADR-070 checkpoint, arbitrate through
+ADR-069, and keep supervision owned through recoverable publication and durable
+completion. Publication ownership, session composition, acquisition polling,
+and runner enablement remain separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

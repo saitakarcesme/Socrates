@@ -1079,6 +1079,26 @@ run `30709048533` passed every database, API, runner, native durability,
 Chromium, and production-build gate. Publication and session composition remain
 disabled.
 
+### Slice 2.34 — closed local attempt observation
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-071.
+
+Detailed plan: `docs/plans/slice-2.34-local-attempt-observation.md`.
+
+- normalize every local execution stage into the closed failure policy;
+- distinguish explicit authority abort from unrelated concurrent failure;
+- record elapsed duration only after the durable execution-start barrier;
+- prepare, execute, adapt, and release through one single-flight observer;
+- return only frozen timing and candidate inputs for ADR-069;
+- prove cleanup failure overrides otherwise publishable local evidence;
+- keep authority, publication, polling, and runner enablement out of scope.
+
+Exit: adversarial stage, cancellation, timing, cleanup, and re-entry tests prove
+one local attempt closes into one immutable arbitration observation without
+publishing an event or owning lease authority.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
