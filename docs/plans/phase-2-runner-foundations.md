@@ -972,6 +972,25 @@ Evidence: implementation commit `0fa3686`; focused claimed-recovery tests and
 GitHub Actions run `30669383760` passed every integration suite, both Linux
 native durability probes, Chromium, and production builds.
 
+### Slice 2.30 — terminal evidence publication
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-067.
+
+Detailed plan: `docs/plans/slice-2.30-terminal-evidence-publication.md`.
+
+- validate delivery ownership and terminal batch shape before side effects;
+- recover existing exact evidence before any fresh append;
+- append one lifecycle batch and reuse ADR-065 for delivery and completion;
+- preserve byte-stable recovery across every ambiguity boundary;
+- serialize duplicate calls into one append and durable completion;
+- keep execution, session composition, polling, and runner enablement out of
+  scope.
+
+Exit: mutation, fault-boundary, restart, identity, and concurrency tests prove
+fresh terminal evidence cannot allocate duplicate event identities on retry.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

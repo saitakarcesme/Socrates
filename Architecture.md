@@ -3090,6 +3090,51 @@ native durability probes, the Chromium product journey, and all production
 builds. This admits ADR-066 and closes Slice 2.29; execution, fresh event
 creation, polling, and runner enablement remain disabled.
 
+### ADR-067: Fresh terminal evidence publishes through one durable recovery path
+
+A session needs one operation that turns a validated terminal draft batch into
+durable, acknowledged, locally completed work. Calling spool append, sender,
+and work completion independently would expose an unsafe retry boundary: a
+caller could append a batch, lose the return value, and create different event
+IDs on retry. Publication must treat any exact durable batch as authoritative
+before considering fresh evidence.
+
+`TerminalEvidencePublicationCoordinator.publish` owns this boundary. Before
+filesystem or network effects it parses and freezes the delivery ID,
+execution, and every draft, verifies that the batch is non-empty and ends with
+exactly one terminal event, and proves the work journal binds that delivery to
+the byte-equivalent execution. Only `claimed`, `execution_started`, or an exact
+`completed` replay may enter publication. Pending, rejected, retired, missing,
+or identity-conflicting work fails closed.
+
+Publication first invokes ADR-065 recovery. If exact terminal evidence already
+exists, it drains and completes that evidence and ignores the candidate batch
+for mutation purposes. This is the required retry path after append,
+acknowledgement, or completion uncertainty. The drafts are still validated so
+an invalid caller cannot appear successful merely because older evidence is
+present. An exact completed replay returns the same durable completion without
+creating or sending anything new.
+
+Only an active work item with recovery result `none` may append. The
+coordinator revalidates active journal ownership immediately before append,
+then writes one lifecycle segment through `LocalEventSpool`. Spool input and
+terminal-shape validation must precede attempt-manifest creation, so invalid
+drafts cannot mutate the filesystem. After append, the coordinator invokes the
+same recovery operation again; `none` or completion not ready at that point is
+an invariant failure. Storage and transport ambiguity propagate unchanged so
+admission or a later publication call can replay the durable bytes.
+
+The coordinator serializes calls in-process. Concurrent duplicate calls yield
+one append and one durable completion; later calls recover the completed
+evidence. It returns a frozen result identifying whether evidence was freshly
+appended or recovered, but never returns generated event IDs as authority.
+The spool and control plane remain the sources of truth.
+
+This slice adds no runtime execution, preparation composition, lifecycle
+failure classification, heartbeat lifetime, polling loop, garbage collection,
+or runner enablement. It creates the single terminal publication primitive
+needed by a future one-attempt session.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
