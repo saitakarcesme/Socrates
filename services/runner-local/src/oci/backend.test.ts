@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { NerdctlSandboxBackend, sandboxTerminationReceipt } from "./backend";
+import { NerdctlSandboxBackend } from "./backend";
 import { createSandboxOwnership } from "./identity";
 import {
   fixtureCompatibleInspection,
@@ -15,6 +15,7 @@ import { issueMaterializedSourceSnapshot } from "../source/capability";
 import { issueInspectedSandboxImage } from "../image/capability";
 import { issueMaterializedRuntimeRequest } from "../request/capability";
 import { ProcessExecutionError } from "./process";
+import { sandboxTerminationReceipt } from "./termination";
 
 import type { ProcessExecutor, ProcessRequest, ProcessResult } from "./process";
 import type { ReadinessVerifier } from "./readiness";

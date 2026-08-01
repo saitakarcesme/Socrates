@@ -10,6 +10,7 @@ export {
   verifyNativeSpec,
 } from "./native-spec";
 export { NodeProcessExecutor, ProcessExecutionError } from "./process";
+export { sandboxTerminationReceipt } from "./termination";
 export {
   buildCreateArguments,
   sandboxAppArmorProfile,
@@ -29,6 +30,7 @@ export type {
 } from "./backend";
 export type { SandboxAttemptIdentity, SandboxOwnership } from "./identity";
 export type { ProcessExecutor, ProcessRequest, ProcessResult } from "./process";
+export type { SandboxTerminationReceipt } from "./termination";
 export type {
   AdmittedSandboxImage,
   SandboxCommand,

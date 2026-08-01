@@ -10,7 +10,7 @@ import {
   RunnerTransportError,
   type RunnerControlPlaneClient,
 } from "../transport/client";
-import type { SandboxTerminationReceipt } from "../oci/backend";
+import type { SandboxTerminationReceipt } from "../oci/termination";
 
 export interface RunnerCancellationTarget {
   cancel(command: RunnerCancellationV1): Promise<SandboxTerminationReceipt>;

@@ -29,6 +29,10 @@ import type {
   SandboxCommand,
   SandboxResourceProfile,
 } from "./profile";
+import {
+  sandboxTerminationReceipt,
+  type SandboxTerminationReceipt,
+} from "./termination";
 import type {
   InspectedSandboxImage,
   SandboxImageAuthority,
@@ -71,33 +75,6 @@ export type SandboxExecutionResult = Readonly<{
   stderrBytes: Uint8Array;
   durationMs: number;
 }>;
-
-export type SandboxTerminationReceipt =
-  | Readonly<{ state: "absent" }>
-  | Readonly<{ state: "terminated"; forced: boolean }>;
-
-export function sandboxTerminationReceipt(
-  candidate: unknown,
-): SandboxTerminationReceipt {
-  if (typeof candidate !== "object" || candidate === null) {
-    throw new TypeError("Sandbox termination receipt must be an object.");
-  }
-  const value = candidate as Record<string, unknown>;
-  const keys = Object.keys(value).sort();
-  if (value["state"] === "absent" && keys.length === 1 && keys[0] === "state") {
-    return Object.freeze({ state: "absent" });
-  }
-  if (
-    value["state"] === "terminated" &&
-    typeof value["forced"] === "boolean" &&
-    keys.length === 2 &&
-    keys[0] === "forced" &&
-    keys[1] === "state"
-  ) {
-    return Object.freeze({ state: "terminated", forced: value["forced"] });
-  }
-  throw new TypeError("Sandbox termination receipt is invalid.");
-}
 
 type PreparedSandboxExecution = Readonly<{
   identity: SandboxAttemptIdentity;

@@ -16,3 +16,14 @@ export {
   RuntimeMeasurementError,
   runtimeMeasurementDraft,
 } from "./measurement";
+export {
+  TerminalOutcomeArbiter,
+  TerminalOutcomeArbiterError,
+} from "./outcome-arbiter";
+export type {
+  TerminalAuthorityObservation,
+  TerminalExecutionTiming,
+  TerminalOutcomeCandidate,
+  TerminalOutcomeDecision,
+  TerminalOutcomeNoEvidenceReason,
+} from "./outcome-arbiter";

@@ -6,7 +6,7 @@ import {
 
 import type { LeaseSupervisionResult } from "./lease-supervisor";
 import type { SandboxLocalRevocation } from "./sandbox-cancellation-scope";
-import type { SandboxTerminationReceipt } from "../oci/backend";
+import type { SandboxTerminationReceipt } from "../oci/termination";
 
 export interface LeaseAuthoritySupervisor {
   readonly leaseDurationMs: number;

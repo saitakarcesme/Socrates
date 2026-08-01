@@ -9,7 +9,7 @@ import type { SandboxAttemptIdentity } from "../oci/identity";
 import {
   sandboxTerminationReceipt,
   type SandboxTerminationReceipt,
-} from "../oci/backend";
+} from "../oci/termination";
 import type { RunnerCancellationTarget } from "./lease-supervisor";
 
 export interface SandboxCancellationBackend {
