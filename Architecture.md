@@ -3192,6 +3192,21 @@ This decision adds no session, elapsed-time clock, runtime execution,
 publication call, polling loop, or runner enablement. It supplies the factual
 termination result required before terminal outcome precedence can be defined.
 
+Implementation commit `c7d5669` passed every local repository gate, including
+436 runner-local tests and the low-severity dependency audit. Fifty-seven
+focused backend, cancellation-scope, supervisor, and authority-monitor tests
+prove exact receipt validation, graceful and forced termination, disappearance,
+uncertainty, cleanup failure, natural-completion races, duplicate joining, and
+receipt identity preservation. GitHub Actions run `30707452237` passed every
+PostgreSQL, authenticated API, runner, Chromium product-journey, and production
+build gate. Manual OCI reference-host run `30707705105` then passed the rootless
+engine comparison, guarded production backend, and admitted task-runtime
+validation on implementation commit `c7d5669`. Its new schema-version 3 backend
+and schema-version 6 runtime evidence both record exact-fence cancellation as
+`{ state: "terminated", forced: true }` with successful cleanup. This admits
+ADR-068 and closes Slice 2.31; session composition, terminal outcome
+arbitration, polling, and runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

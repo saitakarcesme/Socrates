@@ -1,6 +1,6 @@
 # Slice 2.31 cancellation termination receipt
 
-Status: Planned
+Status: Complete
 
 Date: 2026-08-01
 
@@ -74,3 +74,22 @@ unclassified response, kill, and cleanup uncertainty reject without a receipt.
 5. Exact duplicates share one result and one backend operation.
 6. Session composition, outcome arbitration, polling, and runner enablement
    remain disabled.
+
+## Validation
+
+Implementation commit `c7d5669` passed every local repository gate, including
+436 runner-local tests and the low-severity dependency audit. Fifty-seven
+focused tests cover exact receipt parsing and freezing, graceful and forced
+termination, TERM failure, wait timeout and unclassified failure, disappearance,
+failed escalation and removal, natural cleanup races, duplicate joining,
+conflicting policy, supervisor propagation, and monitor identity preservation.
+
+GitHub Actions run `30707452237` passed every PostgreSQL, authenticated API,
+runner, Chromium product-journey, and production-build gate. Manual OCI
+reference-host run `30707705105` passed rootless engine comparison, guarded
+production backend validation, and admitted task-runtime validation on the same
+commit. Its schema-version 3 backend evidence and schema-version 6 runtime
+evidence both record `{ state: "terminated", forced: true }` for exact-fence
+cancellation and prove successful cleanup. ADR-068 is admitted; session
+composition, terminal outcome arbitration, polling, and runner enablement remain
+disabled.

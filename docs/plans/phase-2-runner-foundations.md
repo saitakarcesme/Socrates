@@ -1000,7 +1000,7 @@ production builds.
 
 ### Slice 2.31 — cancellation termination receipt
 
-Status: Planned on 2026-08-01.
+Status: Complete on 2026-08-01.
 
 Architecture decision: ADR-068.
 
@@ -1016,6 +1016,13 @@ Detailed plan: `docs/plans/slice-2.31-cancellation-termination-receipt.md`.
 
 Exit: deterministic and native tests prove forced cancellation evidence can be
 derived only from an authoritative successful escalation receipt.
+
+Evidence: implementation commit `c7d5669`; 57 focused receipt tests and 436
+runner-local tests passed locally with every repository quality gate. GitHub
+Actions run `30707452237` passed every integration suite, both Linux native
+durability probes, Chromium, and production builds. OCI reference-host run
+`30707705105` passed guarded backend and admitted runtime validation; schema
+versions 3 and 6 both recorded exact forced-termination receipts with cleanup.
 
 ## Acceptance gates
 
