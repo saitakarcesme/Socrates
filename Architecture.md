@@ -3902,6 +3902,26 @@ event, compose a fresh session, poll, back off, or enable the runner. It only
 creates the last closed local fact required for every observation settlement
 to reach deterministic arbitration.
 
+Implementation commit `f521a45` adds the exact frozen `monotonic_time`
+uncertainty state, resolves typed observer timing failures only after local
+cleanup settlement, and adds strict `observation_uncertain` arbitration. The
+observer no longer exports a timing-rejection type. The arbiter validates the
+complete candidate and authenticated cancellation identity before local
+uncertainty suppression, while stale and uncertain authority retain their
+authority-first result. Fifteen focused tests cover crossing and final-snapshot
+uncertainty, cleanup precedence, single-flight resolution, lookalike errors,
+all candidate/authority combinations, malformed hidden inputs, identity drift,
+deep immutability, and redaction.
+
+All 759 runner-local tests and every locally applicable repository gate passed
+against a fresh PostgreSQL database, including the Chromium measured-research
+journey and production build. GitHub Actions run `30718820150` passed every
+format, type, lint, Phase 1/2 boundary, PostgreSQL migration/seed,
+workspace/database/API/runner integration, Linux native spool/work-journal
+durability, Chromium product-journey, production-build, and evidence-upload
+gate. This admits ADR-079 and closes Slice 2.42. Authority/session composition,
+publication wiring, polling, and runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

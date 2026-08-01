@@ -1301,7 +1301,7 @@ remain separate decisions.
 
 ### Slice 2.42 — closed local timing uncertainty
 
-Status: Planned on 2026-08-01.
+Status: Complete on 2026-08-01.
 
 Architecture decision: ADR-079.
 
@@ -1318,6 +1318,13 @@ Detailed plan: `docs/plans/slice-2.42-closed-local-timing-uncertainty.md`.
 Exit: observer and arbiter tests prove every exact timing-uncertain attempt can
 reach one immutable no-evidence decision without inventing duration, failure,
 cancellation, or authority meaning.
+
+Evidence: implementation commit `f521a45`; 15 focused observer and arbiter
+tests passed with all 759 runner-local tests and every local repository gate
+applicable on Windows. Main CI run `30718820150` passed all PostgreSQL, API,
+runner, Linux native durability, Chromium product-journey, production-build,
+and evidence-upload gates. ADR-079 is admitted; authority/session composition,
+publication wiring, polling, and runner enablement remain separate decisions.
 
 ## Acceptance gates
 

@@ -1,6 +1,6 @@
 # Slice 2.42 closed local timing uncertainty
 
-Status: Planned
+Status: Complete
 
 Date: 2026-08-01
 
@@ -88,3 +88,31 @@ clock.
 4. Normal started and not-started arbitration is behaviorally unchanged.
 5. No authority monitor, publication call, session, polling loop, or runner
    enablement is added.
+
+## Admission evidence
+
+Implementation commit `f521a45` introduced the exact frozen
+`{ state: "uncertain", boundary: "monotonic_time" }` fact and the closed
+`observation_uncertain` decision. The observer resolves only an exact nested
+`DurableExecutionTimingBarrierError` after cleanup settlement; lookalike errors
+remain ordinary typed local failures. The arbiter validates complete candidate
+shape and cancellation identity before suppressing local evidence, while stale
+and uncertain authority keep authority-first precedence.
+
+Fifteen focused tests passed across the attempt observer and terminal outcome
+arbiter. They cover timing-source throws, crossing and final-snapshot
+uncertainty, cleanup failure, single-flight identity, deep freezing, redaction,
+lookalike errors, runtime/failure/absent candidates crossed with renewed,
+cancelled, stale, and uncertain authority, malformed candidates and timing
+fields, and forged cancellation identity. Existing timing-barrier tests retain
+normal pre-start, started, regression, overflow, and invalid-value coverage.
+
+The complete runner-local suite passed with 759 tests against a fresh
+PostgreSQL database. Every locally applicable repository gate passed,
+including the Chromium measured-research journey and production build. GitHub
+Actions run `30718820150` passed formatting, type checking, lint, Phase 1/2
+dependency audits, PostgreSQL migration and seed, workspace/database/API/runner
+tests, Linux native spool and work-journal durability, Chromium product
+journey, production build, and evidence upload. ADR-079 is admitted without
+constructing authority, publication, a fresh session, polling, or runner
+enablement.
