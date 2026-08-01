@@ -12,13 +12,18 @@ import {
 import type { WorkJournalState } from "./contracts";
 import { executionDigestFor } from "./codec";
 import type { TerminalEvidenceRecoveryResult } from "./terminal-evidence-recovery";
+import {
+  TerminalPublicationDispositionAuditor,
+  type TerminalDispositionSpool,
+  type TerminalPublicationDisposition,
+} from "./terminal-publication-disposition";
 
 export interface TerminalPublicationWorkJournal {
   inspect(deliveryId: string): Promise<WorkJournalState | null>;
   claimedExecution(deliveryId: string): Promise<RunnerExecutionV1 | null>;
 }
 
-export interface TerminalEvidenceAppender {
+export interface TerminalEvidenceAppender extends TerminalDispositionSpool {
   append(
     execution: RunnerExecutionV1,
     drafts: readonly RunnerEventDraft[],
@@ -38,6 +43,9 @@ export type TerminalEvidencePublicationResult = Readonly<{
   work: WorkJournalState;
 }>;
 
+export type TerminalPublicationFailureBoundary =
+  "append" | "recovery_after_append" | "recovery_before_append";
+
 export class TerminalEvidencePublicationError extends Error {
   constructor(
     readonly code:
@@ -51,6 +59,33 @@ export class TerminalEvidencePublicationError extends Error {
   ) {
     super(message, options);
     this.name = "TerminalEvidencePublicationError";
+  }
+}
+
+export class TerminalEvidencePublicationStateUncertainError extends Error {
+  readonly code = "publication_state_uncertain" as const;
+
+  constructor(
+    readonly boundary: TerminalPublicationFailureBoundary,
+    options?: ErrorOptions,
+  ) {
+    super("Terminal evidence publication state is uncertain.", options);
+    this.name = "TerminalEvidencePublicationStateUncertainError";
+    Object.freeze(this);
+  }
+}
+
+export class TerminalEvidencePublicationDeferredError extends Error {
+  readonly code = "publication_deferred" as const;
+
+  constructor(
+    readonly boundary: TerminalPublicationFailureBoundary,
+    readonly disposition: TerminalPublicationDisposition,
+    options?: ErrorOptions,
+  ) {
+    super("Terminal evidence publication requires deferred recovery.", options);
+    this.name = "TerminalEvidencePublicationDeferredError";
+    Object.freeze(this);
   }
 }
 
@@ -92,12 +127,15 @@ function active(state: WorkJournalState): boolean {
 
 export class TerminalEvidencePublicationCoordinator {
   #operationTail: Promise<void> = Promise.resolve();
+  readonly #auditor: TerminalPublicationDispositionAuditor;
 
   constructor(
     private readonly journal: TerminalPublicationWorkJournal,
     private readonly spool: TerminalEvidenceAppender,
     private readonly recovery: TerminalPublicationRecoveryPort,
-  ) {}
+  ) {
+    this.#auditor = new TerminalPublicationDispositionAuditor(journal, spool);
+  }
 
   async publish(
     candidate: PublicationInput,
@@ -105,10 +143,15 @@ export class TerminalEvidencePublicationCoordinator {
     const input = parseInput(candidate);
     return this.#serialize(async () => {
       const initialWork = await this.#requireBoundWork(input);
-      const existing = await this.recovery.recover(
-        input.deliveryId,
-        input.execution,
-      );
+      let existing: TerminalEvidenceRecoveryResult;
+      try {
+        existing = await this.recovery.recover(
+          input.deliveryId,
+          input.execution,
+        );
+      } catch (cause) {
+        return this.#afterFailure(input, "recovery_before_append", cause);
+      }
       if (existing.state === "completed") {
         return deepFreeze({
           state: "completed" as const,
@@ -130,12 +173,21 @@ export class TerminalEvidencePublicationCoordinator {
           "Work became non-publishable before terminal evidence append.",
         );
       }
-      await this.spool.append(input.execution, input.drafts);
+      try {
+        await this.spool.append(input.execution, input.drafts);
+      } catch (cause) {
+        return this.#afterFailure(input, "append", cause);
+      }
 
-      const completed = await this.recovery.recover(
-        input.deliveryId,
-        input.execution,
-      );
+      let completed: TerminalEvidenceRecoveryResult;
+      try {
+        completed = await this.recovery.recover(
+          input.deliveryId,
+          input.execution,
+        );
+      } catch (cause) {
+        return this.#afterFailure(input, "recovery_after_append", cause);
+      }
       if (completed.state !== "completed") {
         throw new TerminalEvidencePublicationError(
           "publication_not_recoverable",
@@ -147,6 +199,34 @@ export class TerminalEvidencePublicationCoordinator {
         publication: "appended" as const,
         work: completed.work,
       });
+    });
+  }
+
+  async #afterFailure(
+    input: PublicationInput,
+    boundary: TerminalPublicationFailureBoundary,
+    primaryCause: unknown,
+  ): Promise<TerminalEvidencePublicationResult> {
+    let disposition: TerminalPublicationDisposition;
+    try {
+      disposition = await this.#auditor.audit(
+        input.deliveryId,
+        input.execution,
+      );
+    } catch (auditCause) {
+      throw new TerminalEvidencePublicationStateUncertainError(boundary, {
+        cause: new AggregateError([primaryCause, auditCause]),
+      });
+    }
+    if (disposition.state === "completed") {
+      return deepFreeze({
+        state: "completed",
+        publication: "recovered",
+        work: disposition.work,
+      });
+    }
+    throw new TerminalEvidencePublicationDeferredError(boundary, disposition, {
+      cause: primaryCause,
     });
   }
 

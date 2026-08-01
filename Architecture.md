@@ -3429,7 +3429,8 @@ The resulting deeply frozen `TerminalPublicationDisposition` is one of:
 Impossible combinations are not coerced. Completed work without the matching
 terminal acknowledgement, non-terminal non-empty evidence, counter drift,
 identity mismatch, retired or rejected work, or an audit dependency failure
-reject as `publication_state_uncertain`. No guessed disposition is returned.
+reject as a frozen `publication_state_uncertain` error that retains the same
+fixed failure boundary. No guessed disposition is returned.
 Invalid caller input and pre-existing identity or work-state conflicts retain
 their current fixed errors and do not enter deferred recovery policy.
 

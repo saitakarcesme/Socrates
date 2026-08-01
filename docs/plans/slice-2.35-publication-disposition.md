@@ -60,7 +60,9 @@ If the audit proves completed after a lost response, return the existing
 `completed/recovered` success. Otherwise throw a single frozen
 `TerminalEvidencePublicationDeferredError` with boundary and disposition. The
 error message and disposition contain no dependency message, path, token, or
-response body.
+response body. Audit failure throws a separate frozen
+`publication_state_uncertain` error while retaining the original fixed
+boundary and both causes only in memory.
 
 ## Failure matrix
 
