@@ -3865,6 +3865,43 @@ durability, Chromium product-journey, production-build, and evidence-upload
 gate. This admits ADR-078 and closes Slice 2.41. Outcome arbitration, fresh
 attempt-session composition, polling, and runner enablement remain disabled.
 
+### ADR-079: Local timing uncertainty is a closed arbitration fact
+
+ADR-071 normally resolves one local attempt into timing plus a trusted terminal
+candidate, but it currently rejects when the injected monotonic time source is
+unavailable, non-finite, regresses, or overflows. A future fresh attempt
+session cannot safely propagate that rejection. Publication would be
+untruthful because elapsed execution timing is unknown, while ADR-078 permits
+evidence-free authority release only after an exact frozen ADR-069
+`no_evidence` decision. Stopping or abandoning the monitor would assign false
+completion or publication meaning, and detaching it would orphan authority.
+
+`TerminalExecutionTiming` will therefore gain one exact redacted state:
+`{ state: "uncertain", boundary: "monotonic_time" }`. ADR-071 will resolve,
+rather than reject, its shared observation with that state only when an exact
+nested `DurableExecutionTimingBarrierError` proves `timing_uncertain`. It still
+awaits request, sandbox, source, and compensating cleanup ownership before
+settlement. Arbitrary dependency errors remain subject to the existing typed
+stage normalization and cannot disguise themselves as timing uncertainty. No
+exception, time value, path, or dependency message enters the observation.
+
+ADR-069 will strictly parse the new timing state and add the closed
+`observation_uncertain` no-evidence reason. It continues to validate the full
+candidate and authority shapes before deciding. Stale and uncertain authority
+retain authority-first precedence. An authenticated cancellation must still
+match the frozen execution identity even when local timing is uncertain; after
+that validation, timing uncertainty suppresses renewed or cancelled evidence
+because neither a truthful duration nor a durable pre-start classification can
+be proven. It never becomes `task.failed`, `task.cancelled`, or a zero-duration
+guess.
+
+Normal `not_started` and `started` behavior is unchanged. The observer remains
+single-flight and side-effect closed, while the arbiter remains pure. This
+slice does not construct an authority monitor, call ADR-078 release, publish an
+event, compose a fresh session, poll, back off, or enable the runner. It only
+creates the last closed local fact required for every observation settlement
+to reach deterministic arbitration.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

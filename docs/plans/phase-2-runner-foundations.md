@@ -1299,6 +1299,26 @@ production-build, and evidence-upload gates. ADR-078 is admitted; outcome
 arbitration, fresh attempt-session composition, polling, and runner enablement
 remain separate decisions.
 
+### Slice 2.42 — closed local timing uncertainty
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-079.
+
+Detailed plan: `docs/plans/slice-2.42-closed-local-timing-uncertainty.md`.
+
+- resolve exact monotonic timing uncertainty as one redacted timing fact;
+- preserve cleanup settlement before the observer returns that fact;
+- make the pure arbiter return `observation_uncertain` without an event;
+- retain authority-first precedence and exact cancellation identity checks;
+- reject malformed or disguised uncertainty and preserve normal timing paths;
+- keep authority wiring, publication, fresh sessions, polling, and enablement
+  out of scope.
+
+Exit: observer and arbiter tests prove every exact timing-uncertain attempt can
+reach one immutable no-evidence decision without inventing duration, failure,
+cancellation, or authority meaning.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
