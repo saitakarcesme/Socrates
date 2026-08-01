@@ -3604,6 +3604,55 @@ ADR-074 and closes Slice 2.37. Restart reconciliation order, attempt-session
 composition, acquisition polling, and runner enablement remain disabled pending
 their own architecture decision.
 
+### ADR-075: Restart triage separates local completion from authority-bound replay
+
+ADR-065 and ADR-066 recover terminal evidence before attempt reconciliation.
+That ordering was sufficient while no live session could be composed, but it is
+too coarse for production enablement. Fully acknowledged evidence needs only a
+local journal completion and is safe before reconciliation. Pending evidence can
+still require a control-plane event write and must not be replayed by a restarted
+process that has not re-established current lease authority. Recovered `claimed`
+work has the same gap: returning it as ready without reconciliation can start an
+attempt from an expired or superseded lease.
+
+`WorkAdmissionCoordinator` will therefore receive both the read-only ADR-072
+disposition auditor and the existing ADR-065 recovery operation. For recovered
+`claimed` and `execution_started` work it audits first, before sender,
+completion, reconciliation mutation, acquisition, or execution release:
+
+- `completed` returns the existing completed admission result;
+- `acknowledged` invokes bounded recovery, which sends zero events and must
+  durably complete the local journal before admission returns completed;
+- `pending` reconciles the exact attempt before any sender call;
+- `absent` follows state-specific reconciliation with no recovery call.
+
+For pending evidence, a `current` reconciliation returns a new frozen
+`recovery_pending` admission result containing the exact delivery, execution,
+work, observed time, and lease expiry. It performs no replay. A later session
+must start lease supervision and hand the fixed recovery publication to ADR-074.
+A `retired` reconciliation durably retires the local work with the authoritative
+reason and leaves spool bytes untouched for diagnostics; it does not attempt an
+unauthorized replay.
+
+Recovered claimed work with absent evidence also reconciles. Current authority
+returns the existing ready result; retired authority commits retirement and
+cannot execute. Fresh work claimed in the same serialized admission call remains
+ready without a redundant reconciliation because that claim transaction just
+created the exact lease. Execution-started absent evidence preserves the current
+indeterminate/retired behavior.
+
+An acknowledged disposition followed by recovery `none`, non-completed output,
+identity drift, or work-state drift is `terminal_recovery_inconsistent` and
+fails closed. Audit, recovery, and reconciliation exceptions remain unchanged
+in memory and suppress same-call acquisition. The coordinator stays serialized,
+and no path can call both terminal sender recovery and reconciliation for one
+prepare operation.
+
+ADR-075 supersedes only the restart ordering paragraphs of ADR-065 and ADR-066;
+their durable replay, exact acknowledgement, and completion invariants remain
+unchanged. This slice adds no monitor construction, publication owner wiring,
+attempt session, polling loop, or runner enablement.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

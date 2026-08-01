@@ -1190,6 +1190,25 @@ API, runner, native durability, Chromium product-journey, production-build, and
 evidence-upload gates. ADR-074 is admitted; restart reconciliation remains the
 last known ordering prerequisite before attempt-session composition.
 
+### Slice 2.38 — restart terminal-evidence triage
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-075.
+
+Detailed plan: `docs/plans/slice-2.38-restart-evidence-triage.md`.
+
+- audit terminal disposition before restart-side recovery or reconciliation;
+- complete acknowledged evidence locally without lease reconciliation;
+- reconcile pending evidence before allowing any replay;
+- reconcile recovered claimed work before returning it as executable;
+- expose current pending evidence as a frozen recovery-pending handoff;
+- keep monitor/session wiring, polling, and enablement out of scope.
+
+Exit: state/order tests prove a restarted process cannot send pending evidence
+or execute a recovered claim before exact reconciliation, while fully
+acknowledged evidence still completes without a network authority dependency.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
