@@ -1273,7 +1273,7 @@ enablement remain separate decisions.
 
 ### Slice 2.41 — no-evidence authority release
 
-Status: Planned on 2026-08-01.
+Status: Complete on 2026-08-01.
 
 Architecture decision: ADR-078.
 
@@ -1290,6 +1290,14 @@ Detailed plan: `docs/plans/slice-2.41-no-evidence-authority-release.md`.
 Exit: monitor and owner-policy tests prove an evidence-free attempt can release
 heartbeat ownership without claiming completion, publication failure, server
 retirement, or a locally inferred lease outcome.
+
+Evidence: implementation commit `f716f67`; 15 focused authority-release and
+publication-owner tests passed with all 744 runner-local tests and every local
+repository gate applicable on Windows. Main CI run `30717770398` passed all
+PostgreSQL, API, runner, Linux native durability, Chromium product-journey,
+production-build, and evidence-upload gates. ADR-078 is admitted; outcome
+arbitration, fresh attempt-session composition, polling, and runner enablement
+remain separate decisions.
 
 ## Acceptance gates
 

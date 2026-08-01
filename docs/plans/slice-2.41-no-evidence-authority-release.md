@@ -1,6 +1,6 @@
 # Slice 2.41 no-evidence authority release
 
-Status: Planned
+Status: Complete
 
 Date: 2026-08-01
 
@@ -84,3 +84,31 @@ conflict/terminal error rather than successful completion or abandonment.
 4. No clean release creates an event, journal mutation, revocation, or new
    heartbeat; an already in-flight failure retains its existing revocation.
 5. No arbiter, fresh session, polling loop, or runner enablement is added.
+
+## Admission evidence
+
+Implementation commit `f716f67` introduced the distinct immutable
+`terminal_evidence_unavailable` result and the first-intent
+`releaseWithoutEvidence()` transition. ADR-074 keeps exact successful result
+sets, so released authority fails closed through existing completion,
+abandonment, and checkpoint conflict paths instead of acquiring publication
+meaning.
+
+Fifteen focused tests passed across the authority monitor and terminal
+publication owner. They cover release before start and during scheduled or
+in-flight work; renewed, cancelled, stale, heartbeat, scheduler, and revocation
+outcomes; joined and queued checkpoints; competing intents; already-terminal
+monitors; immutable results; fixed redacted errors; and publication success,
+fatal failure, and pending recovery encountering released authority. Counters
+prove clean release sends no heartbeat, invokes no revocation, and performs no
+publication-owner success transition.
+
+The complete runner-local suite passed with 744 tests against a fresh
+PostgreSQL database. Every locally applicable repository gate passed,
+including the Chromium measured-research journey and production build. GitHub
+Actions run `30717770398` passed formatting, type checking, lint, Phase 1/2
+dependency audits, PostgreSQL migration and seed, workspace/database/API/runner
+tests, Linux native spool and work-journal durability, Chromium product
+journey, production build, and evidence upload. ADR-078 is admitted without
+adding arbitration, a fresh attempt session, polling, backoff, or runner
+enablement.

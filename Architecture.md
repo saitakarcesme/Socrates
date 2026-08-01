@@ -3846,6 +3846,25 @@ execute a sandbox, append evidence, mutate admission, poll, back off, or enable
 the runner. The later session may select this release only from an exact frozen
 ADR-069 `no_evidence` decision after local observation cleanup.
 
+Implementation commit `f716f67` adds the distinct immutable release result,
+the first-intent `releaseWithoutEvidence()` monitor transition, and the fixed
+post-release checkpoint error. ADR-074 completion is narrowed to the exact
+stopped, cancelled, and stale result set, so a released monitor cannot become
+successful completion or publication abandonment through a widened union.
+Fifteen focused tests cover pre-start and scheduled release, in-flight renewal,
+cancellation, stale authority, heartbeat/scheduler/revocation uncertainty,
+checkpoint ordering, competing owner intents, already-terminal monitors, deep
+immutability, redacted errors, and all three publication-owner conflict paths.
+
+All 744 runner-local tests and every locally applicable repository gate passed
+against a fresh PostgreSQL database, including the Chromium measured-research
+journey and production build. GitHub Actions run `30717770398` passed every
+format, type, lint, Phase 1/2 boundary, PostgreSQL migration/seed,
+workspace/database/API/runner integration, Linux native spool/work-journal
+durability, Chromium product-journey, production-build, and evidence-upload
+gate. This admits ADR-078 and closes Slice 2.41. Outcome arbitration, fresh
+attempt-session composition, polling, and runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
