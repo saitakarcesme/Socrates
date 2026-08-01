@@ -3151,6 +3151,47 @@ journey, and all production builds. This admits ADR-067 and closes Slice 2.30;
 execution, session composition, polling, and runner enablement remain
 disabled.
 
+### ADR-068: Cancellation propagates an authoritative termination receipt
+
+`task.cancelled` requires a truthful `forced` value. The sandbox backend
+currently returns one boolean from cancellation, but that value only says
+whether an exact active sandbox was found. It does not distinguish graceful
+termination from escalation to `SIGKILL`. A session must not infer terminal
+evidence from that boolean or from the requested grace period.
+
+Sandbox cancellation therefore returns one deeply frozen
+`SandboxTerminationReceipt`: `absent` when no exact active fence exists, or
+`terminated` with `forced: false` after an authoritative successful graceful
+stop and `forced: true` only after graceful stop authoritatively fails and a
+bounded kill succeeds. A container that disappears during the operation is
+classified as absent rather than forced. Stop timeout, process-launch failure,
+unclassified engine output, failed kill, or cleanup uncertainty throws and
+produces no receipt.
+
+The backend must not issue an unconditional kill after a successful stop.
+Every path still removes only deployment-, runner-, task-, attempt-, and
+fence-owned resources before returning. A failed removal makes the operation
+ambiguous even if process termination was observed. Exact identity mismatch
+returns `absent` without a process call.
+
+`SandboxCancellationScope` latches the first authenticated cancellation or
+local revocation as before, but its shared promise now resolves with the exact
+receipt. Exact concurrent and sequential duplicates receive the same frozen
+object; uncertainty is replayed as the same rejection. `LeaseSupervisor`
+includes the authenticated cancellation receipt in its `cancelled` result,
+and `LeaseAuthorityMonitor` preserves it unchanged. Local authority revocation
+may discard the receipt because stale or uncertain authority forbids terminal
+event publication, but it must still await successful termination and cleanup.
+
+`absent` is not an error: cancellation may arrive before the sandbox exists or
+race with already-finished cleanup. A later outcome arbiter will combine the
+authenticated directive, receipt, execution-start latch, elapsed duration,
+and runtime outcome. This slice does not itself create cancellation evidence.
+
+This decision adds no session, elapsed-time clock, runtime execution,
+publication call, polling loop, or runner enablement. It supplies the factual
+termination result required before terminal outcome precedence can be defined.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

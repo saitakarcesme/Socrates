@@ -998,6 +998,25 @@ identity, clock read, or network send. GitHub Actions run `30706571197` passed
 every integration suite, both Linux native durability probes, Chromium, and
 production builds.
 
+### Slice 2.31 — cancellation termination receipt
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-068.
+
+Detailed plan: `docs/plans/slice-2.31-cancellation-termination-receipt.md`.
+
+- replace the ambiguous cancellation boolean with an authoritative receipt;
+- distinguish absent, graceful, and forced termination without inference;
+- skip unconditional kill after successful graceful stop;
+- propagate the exact receipt through scope, supervisor, and monitor;
+- fail closed on stop, kill, or cleanup uncertainty;
+- keep session composition, outcome arbitration, polling, and runner
+  enablement out of scope.
+
+Exit: deterministic and native tests prove forced cancellation evidence can be
+derived only from an authoritative successful escalation receipt.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
