@@ -3588,6 +3588,22 @@ abandonment ports. It does not start a monitor, observe or arbitrate execution,
 reconcile restart state, schedule delays, acquire work, poll, or enable a runner
 entry point. Full attempt-session composition remains a later decision.
 
+Implementation commit `57a7bb9` passed every local repository gate, including
+45 publication-owner tests, 100 combined owner/policy/monitor tests, all 618
+runner-local tests, production builds, and the dependency audit. These tests
+prove exact zero-to-one-hundred retry bounds, checkpointed pending recovery,
+local acknowledged recovery, monotonic cursor/identity pinning, authority
+terminal precedence, clean-stop and abandonment races, malformed-port
+fail-closed behavior, single-flight success and failure replay, mutation
+resistance, and redaction.
+
+GitHub Actions run `30712598503` passed every PostgreSQL, authenticated API,
+runner integration, Linux native spool/work-journal durability, Chromium
+product-journey, production-build, and evidence-upload gate. This admits
+ADR-074 and closes Slice 2.37. Restart reconciliation order, attempt-session
+composition, acquisition polling, and runner enablement remain disabled pending
+their own architecture decision.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

@@ -1165,7 +1165,7 @@ separate prerequisite before session composition.
 
 ### Slice 2.37 — bounded terminal publication ownership
 
-Status: Planned on 2026-08-01.
+Status: Complete on 2026-08-01.
 
 Architecture decision: ADR-074.
 
@@ -1182,6 +1182,13 @@ Detailed plan: `docs/plans/slice-2.37-terminal-publication-owner.md`.
 Exit: adversarial ownership tests prove no deferred publication can retry
 without the exact required authority action or release through the wrong
 terminal monitor path.
+
+Evidence: implementation commit `57a7bb9`; 45 publication-owner tests and 100
+combined owner/policy/monitor tests passed with all 618 runner-local tests and
+every local repository gate. Main CI run `30712598503` passed all PostgreSQL,
+API, runner, native durability, Chromium product-journey, production-build, and
+evidence-upload gates. ADR-074 is admitted; restart reconciliation remains the
+last known ordering prerequisite before attempt-session composition.
 
 ## Acceptance gates
 

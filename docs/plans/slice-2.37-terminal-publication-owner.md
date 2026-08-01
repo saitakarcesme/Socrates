@@ -1,6 +1,6 @@
 # Slice 2.37 terminal publication owner
 
-Status: Planned
+Status: Implemented
 
 Date: 2026-08-01
 
@@ -105,3 +105,19 @@ or release conflict and never satisfy completion or abandonment.
    once through their prescribed path.
 5. Concurrent or later callers cannot duplicate publication or release.
 6. No restart reconciliation, session, polling loop, or runner is enabled.
+
+## Admission evidence
+
+Implementation commit `57a7bb9` passed all local repository gates, including 45
+publication-owner tests, 100 combined owner/policy/monitor tests, and all 618
+runner-local tests. The focused suites prove exact retry bounds, checkpointed
+pending recovery, local acknowledged recovery, cursor monotonicity, authority
+terminal precedence, clean-stop and abandonment races, malformed-port
+fail-closed behavior, single-flight replay, mutation resistance, and redaction.
+
+Main CI run `30712598503` passed formatting, type checks, lint, both dependency
+boundary audits, PostgreSQL migration and seed, workspace and integration
+tests, native spool and work-journal durability, the Chromium product journey,
+production builds, and evidence upload. ADR-074 is admitted with restart
+reconciliation, session composition, acquisition polling, and runner enablement
+still excluded.
