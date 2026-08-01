@@ -126,7 +126,9 @@ function exactKeys(
   );
 }
 
-function handoffSnapshot(candidate: unknown): ReadyWorkAdmission {
+export function freshAttemptHandoffSnapshot(
+  candidate: unknown,
+): ReadyWorkAdmission {
   try {
     const value = record(immutableEvidenceSnapshot(candidate));
     if (
@@ -234,7 +236,7 @@ export class FreshAttemptSession {
     revocationGracePeriodMs: number;
     maximumRecoveryAttempts: number;
   }) {
-    const admission = handoffSnapshot(options.admission);
+    const admission = freshAttemptHandoffSnapshot(options.admission);
     this.#admission = admission;
     const target = new SandboxCancellationScope(
       admission.execution,

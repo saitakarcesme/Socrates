@@ -72,7 +72,9 @@ function instant(candidate: unknown): string {
   return z.iso.datetime().parse(candidate);
 }
 
-function handoffSnapshot(candidate: unknown): RecoveryPendingWorkAdmission {
+export function restartTerminalRecoveryHandoffSnapshot(
+  candidate: unknown,
+): RecoveryPendingWorkAdmission {
   try {
     const value = record(immutableEvidenceSnapshot(candidate));
     if (
@@ -133,7 +135,7 @@ export class RestartTerminalRecoverySession {
     revocationGracePeriodMs: number;
     maximumRecoveryAttempts: number;
   }) {
-    const admission = handoffSnapshot(options.admission);
+    const admission = restartTerminalRecoveryHandoffSnapshot(options.admission);
     const target = new SandboxCancellationScope(
       admission.execution,
       options.sandbox,
