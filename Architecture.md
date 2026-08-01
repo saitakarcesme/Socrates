@@ -3717,6 +3717,24 @@ monitor, and hand its fixed zero-argument operation to ADR-074. This slice adds
 no monitor construction, execution observer, terminal arbitration, fresh
 publication, acquisition polling, or runner enablement.
 
+Implementation commit `9559f45` adds the append-free recovery publication
+primitive, extracts strict shared terminal-evidence consistency validation,
+and proves compatibility with the standard ADR-074 bounded publication owner
+without granting draft or append capabilities. Thirty-seven focused tests cover constructor and
+identity validation, malformed and drifting evidence, audit/recovery ordering,
+pending and acknowledged retry ownership, immutable repeatable results, and
+real restarted journal/spool states that prove absent evidence stays absent and
+pending recovery sends only the already-durable event. All 696 runner-local
+tests and every local repository gate passed, including the PostgreSQL-backed
+Chromium measured-research journey.
+
+GitHub Actions run `30715071832` passed every PostgreSQL migration, seed,
+database/API/runner integration, Linux native spool/work-journal durability,
+Chromium product-journey, production-build, and evidence-upload gate. This
+admits ADR-076 and closes Slice 2.39. Monitor construction, attempt-session
+composition, acquisition polling, and runner enablement remain disabled
+pending their own architecture decision.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

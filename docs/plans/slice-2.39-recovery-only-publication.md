@@ -1,6 +1,6 @@
 # Slice 2.39 recovery-only terminal publication
 
-Status: Planned
+Status: Complete
 
 Date: 2026-08-01
 
@@ -87,3 +87,20 @@ publication.
 4. Missing, drifting, malformed, or uncertain evidence never creates an event.
 5. No monitor, attempt session, fresh publication, polling loop, or runner is
    enabled.
+
+## Admission evidence
+
+Implementation commit `9559f45` introduced the append-free publication
+boundary and strict shared terminal-evidence consistency validators. All 37
+focused recovery-only tests passed, including ADR-074 owner integration and
+real restarted journal/spool pending, acknowledged, completed-replay, and
+absent cases. The full runner-local suite passed with 696 tests, and every
+locally applicable repository gate passed, including the PostgreSQL-backed
+Chromium measured-research journey.
+
+GitHub Actions run `30715071832` passed formatting, type checking, lint,
+Phase 1 and Phase 2 dependency audits, PostgreSQL migration and seed,
+workspace/database/API/runner tests, Linux native spool and work-journal
+durability, Chromium product journey, production build, and evidence upload.
+ADR-076 is admitted without enabling a monitor, attempt session, acquisition
+polling, or the runner.

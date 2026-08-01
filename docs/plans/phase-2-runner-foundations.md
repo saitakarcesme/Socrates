@@ -1218,7 +1218,7 @@ enablement remain separate decisions.
 
 ### Slice 2.39 — recovery-only terminal publication
 
-Status: Planned on 2026-08-01.
+Status: Complete on 2026-08-01.
 
 Architecture decision: ADR-076.
 
@@ -1234,6 +1234,13 @@ Detailed plan: `docs/plans/slice-2.39-recovery-only-publication.md`.
 Exit: type boundaries and real durable restart tests prove a
 `recovery_pending` handoff can drain only its existing terminal spool and can
 never manufacture a new event batch if that evidence is absent or uncertain.
+
+Evidence: implementation commit `9559f45`; 37 recovery-only publication tests
+passed with all 696 runner-local tests and every local repository gate. Main CI
+run `30715071832` passed all PostgreSQL, API, runner, Linux native durability,
+Chromium product-journey, production-build, and evidence-upload gates. ADR-076
+is admitted; monitor construction, attempt-session composition, polling, and
+runner enablement remain separate decisions.
 
 ## Acceptance gates
 
