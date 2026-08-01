@@ -3249,6 +3249,20 @@ spool mutation, network request, publication, completion, or retry. This slice
 defines deterministic precedence only. Session composition, concurrent
 execution, polling, and runner enablement remain disabled.
 
+Implementation commit `ce9b2e9` passed every local repository gate, including
+473 runner-local tests and the low-severity dependency audit. Thirty-seven
+focused arbiter tests exhaustively cross runtime, local failure, and absent
+candidates with stopped, absent-cancellation, graceful-cancellation,
+forced-cancellation, stale, and uncertain authority. They also prove pre-start
+contradictions, exact identity binding, duration bounds, strict shape rejection,
+uncertainty redaction, deep immutability, and terminal-batch validation. The
+receipt contract was separated into a pure OCI contract module so lifecycle
+policy cannot reach the production backend adapter. GitHub Actions run
+`30708344642` passed every PostgreSQL, authenticated API, runner, Linux native
+durability, Chromium product-journey, and production-build gate. This admits
+ADR-069 and closes Slice 2.32; session composition, side effects, polling, and
+runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

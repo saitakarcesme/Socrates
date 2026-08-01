@@ -1,6 +1,6 @@
 # Slice 2.32 terminal outcome arbitration policy
 
-Status: Planned
+Status: Complete
 
 Date: 2026-08-01
 
@@ -88,3 +88,22 @@ authority, or authority uncertainty.
 5. Every evidence result is a valid frozen terminal batch.
 6. Session composition, side effects, polling, and runner enablement remain
    disabled.
+
+## Validation
+
+Implementation commit `ce9b2e9` passed every local repository gate, including
+473 runner-local tests and the low-severity dependency audit. Thirty-seven
+focused tests exhaustively cross the three candidate states with stopped,
+absent-cancellation, graceful-cancellation, forced-cancellation, stale, and all
+three uncertainty boundaries. Additional tests cover durable-start
+contradictions, zero and maximum durations, exact cancellation identity,
+malformed and disguised drafts, multiple terminals, strict unknown-field
+rejection, arbitrary secret-bearing input, and deep immutability.
+
+The sandbox termination receipt and validator were moved from the production
+backend adapter into a pure OCI contract module; the arbiter has no runtime,
+transport, journal, spool, database, clock, timer, or process dependency.
+GitHub Actions run `30708344642` passed every PostgreSQL, authenticated API,
+runner, Linux native durability, Chromium product-journey, and production-build
+gate. ADR-069 is admitted; session composition, side effects, polling, and
+runner enablement remain disabled.

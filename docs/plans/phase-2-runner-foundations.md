@@ -1026,7 +1026,7 @@ versions 3 and 6 both recorded exact forced-termination receipts with cleanup.
 
 ### Slice 2.32 — terminal outcome arbitration policy
 
-Status: Planned on 2026-08-01.
+Status: Complete on 2026-08-01.
 
 Architecture decision: ADR-069.
 
@@ -1044,6 +1044,12 @@ Detailed plan: `docs/plans/slice-2.32-terminal-outcome-arbitration.md`.
 Exit: exhaustive table and mutation tests prove every supported race has one
 deterministic frozen decision and no ambiguous authority state can create
 terminal evidence.
+
+Evidence: implementation commit `ce9b2e9`; 37 focused arbiter tests and 473
+runner-local tests passed locally with every repository quality gate. The
+receipt validator now lives in a pure contract module outside the backend
+adapter. GitHub Actions run `30708344642` passed every integration suite, both
+Linux native durability probes, Chromium, and production builds.
 
 ## Acceptance gates
 
