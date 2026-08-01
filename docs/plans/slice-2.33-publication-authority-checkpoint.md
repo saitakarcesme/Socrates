@@ -1,6 +1,6 @@
 # Slice 2.33 publication authority checkpoint
 
-Status: Planned
+Status: Complete
 
 Date: 2026-08-01
 
@@ -84,3 +84,13 @@ arbiter input.
 5. Arbiter no longer accepts stopped as pre-publication authority.
 6. Publication, session composition, polling, and runner enablement remain
    disabled.
+
+## Validation
+
+Implementation commit `9636848` passed formatting, type checking, linting,
+both architecture audits, every repository test and build, and the low-severity
+dependency audit. The focused proof comprises 26 lease-authority monitor tests
+and 39 terminal-outcome arbiter tests; the complete runner-local suite contains
+485 passing tests. GitHub Actions run `30709048533` independently passed the
+PostgreSQL, authenticated API, runner, Linux native durability, Chromium
+product-journey, and production-build gates.

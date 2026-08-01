@@ -1053,7 +1053,7 @@ Linux native durability probes, Chromium, and production builds.
 
 ### Slice 2.33 — publication authority checkpoint
 
-Status: Planned on 2026-08-01.
+Status: Complete on 2026-08-01.
 
 Architecture decision: ADR-070.
 
@@ -1071,6 +1071,13 @@ Detailed plan: `docs/plans/slice-2.33-publication-authority-checkpoint.md`.
 Exit: cadence and arbiter tests prove publication eligibility can be observed
 without local clock inference, overlapping heartbeats, or premature monitor
 stop.
+
+Evidence: implementation commit `9636848`; 26 focused monitor tests, 39
+focused arbiter tests, and 485 runner-local tests passed locally with every
+repository quality gate and the low-severity dependency audit. GitHub Actions
+run `30709048533` passed every database, API, runner, native durability,
+Chromium, and production-build gate. Publication and session composition remain
+disabled.
 
 ## Acceptance gates
 

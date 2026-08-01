@@ -3304,6 +3304,19 @@ fence transactionally. Only after completion may the owner call `stop()`. This
 slice adds no terminal publication, session composition, acquisition loop,
 polling, or runner enablement.
 
+Implementation commit `9636848` passed every local repository gate, including
+26 focused lease-authority monitor tests, 39 focused terminal-arbiter tests,
+485 runner-local tests, production builds, and the low-severity dependency
+audit. The monitor tests prove checkpoint single-flight identity, immediate
+wake-up without heartbeat overlap, terminal replay, stop races, scheduler
+failure separation, and deep immutability. The arbiter tests prove that only an
+authenticated renewed checkpoint can preserve trusted local evidence and that
+the former stopped observation is rejected. GitHub Actions run `30709048533`
+passed every PostgreSQL, authenticated API, runner, Linux native durability,
+Chromium product-journey, and production-build gate. This admits ADR-070 and
+closes Slice 2.33; terminal publication, session composition, polling, and
+runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
