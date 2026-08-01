@@ -14,6 +14,11 @@ export {
   type LeaseAuthoritySupervisor,
 } from "./lease-authority-monitor";
 export {
+  NodeAttemptTimingError,
+  NodeLeaseAuthorityScheduler,
+  type NodeTimerDriver,
+} from "./node-scheduler";
+export {
   SandboxCancellationScope,
   SandboxCancellationScopeError,
   type SandboxCancellationBackend,

@@ -30,3 +30,4 @@ export {
   DurableExecutionTimingBarrierError,
   type MonotonicTimeSource,
 } from "./timing-barrier";
+export { nodeMonotonicTimeSource } from "./node-monotonic-time";
