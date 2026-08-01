@@ -292,27 +292,23 @@ export class LocalWorkJournal {
       .parse(observationInput);
     return this.#serialize(async () => {
       const loaded = await this.#requireByDeliveryId(deliveryId);
-      if (
-        !loaded.claim ||
-        !loaded.executionStart ||
-        loaded.rejection ||
-        loaded.completion
-      ) {
+      if (!loaded.claim || loaded.rejection || loaded.completion) {
         throw new WorkJournalError(
           "identity_conflict",
-          "Execution can retire only from an active durable start.",
+          "Execution can retire only from an active durable claim or start.",
         );
       }
       const executionDigest = executionDigestFor(execution);
       const attemptKey = attemptKeyFor(execution);
       if (
         loaded.claim.executionDigest !== executionDigest ||
-        loaded.executionStart.executionDigest !== executionDigest ||
-        loaded.executionStart.attemptKey !== attemptKey
+        (loaded.executionStart !== null &&
+          (loaded.executionStart.executionDigest !== executionDigest ||
+            loaded.executionStart.attemptKey !== attemptKey))
       ) {
         throw new WorkJournalError(
           "identity_conflict",
-          "Execution retirement does not match the durable start.",
+          "Execution retirement does not match the durable claim or start.",
         );
       }
       if (loaded.executionRetirement) {
@@ -620,10 +616,10 @@ export class LocalWorkJournal {
         "corrupt",
         "Work completion requires a claim and forbids rejection.",
       );
-    if (executionRetirement && (!executionStart || !claim || rejection))
+    if (executionRetirement && (!claim || rejection))
       throw new WorkJournalError(
         "corrupt",
-        "Work execution retirement requires a start and forbids rejection.",
+        "Work execution retirement requires a claim and forbids rejection.",
       );
     if (executionRetirement && completion)
       throw new WorkJournalError(

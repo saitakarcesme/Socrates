@@ -13,8 +13,10 @@ import {
   RunnerTransportError,
   type RunnerControlPlaneClient,
 } from "../transport/client";
+import { attemptKeyFor } from "../spool";
 import { WorkAdmissionCoordinator } from "./coordinator";
 import { LocalWorkJournal } from "./store";
+import type { TerminalAdmissionEvidencePort } from "./coordinator";
 import taskFixture from "../../../../packages/contracts/fixtures/runner/task-v2.json";
 
 const delivery: RunnerTaskDeliveryV1 = {
@@ -36,9 +38,6 @@ const execution = runnerExecutionV1Schema.parse({
   task: taskFixture,
 });
 const roots: string[] = [];
-const noTerminalRecovery = {
-  recover: async () => Object.freeze({ state: "none" as const }),
-};
 
 function root(): string {
   const value = join(
@@ -64,6 +63,19 @@ async function journal(rootPath = root()): Promise<LocalWorkJournal> {
     },
     directorySync: { sync: async () => undefined },
   });
+}
+
+function absentTerminalEvidence(
+  durable: LocalWorkJournal,
+): TerminalAdmissionEvidencePort {
+  return {
+    audit: async (deliveryId) => {
+      const work = await durable.inspect(deliveryId);
+      if (!work) throw new Error("missing test work");
+      return Object.freeze({ state: "absent", work });
+    },
+    recover: async () => Object.freeze({ state: "none" }),
+  };
 }
 
 function client(options: {
@@ -95,11 +107,12 @@ describe("WorkAdmissionCoordinator", () => {
   it("returns idle after one acquire when local work is empty", async () => {
     const acquire = vi.fn().mockResolvedValue(null);
     const claim = vi.fn();
+    const durable = await journal();
     const coordinator = new WorkAdmissionCoordinator({
-      journal: await journal(),
+      journal: durable,
       client: client({ acquire, claim }),
       leaseDurationMs: 60_000,
-      terminalRecovery: noTerminalRecovery,
+      terminalEvidence: absentTerminalEvidence(durable),
     });
 
     await expect(coordinator.prepareNext()).resolves.toEqual({ state: "idle" });
@@ -110,11 +123,14 @@ describe("WorkAdmissionCoordinator", () => {
   it("admits and claims one new delivery with its durable attempt", async () => {
     const acquire = vi.fn().mockResolvedValue(delivery);
     const claim = vi.fn().mockResolvedValue(execution);
+    const durable = await journal();
+    const terminalEvidence = absentTerminalEvidence(durable);
+    const audit = vi.spyOn(terminalEvidence, "audit");
     const coordinator = new WorkAdmissionCoordinator({
-      journal: await journal(),
+      journal: durable,
       client: client({ acquire, claim }),
       leaseDurationMs: 60_000,
-      terminalRecovery: noTerminalRecovery,
+      terminalEvidence,
     });
 
     await expect(coordinator.prepareNext()).resolves.toEqual({
@@ -133,6 +149,7 @@ describe("WorkAdmissionCoordinator", () => {
       },
       undefined,
     );
+    expect(audit).not.toHaveBeenCalled();
   });
 
   it("recovers pending and claimed work before any acquire", async () => {
@@ -141,11 +158,12 @@ describe("WorkAdmissionCoordinator", () => {
     await first.admit(delivery);
     const acquire = vi.fn();
     const claim = vi.fn().mockResolvedValue(execution);
+    const pendingJournal = await journal(rootPath);
     const pendingRecovery = new WorkAdmissionCoordinator({
-      journal: await journal(rootPath),
+      journal: pendingJournal,
       client: client({ acquire, claim }),
       leaseDurationMs: 60_000,
-      terminalRecovery: noTerminalRecovery,
+      terminalEvidence: absentTerminalEvidence(pendingJournal),
     });
     await expect(pendingRecovery.prepareNext()).resolves.toMatchObject({
       state: "ready",
@@ -156,14 +174,15 @@ describe("WorkAdmissionCoordinator", () => {
 
     const noNetworkAcquire = vi.fn();
     const noNetworkClaim = vi.fn();
+    const claimedJournal = await journal(rootPath);
     const claimedRecovery = new WorkAdmissionCoordinator({
-      journal: await journal(rootPath),
+      journal: claimedJournal,
       client: client({
         acquire: noNetworkAcquire,
         claim: noNetworkClaim,
       }),
       leaseDurationMs: 60_000,
-      terminalRecovery: noTerminalRecovery,
+      terminalEvidence: absentTerminalEvidence(claimedJournal),
     });
     await expect(claimedRecovery.prepareNext()).resolves.toEqual({
       state: "ready",
@@ -179,13 +198,15 @@ describe("WorkAdmissionCoordinator", () => {
     const rootPath = root();
     const durable = await journal(rootPath);
     await durable.admit(delivery);
-    const claimed = await durable.commitClaim(delivery.deliveryId, execution);
+    await durable.commitClaim(delivery.deliveryId, execution);
+    const claimed = await durable.inspect(delivery.deliveryId);
+    if (!claimed) throw new Error("missing test work");
     const completed = Object.freeze({
       ...claimed,
       state: "completed" as const,
       completedAt: "2026-07-31T12:00:02.000Z",
       completion: {
-        attemptKey: "a".repeat(64),
+        attemptKey: attemptKeyFor(execution),
         acknowledgedSequence: 1,
       },
     });
@@ -193,13 +214,20 @@ describe("WorkAdmissionCoordinator", () => {
       state: "completed" as const,
       work: completed,
     }));
+    const audit = vi.fn(async () => ({
+      state: "acknowledged" as const,
+      work: claimed,
+      acknowledgedSequence: 1,
+      lastSequence: 1,
+      pendingEvents: 0,
+    }));
     const acquire = vi.fn();
     const claim = vi.fn();
     const coordinator = new WorkAdmissionCoordinator({
       journal: await journal(rootPath),
       client: client({ acquire, claim }),
       leaseDurationMs: 60_000,
-      terminalRecovery: { recover },
+      terminalEvidence: { audit, recover },
     });
 
     await expect(coordinator.prepareNext()).resolves.toEqual({
@@ -209,6 +237,7 @@ describe("WorkAdmissionCoordinator", () => {
       recovered: true,
     });
     expect(recover).toHaveBeenCalledWith(delivery.deliveryId, execution);
+    expect(audit).toHaveBeenCalledWith(delivery.deliveryId, execution);
     expect(acquire).not.toHaveBeenCalled();
     expect(claim).not.toHaveBeenCalled();
   });
@@ -222,11 +251,22 @@ describe("WorkAdmissionCoordinator", () => {
     const acquire = vi.fn();
     const claim = vi.fn();
     const recover = vi.fn(async () => Promise.reject(failure));
+    const audit = vi.fn(async () => {
+      const work = await durable.inspect(delivery.deliveryId);
+      if (!work) throw new Error("missing test work");
+      return {
+        state: "acknowledged" as const,
+        work,
+        acknowledgedSequence: 1,
+        lastSequence: 1,
+        pendingEvents: 0,
+      };
+    });
     const coordinator = new WorkAdmissionCoordinator({
       journal: await journal(rootPath),
       client: client({ acquire, claim }),
       leaseDurationMs: 60_000,
-      terminalRecovery: { recover },
+      terminalEvidence: { audit, recover },
     });
 
     await expect(coordinator.prepareNext()).rejects.toBe(failure);
@@ -246,11 +286,12 @@ describe("WorkAdmissionCoordinator", () => {
     );
     const acquire = vi.fn();
     const claim = vi.fn();
+    const reopened = await journal(rootPath);
     const recovered = new WorkAdmissionCoordinator({
-      journal: await journal(rootPath),
+      journal: reopened,
       client: client({ acquire, claim }),
       leaseDurationMs: 60_000,
-      terminalRecovery: noTerminalRecovery,
+      terminalEvidence: absentTerminalEvidence(reopened),
     });
 
     await expect(recovered.prepareNext()).resolves.toEqual({
@@ -279,7 +320,7 @@ describe("WorkAdmissionCoordinator", () => {
       state: "completed" as const,
       completedAt: "2026-07-31T12:00:02.000Z",
       completion: {
-        attemptKey: "a".repeat(64),
+        attemptKey: attemptKeyFor(execution),
         acknowledgedSequence: 2,
       },
     });
@@ -287,13 +328,20 @@ describe("WorkAdmissionCoordinator", () => {
       state: "completed" as const,
       work: completed,
     }));
+    const audit = vi.fn(async () => ({
+      state: "acknowledged" as const,
+      work: started,
+      acknowledgedSequence: 2,
+      lastSequence: 2,
+      pendingEvents: 0,
+    }));
     const reconcile = vi.fn();
     const acquire = vi.fn();
     const coordinator = new WorkAdmissionCoordinator({
       journal: await journal(rootPath),
       client: client({ acquire, reconcile }),
       leaseDurationMs: 60_000,
-      terminalRecovery: { recover },
+      terminalEvidence: { audit, recover },
     });
 
     await expect(coordinator.prepareNext()).resolves.toEqual({
@@ -316,11 +364,23 @@ describe("WorkAdmissionCoordinator", () => {
     const failure = new Error("event delivery ambiguous");
     const reconcile = vi.fn();
     const acquire = vi.fn();
+    const audit = vi.fn(async () => {
+      const work = await durable.inspect(delivery.deliveryId);
+      if (!work) throw new Error("missing test work");
+      return {
+        state: "acknowledged" as const,
+        work,
+        acknowledgedSequence: 1,
+        lastSequence: 1,
+        pendingEvents: 0,
+      };
+    });
     const coordinator = new WorkAdmissionCoordinator({
       journal: await journal(rootPath),
       client: client({ acquire, reconcile }),
       leaseDurationMs: 60_000,
-      terminalRecovery: {
+      terminalEvidence: {
+        audit,
         recover: vi.fn(async () => Promise.reject(failure)),
       },
     });
@@ -343,11 +403,12 @@ describe("WorkAdmissionCoordinator", () => {
       observedAt: "2026-07-31T12:02:00.000Z",
       reason: "lease_expired_requeued",
     });
+    const reopened = await journal(rootPath);
     const coordinator = new WorkAdmissionCoordinator({
-      journal: await journal(rootPath),
+      journal: reopened,
       client: client({ acquire, reconcile }),
       leaseDurationMs: 60_000,
-      terminalRecovery: noTerminalRecovery,
+      terminalEvidence: absentTerminalEvidence(reopened),
     });
 
     await expect(coordinator.prepareNext()).resolves.toMatchObject({
@@ -366,11 +427,12 @@ describe("WorkAdmissionCoordinator", () => {
 
     const acquireLater = vi.fn().mockResolvedValue(null);
     const noReconcile = vi.fn();
+    const laterJournal = await journal(rootPath);
     const restarted = new WorkAdmissionCoordinator({
-      journal: await journal(rootPath),
+      journal: laterJournal,
       client: client({ acquire: acquireLater, reconcile: noReconcile }),
       leaseDurationMs: 60_000,
-      terminalRecovery: noTerminalRecovery,
+      terminalEvidence: absentTerminalEvidence(laterJournal),
     });
     await expect(restarted.prepareNext()).resolves.toEqual({ state: "idle" });
     expect(acquireLater).toHaveBeenCalledOnce();
@@ -391,7 +453,7 @@ describe("WorkAdmissionCoordinator", () => {
       journal: durable,
       client: client({ acquire: vi.fn(), claim }),
       leaseDurationMs: 60_000,
-      terminalRecovery: noTerminalRecovery,
+      terminalEvidence: absentTerminalEvidence(durable),
     });
     await expect(coordinator.prepareNext()).resolves.toMatchObject({
       state: "rejected",
@@ -409,11 +471,12 @@ describe("WorkAdmissionCoordinator", () => {
 
     const acquireAfterRestart = vi.fn().mockResolvedValue(null);
     const noClaim = vi.fn();
+    const restartedJournal = await journal(rootPath);
     const restarted = new WorkAdmissionCoordinator({
-      journal: await journal(rootPath),
+      journal: restartedJournal,
       client: client({ acquire: acquireAfterRestart, claim: noClaim }),
       leaseDurationMs: 60_000,
-      terminalRecovery: noTerminalRecovery,
+      terminalEvidence: absentTerminalEvidence(restartedJournal),
     });
     await expect(restarted.prepareNext()).resolves.toEqual({ state: "idle" });
     expect(acquireAfterRestart).toHaveBeenCalledOnce();
@@ -429,7 +492,7 @@ describe("WorkAdmissionCoordinator", () => {
         claim: vi.fn().mockRejectedValue(new Error("network")),
       }),
       leaseDurationMs: 60_000,
-      terminalRecovery: noTerminalRecovery,
+      terminalEvidence: absentTerminalEvidence(durable),
     });
     await expect(coordinator.prepareNext()).rejects.toThrow("network");
     await expect(durable.inspect(delivery.deliveryId)).resolves.toMatchObject({
@@ -441,11 +504,12 @@ describe("WorkAdmissionCoordinator", () => {
   it("serializes concurrent preparation into one acquire and one claim", async () => {
     const acquire = vi.fn().mockResolvedValue(delivery);
     const claim = vi.fn().mockResolvedValue(execution);
+    const durable = await journal();
     const coordinator = new WorkAdmissionCoordinator({
-      journal: await journal(),
+      journal: durable,
       client: client({ acquire, claim }),
       leaseDurationMs: 60_000,
-      terminalRecovery: noTerminalRecovery,
+      terminalEvidence: absentTerminalEvidence(durable),
     });
     const [first, second] = await Promise.all([
       coordinator.prepareNext(),

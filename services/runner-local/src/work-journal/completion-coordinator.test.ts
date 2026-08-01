@@ -170,7 +170,10 @@ describe("WorkCompletionCoordinator", () => {
       journal,
       client: { acquireTaskDelivery } as RunnerControlPlaneClient,
       leaseDurationMs: 60_000,
-      terminalRecovery: {
+      terminalEvidence: {
+        audit: async () => {
+          throw new Error("terminal audit must remain unused");
+        },
         recover: async () => Object.freeze({ state: "none" as const }),
       },
     });
