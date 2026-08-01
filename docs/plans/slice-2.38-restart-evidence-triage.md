@@ -1,6 +1,6 @@
 # Slice 2.38 restart evidence triage
 
-Status: Planned
+Status: Complete
 
 Date: 2026-08-01
 
@@ -80,3 +80,19 @@ without redundant reconciliation.
 4. Recovered claimed work cannot become ready without current reconciliation.
 5. Retired work is durably closed and never released or acquired over.
 6. No monitor, session, polling loop, or runner is enabled.
+
+## Admission evidence
+
+Implementation commit `f69c2af` passed every locally applicable repository
+gate, including 41 restart-triage tests and all 659 runner-local tests. The
+focused suites cover claimed and execution-started work across all four durable
+dispositions, current and all six retired reconciliation results, call order,
+failure propagation, consistency checks, mutation resistance, frozen handoff,
+and real journal/spool restarts for acknowledged and pending evidence.
+
+Main CI run `30713739060` passed formatting, type checks, lint, both dependency
+boundary audits, PostgreSQL migration and seed, workspace and integration
+tests, Linux native spool and work-journal durability, the Chromium product
+journey, production builds, and evidence upload. ADR-075 is admitted with
+monitor construction, attempt-session composition, polling, and runner
+enablement still excluded.

@@ -1192,7 +1192,7 @@ last known ordering prerequisite before attempt-session composition.
 
 ### Slice 2.38 — restart terminal-evidence triage
 
-Status: Planned on 2026-08-01.
+Status: Complete on 2026-08-01.
 
 Architecture decision: ADR-075.
 
@@ -1208,6 +1208,13 @@ Detailed plan: `docs/plans/slice-2.38-restart-evidence-triage.md`.
 Exit: state/order tests prove a restarted process cannot send pending evidence
 or execute a recovered claim before exact reconciliation, while fully
 acknowledged evidence still completes without a network authority dependency.
+
+Evidence: implementation commit `f69c2af`; 41 restart-triage tests passed with
+all 659 runner-local tests and every locally applicable repository gate. Main
+CI run `30713739060` passed all PostgreSQL, API, runner, native durability,
+Chromium product-journey, production-build, and evidence-upload gates. ADR-075
+is admitted; attempt-session composition, monitor startup, polling, and runner
+enablement remain separate decisions.
 
 ## Acceptance gates
 

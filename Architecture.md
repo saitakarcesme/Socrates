@@ -3653,6 +3653,22 @@ their durable replay, exact acknowledgement, and completion invariants remain
 unchanged. This slice adds no monitor construction, publication owner wiring,
 attempt session, polling loop, or runner enablement.
 
+Implementation commit `f69c2af` passed every locally applicable repository
+gate, including 41 restart-triage tests, all 659 runner-local tests, production
+builds, and the dependency audit. The focused matrix proves claimed/started
+ordering across absent, pending, acknowledged, and completed evidence; every
+authoritative retirement reason; exact no-replay/no-reconcile boundaries;
+fail-closed identity, state, cursor, and recovery validation; frozen handoff;
+and acknowledged and pending behavior through restarted durable journal/spool
+stores.
+
+GitHub Actions run `30713739060` passed every PostgreSQL, authenticated API,
+runner integration, Linux native spool/work-journal durability, Chromium
+product-journey, production-build, and evidence-upload gate. This admits
+ADR-075 and closes Slice 2.38. Attempt-session composition, monitor startup,
+acquisition polling, and runner enablement remain disabled pending their own
+architecture decision.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
