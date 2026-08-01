@@ -11,6 +11,12 @@ import {
 } from "./sandbox-cancellation-scope";
 import taskFixture from "../../../../packages/contracts/fixtures/runner/task-v2.json";
 
+const absentReceipt = Object.freeze({ state: "absent" as const });
+const forcedReceipt = Object.freeze({
+  state: "terminated" as const,
+  forced: true,
+});
+
 const execution = runnerExecutionV1Schema.parse({
   version: "1",
   lease: {
@@ -49,11 +55,11 @@ describe("SandboxCancellationScope", () => {
             ...execution,
             lease: { ...execution.lease, fence: 0 },
           },
-          { cancel: vi.fn(async () => true) },
+          { cancel: vi.fn(async () => forcedReceipt) },
         ),
     ).toThrow();
 
-    const cancel = vi.fn(async () => true);
+    const cancel = vi.fn(async () => forcedReceipt);
     const scope = new SandboxCancellationScope(execution, { cancel });
     await expect(
       scope.cancel({ ...command(), gracePeriodMs: 60_001 }),
@@ -66,12 +72,12 @@ describe("SandboxCancellationScope", () => {
     const observed: { scope?: SandboxCancellationScope } = {};
     const cancel = vi.fn(async () => {
       expect(observed.scope?.signal.aborted).toBe(true);
-      return true;
+      return forcedReceipt;
     });
     const scope = new SandboxCancellationScope(execution, { cancel });
     observed.scope = scope;
 
-    await expect(scope.cancel(command())).resolves.toBeUndefined();
+    await expect(scope.cancel(command())).resolves.toEqual(forcedReceipt);
     expect(cancel).toHaveBeenCalledWith(
       {
         runnerId: execution.lease.runnerId,
@@ -84,10 +90,10 @@ describe("SandboxCancellationScope", () => {
   });
 
   it("accepts cancellation before an active sandbox exists", async () => {
-    const cancel = vi.fn(async () => false);
+    const cancel = vi.fn(async () => absentReceipt);
     const scope = new SandboxCancellationScope(execution, { cancel });
 
-    await expect(scope.cancel(command())).resolves.toBeUndefined();
+    await expect(scope.cancel(command())).resolves.toEqual(absentReceipt);
     expect(scope.signal.aborted).toBe(true);
     expect(cancel).toHaveBeenCalledOnce();
   });
@@ -100,7 +106,7 @@ describe("SandboxCancellationScope", () => {
   ] as const)(
     "rejects %s drift before any side effect",
     async (field, value) => {
-      const cancel = vi.fn(async () => true);
+      const cancel = vi.fn(async () => forcedReceipt);
       const scope = new SandboxCancellationScope(execution, { cancel });
 
       await expect(
@@ -120,7 +126,7 @@ describe("SandboxCancellationScope", () => {
     });
     const cancel = vi.fn(async () => {
       await pending;
-      return true;
+      return forcedReceipt;
     });
     const scope = new SandboxCancellationScope(execution, { cancel });
     const firstCommand = command();
@@ -130,14 +136,32 @@ describe("SandboxCancellationScope", () => {
     expect(concurrent).toBe(first);
     expect(cancel).toHaveBeenCalledOnce();
     settle();
-    await first;
+    const receipt = await first;
+    expect(Object.isFrozen(receipt)).toBe(true);
     expect(scope.cancel({ ...firstCommand })).toBe(first);
-    await expect(scope.cancel({ ...firstCommand })).resolves.toBeUndefined();
+    await expect(scope.cancel({ ...firstCommand })).resolves.toBe(receipt);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a malformed backend receipt and memoizes that uncertainty", async () => {
+    const cancel = vi.fn(async () => ({
+      state: "terminated",
+      forced: "yes",
+    }));
+    const scope = new SandboxCancellationScope(execution, {
+      cancel: cancel as never,
+    });
+    const cancellation = command();
+
+    const first = scope.cancel(cancellation);
+    await expect(first).rejects.toThrow(TypeError);
+    expect(scope.cancel({ ...cancellation })).toBe(first);
+    await expect(scope.cancel({ ...cancellation })).rejects.toThrow(TypeError);
     expect(cancel).toHaveBeenCalledOnce();
   });
 
   it("rejects policy drift without replacing the first operation", async () => {
-    const cancel = vi.fn(async () => true);
+    const cancel = vi.fn(async () => forcedReceipt);
     const scope = new SandboxCancellationScope(execution, { cancel });
     await scope.cancel(command());
 
@@ -170,7 +194,7 @@ describe("SandboxCancellationScope", () => {
   });
 
   it("validates local revocation before aborting or touching the backend", async () => {
-    const cancel = vi.fn(async () => true);
+    const cancel = vi.fn(async () => forcedReceipt);
     const scope = new SandboxCancellationScope(execution, { cancel });
 
     await expect(
@@ -190,14 +214,14 @@ describe("SandboxCancellationScope", () => {
     const observed: { scope?: SandboxCancellationScope } = {};
     const cancel = vi.fn(async () => {
       expect(observed.scope?.signal.aborted).toBe(true);
-      return true;
+      return forcedReceipt;
     });
     const scope = new SandboxCancellationScope(execution, { cancel });
     observed.scope = scope;
 
     await expect(
       scope.revoke({ reason: "lease_uncertain", gracePeriodMs: 100 }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual(forcedReceipt);
     expect(cancel).toHaveBeenCalledWith(
       {
         runnerId: execution.lease.runnerId,
@@ -216,7 +240,7 @@ describe("SandboxCancellationScope", () => {
     });
     const cancel = vi.fn(async () => {
       await pending;
-      return true;
+      return forcedReceipt;
     });
     const scope = new SandboxCancellationScope(execution, { cancel });
     const revocation = {
@@ -236,7 +260,7 @@ describe("SandboxCancellationScope", () => {
 
   it("allows only the first authenticated or local termination policy", async () => {
     const cancellationFirst = new SandboxCancellationScope(execution, {
-      cancel: vi.fn(async () => true),
+      cancel: vi.fn(async () => forcedReceipt),
     });
     await cancellationFirst.cancel(command());
     await expect(
@@ -247,7 +271,7 @@ describe("SandboxCancellationScope", () => {
     ).rejects.toMatchObject({ code: "policy_conflict" });
 
     const revocationFirst = new SandboxCancellationScope(execution, {
-      cancel: vi.fn(async () => true),
+      cancel: vi.fn(async () => forcedReceipt),
     });
     await revocationFirst.revoke({
       reason: "scheduler_failure",

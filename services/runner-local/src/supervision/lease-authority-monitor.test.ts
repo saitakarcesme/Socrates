@@ -37,6 +37,10 @@ const cancellation = runnerCancellationV1Schema.parse({
   gracePeriodMs: 100,
   reason: "operator",
 });
+const termination = Object.freeze({
+  state: "terminated" as const,
+  forced: true,
+});
 
 type Deferred<T> = Readonly<{
   promise: Promise<T>;
@@ -96,7 +100,7 @@ function fixture(options: {
     leaseDurationMs: options.leaseDurationMs ?? 30_000,
     supervise,
   };
-  const revoke = options.revoke ?? vi.fn(async () => undefined);
+  const revoke = options.revoke ?? vi.fn(async () => termination);
   const scheduler = options.scheduler ?? new ManualScheduler();
   return {
     monitor: new LeaseAuthorityMonitor({
@@ -158,13 +162,21 @@ describe("LeaseAuthorityMonitor", () => {
 
   it("returns authenticated cancellation without local revocation", async () => {
     const value = fixture({
-      steps: [{ state: "cancelled", leaseExpiresAt: "ignored", cancellation }],
+      steps: [
+        {
+          state: "cancelled",
+          leaseExpiresAt: "ignored",
+          cancellation,
+          termination,
+        },
+      ],
     });
 
     const result = await value.monitor.start();
-    expect(result).toEqual({ state: "cancelled", cancellation });
+    expect(result).toEqual({ state: "cancelled", cancellation, termination });
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.cancellation)).toBe(true);
+    expect(result.termination).toBe(termination);
     expect(value.revoke).not.toHaveBeenCalled();
   });
 
@@ -209,6 +221,7 @@ describe("LeaseAuthorityMonitor", () => {
       state: "cancelled",
       leaseExpiresAt: "ignored",
       cancellation,
+      termination,
     });
     await expect(cancelStop).resolves.toMatchObject({ state: "cancelled" });
 

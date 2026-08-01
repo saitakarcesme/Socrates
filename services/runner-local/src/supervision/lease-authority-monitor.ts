@@ -6,6 +6,7 @@ import {
 
 import type { LeaseSupervisionResult } from "./lease-supervisor";
 import type { SandboxLocalRevocation } from "./sandbox-cancellation-scope";
+import type { SandboxTerminationReceipt } from "../oci/backend";
 
 export interface LeaseAuthoritySupervisor {
   readonly leaseDurationMs: number;
@@ -17,13 +18,16 @@ export interface LeaseAuthorityScheduler {
 }
 
 export interface LeaseAuthorityRevocationTarget {
-  revoke(revocation: SandboxLocalRevocation): Promise<void>;
+  revoke(
+    revocation: SandboxLocalRevocation,
+  ): Promise<SandboxTerminationReceipt>;
 }
 
 export type LeaseAuthorityResult =
   | Readonly<{
       state: "cancelled";
       cancellation: RunnerCancellationV1;
+      termination: SandboxTerminationReceipt;
     }>
   | Readonly<{ state: "stale" }>
   | Readonly<{ state: "stopped" }>;
@@ -134,6 +138,7 @@ export class LeaseAuthorityMonitor {
         return Object.freeze({
           state: "cancelled",
           cancellation: deepFreeze({ ...result.cancellation }),
+          termination: result.termination,
         });
       }
       if (result.state === "stale") {

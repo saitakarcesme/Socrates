@@ -19,7 +19,11 @@ import {
 } from "../request/capability";
 
 import type { SandboxAttemptIdentity, SandboxOwnership } from "./identity";
-import type { ProcessExecutor, ProcessResult } from "./process";
+import {
+  ProcessExecutionError,
+  type ProcessExecutor,
+  type ProcessResult,
+} from "./process";
 import type {
   AdmittedSandboxImage,
   SandboxCommand,
@@ -67,6 +71,33 @@ export type SandboxExecutionResult = Readonly<{
   stderrBytes: Uint8Array;
   durationMs: number;
 }>;
+
+export type SandboxTerminationReceipt =
+  | Readonly<{ state: "absent" }>
+  | Readonly<{ state: "terminated"; forced: boolean }>;
+
+export function sandboxTerminationReceipt(
+  candidate: unknown,
+): SandboxTerminationReceipt {
+  if (typeof candidate !== "object" || candidate === null) {
+    throw new TypeError("Sandbox termination receipt must be an object.");
+  }
+  const value = candidate as Record<string, unknown>;
+  const keys = Object.keys(value).sort();
+  if (value["state"] === "absent" && keys.length === 1 && keys[0] === "state") {
+    return Object.freeze({ state: "absent" });
+  }
+  if (
+    value["state"] === "terminated" &&
+    typeof value["forced"] === "boolean" &&
+    keys.length === 2 &&
+    keys[0] === "forced" &&
+    keys[1] === "state"
+  ) {
+    return Object.freeze({ state: "terminated", forced: value["forced"] });
+  }
+  throw new TypeError("Sandbox termination receipt is invalid.");
+}
 
 type PreparedSandboxExecution = Readonly<{
   identity: SandboxAttemptIdentity;
@@ -505,7 +536,7 @@ export class NerdctlSandboxBackend {
   async cancel(
     identity: SandboxAttemptIdentity,
     gracePeriodMs: number,
-  ): Promise<boolean> {
+  ): Promise<SandboxTerminationReceipt> {
     if (
       !Number.isSafeInteger(gracePeriodMs) ||
       gracePeriodMs < 0 ||
@@ -514,25 +545,103 @@ export class NerdctlSandboxBackend {
       throw new RangeError("gracePeriodMs must be between 0 and 60000.");
     }
     const active = this.active.get(sandboxAttemptKey(identity));
-    if (!active) return false;
-    const seconds = Math.floor(gracePeriodMs / 1_000);
+    if (!active) return sandboxTerminationReceipt({ state: "absent" });
+    const name = active.ownership.containerName;
+    let escalationAttempted = false;
+    const disappeared = (result: ProcessResult): boolean =>
+      /not found|no such container/i.test(`${result.stdout}\n${result.stderr}`);
+    const force = async (): Promise<SandboxTerminationReceipt> => {
+      escalationAttempted = true;
+      const result = await this.run(["kill", "--signal", "KILL", name]);
+      if (result.exitCode === 0) {
+        return sandboxTerminationReceipt({
+          state: "terminated",
+          forced: true,
+        });
+      }
+      if (disappeared(result)) {
+        return sandboxTerminationReceipt({ state: "absent" });
+      }
+      throw new SandboxBackendError(
+        "engine",
+        "Forced sandbox termination failed.",
+      );
+    };
+
+    let receipt: SandboxTerminationReceipt;
+    let terminationObserved = false;
+    let removalAttempted = false;
     try {
-      await this.run(
-        ["stop", "--time", String(seconds), active.ownership.containerName],
+      if (gracePeriodMs === 0) {
+        receipt = await force();
+      } else {
+        const graceful = await this.run(["kill", "--signal", "TERM", name]);
+        if (graceful.exitCode !== 0) {
+          if (disappeared(graceful)) {
+            receipt = sandboxTerminationReceipt({ state: "absent" });
+          } else {
+            receipt = await force();
+          }
+        } else {
+          try {
+            const waited = await this.run(["wait", name], {
+              timeoutMs: gracePeriodMs,
+            });
+            if (waited.exitCode === 0) {
+              receipt = sandboxTerminationReceipt({
+                state: "terminated",
+                forced: false,
+              });
+            } else if (disappeared(waited)) {
+              receipt = sandboxTerminationReceipt({ state: "absent" });
+            } else {
+              throw new SandboxBackendError(
+                "engine",
+                "Graceful sandbox termination wait failed.",
+              );
+            }
+          } catch (cause) {
+            if (
+              cause instanceof ProcessExecutionError &&
+              cause.code === "timeout"
+            ) {
+              receipt = await force();
+            } else {
+              throw cause;
+            }
+          }
+        }
+      }
+      terminationObserved = true;
+      removalAttempted = true;
+      await this.removeOwned(active.ownership);
+      return receipt;
+    } catch (primaryCause) {
+      const failures: unknown[] = [primaryCause];
+      if (!terminationObserved && !escalationAttempted) {
+        try {
+          await force();
+        } catch (cause) {
+          failures.push(cause);
+        }
+      }
+      if (!removalAttempted) {
+        removalAttempted = true;
+        try {
+          await this.removeOwned(active.ownership);
+        } catch (cause) {
+          failures.push(cause);
+        }
+      }
+      throw new SandboxBackendError(
+        "engine",
+        "Sandbox cancellation became uncertain.",
         {
-          timeoutMs: Math.max(500, gracePeriodMs + 250),
+          cause:
+            failures.length === 1 ? failures[0] : new AggregateError(failures),
         },
       );
-    } finally {
-      await this.run([
-        "kill",
-        "--signal",
-        "KILL",
-        active.ownership.containerName,
-      ]);
-      await this.removeOwned(active.ownership);
     }
-    return true;
   }
 
   private async removeOwned(ownership: SandboxOwnership): Promise<void> {

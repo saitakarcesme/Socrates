@@ -371,14 +371,12 @@ try {
     .then(() => undefined)
     .catch((error: unknown) => error);
   await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
-  const cancellationAccepted = await backend.cancel(
-    cancellationIdentity,
-    1_000,
-  );
+  const cancellationReceipt = await backend.cancel(cancellationIdentity, 1_000);
   const cancellationOutcome = await cancellationRun;
   await materializer.release(cancellationSource);
   if (
-    !cancellationAccepted ||
+    cancellationReceipt.state !== "terminated" ||
+    !cancellationReceipt.forced ||
     !(cancellationOutcome instanceof Error) ||
     successfulBarrierCrosses !== 1 ||
     cancellationBarrierCrosses !== 1
@@ -398,7 +396,7 @@ try {
   }
 
   const evidence = {
-    schemaVersion: 5,
+    schemaVersion: 6,
     recordedAt: new Date().toISOString(),
     image: {
       reference: image.reference,
@@ -423,7 +421,7 @@ try {
       recursiveReadOnlySourceBind: actionProof.readOnly === true,
       workspaceWrite: measurementProof.result === "workspace-write-ok",
       framedMeasurement: measurementProof.value === "1",
-      exactFenceCancellation: cancellationAccepted,
+      exactFenceCancellation: cancellationReceipt,
       sourceReleased: unreleasedSources.length === 0,
       cleanup: recoveryAfter === 0,
       scopedRecoveryBeforeRun: recoveryBefore === 0,
@@ -435,7 +433,7 @@ try {
       frameCount: successful.frames.length,
     },
     cancellation: {
-      accepted: cancellationAccepted,
+      receipt: cancellationReceipt,
       error: cancellationOutcome.name,
     },
   };

@@ -10,9 +10,10 @@ import {
   RunnerTransportError,
   type RunnerControlPlaneClient,
 } from "../transport/client";
+import type { SandboxTerminationReceipt } from "../oci/backend";
 
 export interface RunnerCancellationTarget {
-  cancel(command: RunnerCancellationV1): Promise<void>;
+  cancel(command: RunnerCancellationV1): Promise<SandboxTerminationReceipt>;
 }
 
 export type LeaseSupervisionResult =
@@ -21,6 +22,7 @@ export type LeaseSupervisionResult =
       state: "cancelled";
       leaseExpiresAt: string;
       cancellation: RunnerCancellationV1;
+      termination: SandboxTerminationReceipt;
     }>
   | Readonly<{ state: "stale" }>;
 
@@ -91,11 +93,12 @@ export class LeaseSupervisor {
         fence: lease.fence,
         ...heartbeat.cancellation,
       });
-      await this.#target.cancel(cancellation);
+      const termination = await this.#target.cancel(cancellation);
       return Object.freeze({
         state: "cancelled",
         leaseExpiresAt: heartbeat.leaseExpiresAt,
         cancellation,
+        termination,
       });
     });
   }

@@ -11,6 +11,11 @@ import {
 import { LeaseSupervisor } from "./lease-supervisor";
 import taskFixture from "../../../../packages/contracts/fixtures/runner/task-v2.json";
 
+const termination = Object.freeze({
+  state: "terminated" as const,
+  forced: true,
+});
+
 const execution = runnerExecutionV1Schema.parse({
   version: "1",
   lease: {
@@ -28,7 +33,7 @@ function supervisor(options: {
   heartbeat: () => Promise<RunnerTaskHeartbeatResponseV1>;
   cancel?: ReturnType<typeof vi.fn>;
 }) {
-  const cancel = options.cancel ?? vi.fn(async () => undefined);
+  const cancel = options.cancel ?? vi.fn(async () => termination);
   const heartbeat = vi.fn(options.heartbeat);
   const client = { heartbeat } as unknown as RunnerControlPlaneClient;
   return {
@@ -92,7 +97,11 @@ describe("LeaseSupervisor", () => {
         gracePeriodMs: 2_500,
         reason: "budget",
       },
+      termination,
     });
+    expect(result.state === "cancelled" && result.termination).toBe(
+      termination,
+    );
     expect(fixture.cancel).toHaveBeenCalledOnce();
   });
 

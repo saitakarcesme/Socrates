@@ -6,13 +6,17 @@ import {
 } from "@socrates/contracts";
 
 import type { SandboxAttemptIdentity } from "../oci/identity";
+import {
+  sandboxTerminationReceipt,
+  type SandboxTerminationReceipt,
+} from "../oci/backend";
 import type { RunnerCancellationTarget } from "./lease-supervisor";
 
 export interface SandboxCancellationBackend {
   cancel(
     identity: SandboxAttemptIdentity,
     gracePeriodMs: number,
-  ): Promise<boolean>;
+  ): Promise<SandboxTerminationReceipt>;
 }
 
 export type SandboxLocalRevocation = Readonly<{
@@ -101,7 +105,7 @@ export class SandboxCancellationScope implements RunnerCancellationTarget {
   readonly #identity: SandboxAttemptIdentity;
   readonly #controller = new AbortController();
   #termination: Termination | undefined;
-  #operation: Promise<void> | undefined;
+  #operation: Promise<SandboxTerminationReceipt> | undefined;
 
   constructor(
     candidate: RunnerExecutionV1,
@@ -116,7 +120,7 @@ export class SandboxCancellationScope implements RunnerCancellationTarget {
     return this.#controller.signal;
   }
 
-  cancel(candidate: RunnerCancellationV1): Promise<void> {
+  cancel(candidate: RunnerCancellationV1): Promise<SandboxTerminationReceipt> {
     let command: RunnerCancellationV1;
     try {
       command = runnerCancellationV1Schema.parse(candidate);
@@ -151,13 +155,22 @@ export class SandboxCancellationScope implements RunnerCancellationTarget {
       command: Object.freeze(command),
     });
     this.#controller.abort();
-    this.#operation = (async () => {
-      await this.#backend.cancel(this.#identity, command.gracePeriodMs);
-    })();
+    let backendOperation: Promise<SandboxTerminationReceipt>;
+    try {
+      backendOperation = this.#backend.cancel(
+        this.#identity,
+        command.gracePeriodMs,
+      );
+    } catch (cause) {
+      backendOperation = Promise.reject(cause);
+    }
+    this.#operation = backendOperation.then(sandboxTerminationReceipt);
     return this.#operation;
   }
 
-  revoke(candidate: SandboxLocalRevocation): Promise<void> {
+  revoke(
+    candidate: SandboxLocalRevocation,
+  ): Promise<SandboxTerminationReceipt> {
     let revocation: SandboxLocalRevocation;
     try {
       revocation = localRevocation(candidate);
@@ -181,9 +194,16 @@ export class SandboxCancellationScope implements RunnerCancellationTarget {
 
     this.#termination = Object.freeze({ kind: "revocation", revocation });
     this.#controller.abort();
-    this.#operation = (async () => {
-      await this.#backend.cancel(this.#identity, revocation.gracePeriodMs);
-    })();
+    let backendOperation: Promise<SandboxTerminationReceipt>;
+    try {
+      backendOperation = this.#backend.cancel(
+        this.#identity,
+        revocation.gracePeriodMs,
+      );
+    } catch (cause) {
+      backendOperation = Promise.reject(cause);
+    }
+    this.#operation = backendOperation.then(sandboxTerminationReceipt);
     return this.#operation;
   }
 }

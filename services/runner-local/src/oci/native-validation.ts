@@ -191,11 +191,15 @@ try {
   });
   await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
   const cancellationStartedAt = performance.now();
-  const cancellationAccepted = await backend.cancel(cancellationAttempt, 1_000);
+  const cancellationReceipt = await backend.cancel(cancellationAttempt, 1_000);
   const cancellationDurationMs =
     Math.round((performance.now() - cancellationStartedAt) * 100) / 100;
   const cancelled = await running;
-  if (!cancellationAccepted || cancelled.exitCode === 0) {
+  if (
+    cancellationReceipt.state !== "terminated" ||
+    !cancellationReceipt.forced ||
+    cancelled.exitCode === 0
+  ) {
     throw new Error("Native cancellation did not terminate the sandbox.");
   }
   const afterRecovery = await backend.recoverOwned();
@@ -204,7 +208,7 @@ try {
   }
 
   const evidence = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     recordedAt: new Date().toISOString(),
     image: imageReference,
     readiness,
@@ -224,7 +228,7 @@ try {
       createBeforeNativeInspect: true,
       nativeSpecVerifiedBeforeStart: true,
       boundedExecution: true,
-      exactFenceCancellation: cancellationAccepted,
+      exactFenceCancellation: cancellationReceipt,
       cleanup: afterRecovery === 0,
     },
     successfulExecution: {
