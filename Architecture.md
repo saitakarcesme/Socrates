@@ -3526,6 +3526,66 @@ ADR-073 and closes Slice 2.36. Publication retry/recovery ownership,
 reconciliation order, session composition, acquisition polling, and runner
 enablement remain disabled pending their own architecture decision.
 
+### ADR-074: Terminal publication has one bounded authority owner
+
+ADR-072 can report durable `pending` or `acknowledged` evidence, and ADR-073 can
+decide to retain lease supervision, but no component yet owns the next action.
+A future session must not catch a deferred publication error and create an
+unbounded retry loop, retry pending network effects without renewed authority,
+or stop the monitor merely because one recovery attempt failed.
+
+One one-shot `TerminalPublicationOwner` will own publication settlement and
+lease release after the session has already selected terminal evidence. Its
+publication operation is fixed at construction and `complete()` is
+single-flight: concurrent and later callers receive the same Promise and
+cannot create an independent retry or release decision. A bounded configuration
+sets zero to one hundred recovery retries; the initial publication attempt is
+not counted as a retry. There is no hidden default, timer, delay, wall clock, or
+infinite mode.
+
+Every attempt is classified by ADR-073's pure policy. The owner then follows
+one exact path:
+
+- completed publication requests clean monitor stop and returns the durable
+  publication together with the actual `stopped`, `cancelled`, or `stale`
+  monitor result;
+- deferred `acknowledged` evidence retries publication immediately because
+  ADR-065 recovery can only inspect the spool and commit local completion;
+- deferred `pending` evidence obtains a fresh ADR-070 monitor checkpoint before
+  each retry, and retries only after `renewed`;
+- deferred `absent`, publication-state uncertainty, and every other fatal
+  publication failure request ADR-073 abandonment immediately;
+- exhausting the configured recovery count while evidence remains pending or
+  acknowledged also requests abandonment.
+
+Across retained failures, the owner pins delivery/task/attempt identity,
+terminal `lastSequence`, and the first observed cursor. Later acknowledgement
+may advance and pending count may fall by the exact inverse delta; neither may
+regress, and an acknowledged disposition cannot become pending again. Identity,
+terminal-length, or cursor drift is `disposition_regressed` and selects
+abandonment rather than another retry.
+
+Cancellation or stale authority returned by a pending-retry checkpoint ends
+ownership without another publication call or a competing abandonment request;
+the monitor already has an authenticated terminal result. Checkpoint
+uncertainty similarly ends the operation without masking or replacing the
+monitor failure. Restart handling of the retained spool remains a later
+reconciliation-order decision.
+
+Clean stop can race an already in-flight heartbeat. Durable publication remains
+completed when stop returns `cancelled` or `stale`; the exact monitor result is
+retained in the frozen success. A stop rejection is instead
+`completion_release_uncertain` and retains the proven completion only in memory.
+An `abandoned` result from a clean-stop request, or `stopped` from an abandonment
+request, is an ownership conflict because some other caller selected release
+first. Abandonment failure retains both publication and monitor causes only in
+an `AggregateError`. All public messages are fixed and redacted.
+
+This owner composes only existing publication, checkpoint, clean-stop, and
+abandonment ports. It does not start a monitor, observe or arbitrate execution,
+reconcile restart state, schedule delays, acquire work, poll, or enable a runner
+entry point. Full attempt-session composition remains a later decision.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

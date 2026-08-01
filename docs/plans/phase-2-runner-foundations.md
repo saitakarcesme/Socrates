@@ -1163,6 +1163,26 @@ API, runner, native durability, Chromium product-journey, production-build, and
 evidence-upload gates. ADR-073 is admitted; retry/recovery ownership remains a
 separate prerequisite before session composition.
 
+### Slice 2.37 — bounded terminal publication ownership
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-074.
+
+Detailed plan: `docs/plans/slice-2.37-terminal-publication-owner.md`.
+
+- bind one publication operation to one single-flight owner;
+- retry acknowledged evidence locally without an authority heartbeat;
+- require a fresh checkpoint before every pending-evidence retry;
+- bound retries explicitly and abandon on fatal failure or exhaustion;
+- preserve completed publication across clean-stop cancellation/stale races;
+- keep restart reconciliation, session composition, polling, and enablement out
+  of scope.
+
+Exit: adversarial ownership tests prove no deferred publication can retry
+without the exact required authority action or release through the wrong
+terminal monitor path.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
