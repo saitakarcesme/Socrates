@@ -8,3 +8,4 @@ export * from "./terminal-evidence-recovery";
 export * from "./terminal-evidence-publication";
 export * from "./terminal-publication-authority-policy";
 export * from "./terminal-publication-disposition";
+export * from "./terminal-publication-owner";

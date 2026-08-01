@@ -3580,6 +3580,8 @@ An `abandoned` result from a clean-stop request, or `stopped` from an abandonmen
 request, is an ownership conflict because some other caller selected release
 first. Abandonment failure retains both publication and monitor causes only in
 an `AggregateError`. All public messages are fixed and redacted.
+Malformed checkpoint or monitor-release results never satisfy a success path:
+they fail closed as checkpoint uncertainty or release conflict.
 
 This owner composes only existing publication, checkpoint, clean-stop, and
 abandonment ports. It does not start a monitor, observe or arbitrate execution,

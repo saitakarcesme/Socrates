@@ -66,6 +66,8 @@ An abandoned result after clean stop or a stopped result after abandonment is
 `release_conflict`. If abandonment itself rejects, retain the publication cause
 and monitor cause in one in-memory `AggregateError`; never concatenate either
 message. Returned results and owner errors are deeply frozen and redacted.
+Malformed checkpoint or release results fail closed as checkpoint uncertainty
+or release conflict and never satisfy completion or abandonment.
 
 ## Failure matrix
 
