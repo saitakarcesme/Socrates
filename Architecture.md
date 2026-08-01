@@ -3669,6 +3669,50 @@ ADR-075 and closes Slice 2.38. Attempt-session composition, monitor startup,
 acquisition polling, and runner enablement remain disabled pending their own
 architecture decision.
 
+### ADR-076: Restart recovery publication has no append authority
+
+ADR-075 exposes current pending evidence as `recovery_pending`, but the normal
+ADR-067 publication operation still accepts fresh terminal drafts and owns an
+append port. Passing placeholder drafts to that operation would be unsafe: if
+the durable spool disappeared or was misread between admission and session
+startup, recovery could cross into a new append and manufacture different
+terminal evidence. A type-level promise to call recovery first is not enough;
+the restart handoff must be incapable of appending.
+
+One `RecoveryOnlyTerminalPublication` will therefore bind an exact delivery and
+execution to the existing durable recovery operation and read-only ADR-072
+auditor. It receives no drafts and no appender capability. Each serialized
+`publish()` call may drain only the already-existing terminal spool and either
+return the standard frozen `{ state: "completed", publication: "recovered" }`
+result or fail closed. It is repeatable rather than single-flight because the
+ADR-074 owner must be able to retry a retained disposition; ADR-074 remains the
+single owner of retry count, authority checkpoints, and terminal release.
+
+Every invocation audits before recovery. Audited `completed` evidence returns
+recovered success without probing; audited `absent` is a fixed
+`recovery_evidence_missing` failure; only `pending` or `acknowledged` may call
+recovery. A completed recovery result is then audited again and must preserve
+delivery, task, attempt, execution, attempt key, acknowledgement cursor, and
+completed work identity. Recovery `none`, malformed output, or contradictory
+post-recovery state is `recovery_result_inconsistent` and can never fall
+through to append.
+
+If recovery rejects, the operation audits again at the new `recovery_only`
+failure boundary. Audited `completed` evidence converts ambiguity into
+recovered success. Audited `pending` or `acknowledged` evidence throws the
+existing frozen `TerminalEvidencePublicationDeferredError`, allowing ADR-074
+to retain authority and apply its pending-checkpoint or acknowledged-local
+retry rule. Audited `absent` is missing evidence. Initial or post-failure audit
+uncertainty throws `TerminalEvidencePublicationStateUncertainError`; when a
+primary recovery failure exists, both causes remain only in memory. All public
+messages remain fixed and redacted.
+
+This primitive does not itself establish authority. A future attempt session
+may construct it only from ADR-075 `recovery_pending`, start the exact lease
+monitor, and hand its fixed zero-argument operation to ADR-074. This slice adds
+no monitor construction, execution observer, terminal arbitration, fresh
+publication, acquisition polling, or runner enablement.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

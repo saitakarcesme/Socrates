@@ -1216,6 +1216,25 @@ Chromium product-journey, production-build, and evidence-upload gates. ADR-075
 is admitted; attempt-session composition, monitor startup, polling, and runner
 enablement remain separate decisions.
 
+### Slice 2.39 — recovery-only terminal publication
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-076.
+
+Detailed plan: `docs/plans/slice-2.39-recovery-only-publication.md`.
+
+- bind exact restart delivery/execution without accepting terminal drafts;
+- expose no spool append capability at the recovery publication boundary;
+- convert completed audit evidence into recovered success;
+- preserve pending/acknowledged disposition for ADR-074 bounded ownership;
+- fail closed on absent, inconsistent, drifting, or uncertain evidence;
+- keep monitor/session wiring, polling, and enablement out of scope.
+
+Exit: type boundaries and real durable restart tests prove a
+`recovery_pending` handoff can drain only its existing terminal spool and can
+never manufacture a new event batch if that evidence is absent or uncertain.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
