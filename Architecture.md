@@ -3464,6 +3464,50 @@ ADR-072 and closes Slice 2.35. Publication retry, monitor abandonment,
 reconciliation order, session composition, acquisition polling, and runner
 enablement remain disabled pending their own architecture decision.
 
+### ADR-073: Lease release distinguishes completion from publication abandonment
+
+`LeaseAuthorityMonitor.stop()` currently means only that its owner no longer
+wants another heartbeat. That physical effect is insufficient for a future
+attempt session: stopping after durable work completion is a clean release,
+while ceasing renewal because terminal publication cannot safely continue is a
+fail-stop abandonment. Treating both as `stopped` would let callers and tests
+mistake missing terminal evidence for successful ownership closure.
+
+The monitor will therefore expose one explicit publication-abandonment request
+in addition to clean `stop()`. Clean release settles as `stopped`; abandonment
+settles as a deeply frozen `abandoned` result with the fixed redacted reason
+`terminal_publication_failed`. A checkpoint after abandonment rejects with the
+fixed code `monitor_abandoned`. No dependency message, path, event, or durable
+payload enters either result.
+
+Owner release never pretends to revoke control-plane authority. It prevents a
+new heartbeat, wakes a scheduled wait, and lets an already in-flight heartbeat
+settle. If that heartbeat reports cancellation, stale authority, or
+uncertainty, the authenticated or safety-critical outcome outranks the owner
+release request. If it renews, the monitor returns the already selected clean
+or abandoned release without scheduling another heartbeat. The first clean or
+abandon request wins, every caller joins the same terminal monitor promise, and
+neither path invokes local sandbox revocation: ADR-071 has already made closed
+observation and cleanup a prerequisite for publication ownership.
+
+A separate pure `TerminalPublicationAuthorityPolicy` maps an explicit
+`fulfilled` or `rejected` publication settlement without performing effects.
+It never observes Promise settlement order and does not retain the fulfilled
+work value or rejected reason in its decision:
+
+- durable `completed` publication selects clean `stop`;
+- deferred `pending` or `acknowledged` publication selects `retain` so a later
+  owner can recover while supervision remains live;
+- deferred `absent`, publication-state uncertainty, or any other fatal
+  publication failure selects `abandon`;
+- a deferred `completed` disposition is rejected as an impossible input because
+  ADR-072 converts that state into normal recovered success.
+
+The policy does not call the monitor, retry publication, reconcile a lease, or
+race promises. This slice adds the semantic primitive needed by a later
+publication owner; it does not add that owner, a retry scheduler, session
+composition, acquisition polling, or runner enablement.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

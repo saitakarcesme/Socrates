@@ -1135,6 +1135,27 @@ runner, native durability, Chromium product-journey, production-build, and
 evidence-upload gates. ADR-072 is admitted; publication retry and monitor
 ownership remain deliberately unresolved for the next architecture slice.
 
+### Slice 2.36 — explicit lease-authority release
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-073.
+
+Detailed plan: `docs/plans/slice-2.36-lease-authority-release.md`.
+
+- distinguish clean completion release from terminal-publication abandonment;
+- make the first owner release intent single-flight and immutable;
+- preserve cancellation, stale, and uncertainty precedence over owner release;
+- map publication success, disposition, and fatal failure through a pure
+  authority policy;
+- prove release never starts another heartbeat or invokes sandbox revocation;
+- keep retry, reconciliation, session composition, polling, and enablement out
+  of scope.
+
+Exit: adversarial monitor and policy tests prove every publication state has
+one exact retain/stop/abandon decision and abandonment cannot be observed as
+clean completion.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
