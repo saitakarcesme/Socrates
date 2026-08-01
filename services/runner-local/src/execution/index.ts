@@ -1,4 +1,11 @@
 export {
+  AttemptExecutionObservationError,
+  AttemptExecutionObserver,
+  type AttemptExecutionObservation,
+  type AttemptExecutionPreparationPort,
+  type AttemptExecutionRuntimePort,
+} from "./attempt-observer";
+export {
   ExecutionPlanProjectionError,
   ExecutionPlanProjector,
   type LocalExecutionPolicy,
@@ -19,3 +26,8 @@ export {
   type SandboxOwnedResourceRecoveryPort,
   type SourceOwnedResourceRecoveryPort,
 } from "./startup-recovery-barrier";
+export {
+  DurableExecutionTimingBarrier,
+  DurableExecutionTimingBarrierError,
+  type MonotonicTimeSource,
+} from "./timing-barrier";

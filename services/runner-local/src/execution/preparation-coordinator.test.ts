@@ -208,32 +208,36 @@ describe("AttemptPreparationCoordinator", () => {
     });
   });
 
-  it("propagates port failures without invoking later or unowned cleanup", async () => {
+  it("normalizes port failures without invoking later or unowned cleanup", async () => {
     const resolverFailure = await harness();
+    const resolverCause = new Error("resolver unavailable");
     vi.mocked(resolverFailure.artifacts.resolve).mockRejectedValueOnce(
-      new Error("resolver unavailable"),
+      resolverCause,
     );
-    await expect(resolverFailure.coordinator.prepare()).rejects.toThrow(
-      "resolver unavailable",
-    );
+    await expect(resolverFailure.coordinator.prepare()).rejects.toMatchObject({
+      code: "source_unavailable",
+      cause: resolverCause,
+    });
     expect(resolverFailure.images.admit).not.toHaveBeenCalled();
 
     const imageFailure = await harness();
-    vi.mocked(imageFailure.images.admit).mockRejectedValueOnce(
-      new Error("image unavailable"),
-    );
-    await expect(imageFailure.coordinator.prepare()).rejects.toThrow(
-      "image unavailable",
-    );
+    const imageCause = new Error("image unavailable");
+    vi.mocked(imageFailure.images.admit).mockRejectedValueOnce(imageCause);
+    await expect(imageFailure.coordinator.prepare()).rejects.toMatchObject({
+      code: "invalid_image",
+      cause: imageCause,
+    });
     expect(imageFailure.sources.materialize).not.toHaveBeenCalled();
 
     const sourceFailure = await harness();
+    const sourceCause = new Error("source unavailable");
     vi.mocked(sourceFailure.sources.materialize).mockRejectedValueOnce(
-      new Error("source unavailable"),
+      sourceCause,
     );
-    await expect(sourceFailure.coordinator.prepare()).rejects.toThrow(
-      "source unavailable",
-    );
+    await expect(sourceFailure.coordinator.prepare()).rejects.toMatchObject({
+      code: "source_materialization_failed",
+      cause: sourceCause,
+    });
     expect(sourceFailure.sources.release).not.toHaveBeenCalled();
   });
 
@@ -308,18 +312,36 @@ describe("AttemptPreparationCoordinator", () => {
     expect(value.sources.release).toHaveBeenCalledOnce();
   });
 
-  it("normalizes cancellation observed while an awaited port rejects", async () => {
+  it("does not erase an unrelated port failure after a concurrent abort", async () => {
     const value = await harness();
     const controller = new AbortController();
+    const resolverFailure = new Error("resolver interrupted");
     vi.mocked(value.artifacts.resolve).mockImplementationOnce(async () => {
       controller.abort(new Error("lease lost"));
-      throw new Error("resolver interrupted");
+      throw resolverFailure;
     });
 
     await expect(
       value.coordinator.prepare(controller.signal),
-    ).rejects.toMatchObject({ code: "cancelled" });
+    ).rejects.toMatchObject({
+      code: "source_unavailable",
+      cause: resolverFailure,
+    });
     expect(value.images.admit).not.toHaveBeenCalled();
+  });
+
+  it("recognizes an exact signal rejection as cancellation", async () => {
+    const value = await harness();
+    const controller = new AbortController();
+    const reason = new Error("lease lost");
+    vi.mocked(value.artifacts.resolve).mockImplementationOnce(async () => {
+      controller.abort(reason);
+      throw reason;
+    });
+
+    await expect(
+      value.coordinator.prepare(controller.signal),
+    ).rejects.toMatchObject({ code: "cancelled", cause: reason });
   });
 
   it("surfaces compensation uncertainty with both causes", async () => {
@@ -369,13 +391,20 @@ describe("AttemptPreparationCoordinator", () => {
 
   it("retains preparation failures without implicit retry", async () => {
     const value = await harness();
-    vi.mocked(value.images.admit).mockRejectedValueOnce(new Error("engine"));
+    const cause = new Error("engine");
+    vi.mocked(value.images.admit).mockRejectedValueOnce(cause);
     const first = value.coordinator.prepare();
     const second = value.coordinator.prepare();
 
     expect(second).toBe(first);
-    await expect(first).rejects.toThrow("engine");
-    await expect(second).rejects.toThrow("engine");
+    await expect(first).rejects.toMatchObject({
+      code: "invalid_image",
+      cause,
+    });
+    await expect(second).rejects.toMatchObject({
+      code: "invalid_image",
+      cause,
+    });
     expect(value.images.admit).toHaveBeenCalledOnce();
   });
 

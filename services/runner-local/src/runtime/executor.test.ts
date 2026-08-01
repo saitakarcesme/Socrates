@@ -17,6 +17,7 @@ import {
 } from "../oci/test-fixtures";
 import { issueMaterializedSourceSnapshot } from "../source/capability";
 import { issueMaterializedRuntimeRequest } from "../request/capability";
+import { SandboxBackendError } from "../oci/backend";
 
 import type {
   SandboxExecutionResult,
@@ -366,16 +367,14 @@ describe("runtime sandbox executor", () => {
     expect(backend.calls).toHaveLength(0);
   });
 
-  it("releases a materialized request without crossing when cancellation races", async () => {
+  it("normalizes request materialization without erasing unrelated failure", async () => {
     const backend = new FakeBackend(outcome(framed(successfulFrames())));
     const requests = new FakeRequestMaterializer();
-    const cross = vi.fn(async () => undefined);
+    const failure = new Error("private materializer detail");
     const controller = new AbortController();
-    const materialize = requests.materialize.bind(requests);
-    requests.materialize = async (input) => {
-      const capability = await materialize(input);
-      controller.abort(new Error("cancelled during materialization"));
-      return capability;
+    requests.materialize = async () => {
+      controller.abort(new Error("late cancellation"));
+      throw failure;
     };
 
     await expect(
@@ -384,10 +383,64 @@ describe("runtime sandbox executor", () => {
         image: fixtureImage,
         profile: fixtureProfile,
         source,
-        startBarrier: startBarrier(cross),
+        startBarrier: startBarrier(),
         signal: controller.signal,
       }),
-    ).rejects.toThrow("cancelled during materialization");
+    ).rejects.toMatchObject({
+      code: "request_materialization_failed",
+      cause: failure,
+    });
+    expect(requests.releases).toBe(0);
+    expect(backend.calls).toHaveLength(0);
+  });
+
+  it("recognizes exact request materializer abort reason", async () => {
+    const backend = new FakeBackend(outcome(framed(successfulFrames())));
+    const requests = new FakeRequestMaterializer();
+    const reason = new Error("lease revoked");
+    const controller = new AbortController();
+    requests.materialize = async () => {
+      controller.abort(reason);
+      throw reason;
+    };
+
+    await expect(
+      executor(backend, requests).execute({
+        request: request(),
+        image: fixtureImage,
+        profile: fixtureProfile,
+        source,
+        startBarrier: startBarrier(),
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ code: "cancelled", cause: reason });
+  });
+
+  it("releases a materialized request without crossing when cancellation races", async () => {
+    const backend = new FakeBackend(outcome(framed(successfulFrames())));
+    const requests = new FakeRequestMaterializer();
+    const cross = vi.fn(async () => undefined);
+    const controller = new AbortController();
+    const cancellationReason = new Error("cancelled during materialization");
+    const materialize = requests.materialize.bind(requests);
+    requests.materialize = async (input) => {
+      const capability = await materialize(input);
+      controller.abort(cancellationReason);
+      return capability;
+    };
+
+    const operation = executor(backend, requests).execute({
+      request: request(),
+      image: fixtureImage,
+      profile: fixtureProfile,
+      source,
+      startBarrier: startBarrier(cross),
+      signal: controller.signal,
+    });
+    await expect(operation).rejects.toMatchObject({
+      code: "cancelled",
+      cause: cancellationReason,
+    });
     expect(requests.releases).toBe(1);
     expect(cross).not.toHaveBeenCalled();
     expect(backend.calls).toHaveLength(0);
@@ -429,7 +482,10 @@ describe("runtime sandbox executor", () => {
         source,
         startBarrier: startBarrier(cross),
       }),
-    ).rejects.toBe(failure);
+    ).rejects.toMatchObject({
+      code: "sandbox_backend_failed",
+      cause: failure,
+    });
     expect(cross).toHaveBeenCalledOnce();
     expect(requests.releases).toBe(1);
   });
@@ -457,6 +513,47 @@ describe("runtime sandbox executor", () => {
       },
     );
     await expect(operation).rejects.not.toThrow("secret request path");
+  });
+
+  it("distinguishes sandbox cleanup uncertainty from backend failure", async () => {
+    const cleanup = new SandboxBackendError(
+      "cleanup",
+      "private cleanup detail",
+    );
+    const backend: RuntimeSandboxBackend = {
+      executeRuntime: async () => Promise.reject(cleanup),
+    };
+
+    await expect(
+      executor(backend, new FakeRequestMaterializer()).execute({
+        request: request(),
+        image: fixtureImage,
+        profile: fixtureProfile,
+        source,
+        startBarrier: startBarrier(),
+      }),
+    ).rejects.toMatchObject({
+      code: "cleanup_failed",
+      cause: cleanup,
+      message: "Sandbox cleanup could not be proven.",
+    });
+  });
+
+  it("recognizes typed sandbox abort without reading late signal state", async () => {
+    const aborted = new SandboxBackendError("aborted", "private detail");
+    const backend: RuntimeSandboxBackend = {
+      executeRuntime: async () => Promise.reject(aborted),
+    };
+
+    await expect(
+      executor(backend, new FakeRequestMaterializer()).execute({
+        request: request(),
+        image: fixtureImage,
+        profile: fixtureProfile,
+        source,
+        startBarrier: startBarrier(),
+      }),
+    ).rejects.toMatchObject({ code: "cancelled", cause: aborted });
   });
 
   it("retains barrier and release failures in an in-memory aggregate", async () => {

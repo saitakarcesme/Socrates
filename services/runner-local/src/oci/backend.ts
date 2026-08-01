@@ -106,7 +106,12 @@ type ActiveSandbox = {
 export class SandboxBackendError extends Error {
   constructor(
     readonly code:
-      "conflict" | "engine" | "identity_mismatch" | "image_mismatch",
+      | "aborted"
+      | "cleanup"
+      | "conflict"
+      | "engine"
+      | "identity_mismatch"
+      | "image_mismatch",
     message: string,
     options?: ErrorOptions,
   ) {
@@ -446,6 +451,8 @@ export class NerdctlSandboxBackend {
       );
     }
     let created = false;
+    let primaryFailure: unknown;
+    let executionResult: SandboxExecutionResult | undefined;
     try {
       await this.requireSuccess(
         buildCreateArguments({
@@ -496,7 +503,7 @@ export class NerdctlSandboxBackend {
           "Sandbox exited without an exit code.",
         );
       }
-      return {
+      executionResult = {
         exitCode: result.exitCode,
         stdout: result.stdout,
         stderr: result.stderr,
@@ -504,10 +511,49 @@ export class NerdctlSandboxBackend {
         stderrBytes: result.stderrBytes,
         durationMs: result.durationMs,
       };
-    } finally {
-      if (created) await this.removeOwned(ownership);
-      this.active.delete(key);
+    } catch (cause) {
+      primaryFailure =
+        cause instanceof ProcessExecutionError && cause.code === "aborted"
+          ? new SandboxBackendError(
+              "aborted",
+              "Sandbox execution was explicitly aborted.",
+              { cause },
+            )
+          : (cause ??
+            new SandboxBackendError(
+              "engine",
+              "Sandbox execution failed without an error value.",
+            ));
     }
+    let cleanupFailed = false;
+    let cleanupFailure: unknown;
+    try {
+      if (created) await this.removeOwned(ownership);
+    } catch (cause) {
+      cleanupFailed = true;
+      cleanupFailure = cause;
+    }
+    this.active.delete(key);
+    if (cleanupFailed) {
+      throw new SandboxBackendError(
+        "cleanup",
+        "Sandbox cleanup could not be proven.",
+        {
+          cause:
+            primaryFailure === undefined
+              ? cleanupFailure
+              : new AggregateError([primaryFailure, cleanupFailure]),
+        },
+      );
+    }
+    if (primaryFailure !== undefined) throw primaryFailure;
+    if (!executionResult) {
+      throw new SandboxBackendError(
+        "engine",
+        "Sandbox execution completed without a result.",
+      );
+    }
+    return executionResult;
   }
 
   async cancel(

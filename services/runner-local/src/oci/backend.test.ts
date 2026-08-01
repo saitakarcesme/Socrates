@@ -387,6 +387,71 @@ describe("nerdctl sandbox backend", () => {
     ]);
   });
 
+  it("classifies execution cleanup uncertainty with safe text", async () => {
+    const lifecycle = new LifecycleProcesses();
+    let removals = 0;
+    const processes: ProcessExecutor = {
+      run: async (request) => {
+        const result = await lifecycle.run(request);
+        if (request.arguments[0] === "rm" && (removals += 1) === 2) {
+          return successfulResult("", {
+            exitCode: 1,
+            stderr: "private engine cleanup detail",
+          });
+        }
+        return result;
+      },
+    };
+    const { value } = backend(processes);
+
+    const operation = value.execute({
+      identity: fixtureIdentity,
+      image: fixtureImage,
+      profile: fixtureProfile,
+      command: { executable: "/bin/true", arguments: [] },
+    });
+    await expect(operation).rejects.toMatchObject({
+      code: "cleanup",
+      message: "Sandbox cleanup could not be proven.",
+    });
+    await expect(operation).rejects.not.toThrow(
+      "private engine cleanup detail",
+    );
+  });
+
+  it("classifies an explicitly aborted attached process", async () => {
+    const lifecycle = new LifecycleProcesses();
+    const aborted = new ProcessExecutionError(
+      "aborted",
+      "private process detail",
+    );
+    const processes: ProcessExecutor = {
+      run: async (request) => {
+        if (
+          request.arguments[0] === "start" &&
+          request.arguments.includes("--attach")
+        ) {
+          throw aborted;
+        }
+        return lifecycle.run(request);
+      },
+    };
+    const { value } = backend(processes);
+
+    await expect(
+      value.execute({
+        identity: fixtureIdentity,
+        image: fixtureImage,
+        profile: fixtureProfile,
+        command: { executable: "/bin/true", arguments: [] },
+      }),
+    ).rejects.toMatchObject({
+      code: "aborted",
+      message: "Sandbox execution was explicitly aborted.",
+      cause: aborted,
+    });
+  });
+
   it("mounts an owned runtime request before attached start", async () => {
     const processes = new LifecycleProcesses();
     const { value } = backend(processes);

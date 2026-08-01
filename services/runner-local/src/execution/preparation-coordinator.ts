@@ -65,6 +65,7 @@ export class AttemptPreparationError extends Error {
       | "invalid_prepared_attempt"
       | "invalid_source"
       | "release_failed"
+      | "source_materialization_failed"
       | "source_unavailable",
     message: string,
     options?: ErrorOptions,
@@ -89,6 +90,10 @@ function cancellation(signal?: AbortSignal): void {
     "Attempt preparation was cancelled.",
     { cause: signal.reason },
   );
+}
+
+function isExactCancellation(cause: unknown, signal?: AbortSignal): boolean {
+  return Boolean(signal?.aborted && cause === signal.reason);
 }
 
 function identityFor(execution: RunnerExecutionV1): SandboxAttemptIdentity {
@@ -166,8 +171,12 @@ export class AttemptPreparationCoordinator {
         signal,
       });
     } catch (cause) {
-      cancellation(signal);
-      throw cause;
+      if (isExactCancellation(cause, signal)) cancellation(signal);
+      throw new AttemptPreparationError(
+        "source_unavailable",
+        "The frozen source snapshot could not be resolved.",
+        { cause },
+      );
     }
     cancellation(signal);
     if (!artifact) {
@@ -194,8 +203,12 @@ export class AttemptPreparationCoordinator {
         this.#execution.task.environment.architecture,
       );
     } catch (cause) {
-      cancellation(signal);
-      throw cause;
+      if (isExactCancellation(cause, signal)) cancellation(signal);
+      throw new AttemptPreparationError(
+        "invalid_image",
+        "The frozen sandbox image could not be admitted.",
+        { cause },
+      );
     }
     cancellation(signal);
     try {
@@ -226,8 +239,12 @@ export class AttemptPreparationCoordinator {
           signal,
         });
       } catch (cause) {
-        cancellation(signal);
-        throw cause;
+        if (isExactCancellation(cause, signal)) cancellation(signal);
+        throw new AttemptPreparationError(
+          "source_materialization_failed",
+          "The frozen source snapshot could not be materialized.",
+          { cause },
+        );
       }
       cancellation(signal);
       if (

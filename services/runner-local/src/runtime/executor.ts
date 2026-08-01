@@ -15,6 +15,7 @@ import type {
   SandboxExecutionResult,
   SandboxRuntimeExecution,
 } from "../oci/backend";
+import { SandboxBackendError } from "../oci/backend";
 import type { SandboxResourceProfile } from "../oci/profile";
 import type { MaterializedSourceSnapshot } from "../source/capability";
 import type { MaterializedRuntimeRequest } from "../request/capability";
@@ -54,7 +55,11 @@ export class RuntimeSandboxError extends Error {
     readonly code:
       | "invalid_request"
       | "protocol"
+      | "cancelled"
+      | "cleanup_failed"
       | "request_release_failed"
+      | "request_materialization_failed"
+      | "sandbox_backend_failed"
       | "runtime_mismatch",
     message: string,
     options?: ErrorOptions,
@@ -68,6 +73,37 @@ function positiveLimit(name: string, value: number): void {
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new RangeError(`${name} must be a positive safe integer.`);
   }
+}
+
+function cancellation(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  throw new RuntimeSandboxError(
+    "cancelled",
+    "Runtime sandbox execution was explicitly cancelled.",
+    { cause: signal.reason },
+  );
+}
+
+function backendFailure(cause: unknown): RuntimeSandboxError {
+  if (cause instanceof SandboxBackendError && cause.code === "aborted") {
+    return new RuntimeSandboxError(
+      "cancelled",
+      "Runtime sandbox execution was explicitly cancelled.",
+      { cause },
+    );
+  }
+  if (cause instanceof SandboxBackendError && cause.code === "cleanup") {
+    return new RuntimeSandboxError(
+      "cleanup_failed",
+      "Sandbox cleanup could not be proven.",
+      { cause },
+    );
+  }
+  return new RuntimeSandboxError(
+    "sandbox_backend_failed",
+    "The sandbox backend failed to execute the runtime request.",
+    { cause },
+  );
 }
 
 export class RuntimeSandboxExecutor {
@@ -134,12 +170,24 @@ export class RuntimeSandboxExecutor {
       );
     }
 
-    input.signal?.throwIfAborted();
-    const envelope = await this.requests.materialize({
-      bytes: encodedRequest,
-      identity: request.identity,
-      source: input.source,
-    });
+    cancellation(input.signal);
+    let envelope: MaterializedRuntimeRequest;
+    try {
+      envelope = await this.requests.materialize({
+        bytes: encodedRequest,
+        identity: request.identity,
+        source: input.source,
+      });
+    } catch (cause) {
+      if (input.signal?.aborted && cause === input.signal.reason) {
+        cancellation(input.signal);
+      }
+      throw new RuntimeSandboxError(
+        "request_materialization_failed",
+        "The bounded runtime request could not be materialized.",
+        { cause },
+      );
+    }
     const expectedRequestDigest = `sha256:${createHash("sha256")
       .update(encodedRequest)
       .digest("hex")}`;
@@ -147,20 +195,24 @@ export class RuntimeSandboxExecutor {
       | Readonly<{ state: "failed"; cause: unknown }>
       | Readonly<{ state: "succeeded"; result: SandboxExecutionResult }>;
     try {
-      input.signal?.throwIfAborted();
+      cancellation(input.signal);
       await input.startBarrier.cross();
-      const execution = this.backend.executeRuntime({
-        identity: request.identity,
-        image: input.image,
-        profile: input.profile,
-        source: {
-          snapshot: input.source,
-          expectedDigest: request.source.digest,
-        },
-        request: { envelope, expectedDigest: expectedRequestDigest },
-        signal: input.signal,
-      });
-      executionOutcome = { state: "succeeded", result: await execution };
+      try {
+        const execution = this.backend.executeRuntime({
+          identity: request.identity,
+          image: input.image,
+          profile: input.profile,
+          source: {
+            snapshot: input.source,
+            expectedDigest: request.source.digest,
+          },
+          request: { envelope, expectedDigest: expectedRequestDigest },
+          signal: input.signal,
+        });
+        executionOutcome = { state: "succeeded", result: await execution };
+      } catch (cause) {
+        throw backendFailure(cause);
+      }
     } catch (cause) {
       executionOutcome = { state: "failed", cause };
     }
