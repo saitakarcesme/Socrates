@@ -131,6 +131,30 @@ describe("local event spool", () => {
     expect(await readdir(attemptsPath)).toEqual(before);
   });
 
+  it.each([
+    { label: "empty", values: [] },
+    { label: "non-terminal", values: drafts(false) },
+    {
+      label: "invalid payload",
+      values: [
+        {
+          type: "task.cancelled",
+          payload: { forced: false, durationMs: -1 },
+        },
+      ],
+    },
+  ])("rejects $label input before creating spool state", async ({ values }) => {
+    const rootPath = root();
+    const spool = await open(rootPath);
+    const attemptsPath = join(rootPath, "attempts");
+    const before = await readdir(attemptsPath);
+
+    await expect(
+      spool.append(execution, values as readonly RunnerEventDraft[]),
+    ).rejects.toBeDefined();
+    expect(await readdir(attemptsPath)).toEqual(before);
+  });
+
   it("recovers a committed batch byte-identically after restart", async () => {
     const rootPath = root();
     const first = await open(rootPath);
@@ -183,9 +207,7 @@ describe("local event spool", () => {
       lastSequence: 3,
       terminal: true,
     });
-    await expect(
-      restarted.append(execution, drafts(false)),
-    ).rejects.toMatchObject({
+    await expect(restarted.append(execution, drafts())).rejects.toMatchObject({
       code: "terminal",
     });
   });

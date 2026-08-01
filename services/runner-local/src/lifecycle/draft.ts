@@ -6,6 +6,12 @@ export type RunnerEventDraft = RunnerEventV2 extends infer Event
     : never
   : never;
 
+const terminalEventTypes = new Set<RunnerEventV2["type"]>([
+  "task.succeeded",
+  "task.failed",
+  "task.cancelled",
+]);
+
 const validationEnvelope = Object.freeze({
   version: "2" as const,
   eventId: "00000000-0000-4000-8000-000000000001",
@@ -26,4 +32,25 @@ export function runnerEventDraft(input: RunnerEventDraft): RunnerEventDraft {
     type: parsed.type,
     payload: Object.freeze(parsed.payload),
   }) as RunnerEventDraft;
+}
+
+export function terminalRunnerEventDrafts(
+  input: readonly RunnerEventDraft[],
+): readonly RunnerEventDraft[] {
+  if (!Array.isArray(input) || input.length < 1) {
+    throw new RangeError("A terminal event batch requires at least one draft.");
+  }
+  const drafts = input.map((draft) => runnerEventDraft(draft));
+  const terminalIndexes = drafts
+    .map((draft, index) => (terminalEventTypes.has(draft.type) ? index : -1))
+    .filter((index) => index >= 0);
+  if (
+    terminalIndexes.length !== 1 ||
+    terminalIndexes[0] !== drafts.length - 1
+  ) {
+    throw new RangeError(
+      "A terminal event batch must end with exactly one terminal draft.",
+    );
+  }
+  return Object.freeze(drafts);
 }

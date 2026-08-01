@@ -9,7 +9,10 @@ import {
 } from "@socrates/contracts";
 import { canonicalJson } from "@socrates/runtime-protocol";
 
-import type { RunnerEventDraft } from "../lifecycle/draft";
+import {
+  terminalRunnerEventDrafts,
+  type RunnerEventDraft,
+} from "../lifecycle/draft";
 import {
   attemptKeyFor,
   createCommit,
@@ -154,9 +157,16 @@ export class LocalEventSpool {
 
   async append(
     input: RunnerExecutionV1,
-    drafts: readonly RunnerEventDraft[],
+    draftInput: readonly RunnerEventDraft[],
   ): Promise<readonly RunnerEventV2[]> {
     const execution = runnerExecutionV1Schema.parse(input);
+    const drafts = terminalRunnerEventDrafts(draftInput);
+    if (drafts.length > this.#limits.maximumEventsPerSegment) {
+      throw new SpoolError(
+        "capacity_exceeded",
+        "The event batch exceeds the configured segment event limit.",
+      );
+    }
     const attemptKey = attemptKeyFor(execution);
     return this.#serialize(async () => {
       const state = await this.#openAttempt(execution);
@@ -166,33 +176,10 @@ export class LocalEventSpool {
           "A terminal attempt cannot accept another event segment.",
         );
       }
-      if (drafts.length < 1) {
-        throw new RangeError(
-          "A spool append requires at least one event draft.",
-        );
-      }
       if (state.lastSequence !== 0) {
         throw new SpoolError(
           "terminal",
           "A lifecycle attempt can contain only one committed segment.",
-        );
-      }
-      const terminalDrafts = drafts.filter(({ type }) =>
-        terminalEventTypes.has(type),
-      );
-      if (
-        terminalDrafts.length !== 1 ||
-        !terminalEventTypes.has(drafts.at(-1)!.type)
-      ) {
-        throw new SpoolError(
-          "corrupt",
-          "A lifecycle batch must end with exactly one terminal event.",
-        );
-      }
-      if (drafts.length > this.#limits.maximumEventsPerSegment) {
-        throw new SpoolError(
-          "capacity_exceeded",
-          "The event batch exceeds the configured segment event limit.",
         );
       }
       if (state.lastSequence >= Number.MAX_SAFE_INTEGER) {

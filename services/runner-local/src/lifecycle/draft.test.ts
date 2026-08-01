@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { runnerEventDraft } from "./draft";
+import { runnerEventDraft, terminalRunnerEventDrafts } from "./draft";
 
 describe("runner event draft", () => {
   it("validates and freezes only V2 type and payload fields", () => {
@@ -33,5 +33,55 @@ describe("runner event draft", () => {
         payload: { commandIndex: -1 },
       }),
     ).toThrow();
+  });
+
+  it("validates and freezes one terminal batch", () => {
+    const drafts = terminalRunnerEventDrafts([
+      runnerEventDraft({
+        type: "action.started",
+        payload: { commandIndex: 0 },
+      }),
+      runnerEventDraft({
+        type: "task.failed",
+        payload: {
+          classification: "infrastructure",
+          message: "Fixed failure.",
+        },
+      }),
+    ]);
+
+    expect(drafts.map(({ type }) => type)).toEqual([
+      "action.started",
+      "task.failed",
+    ]);
+    expect(Object.isFrozen(drafts)).toBe(true);
+    expect(drafts.every(Object.isFrozen)).toBe(true);
+  });
+
+  it.each([
+    [],
+    [
+      runnerEventDraft({
+        type: "action.started",
+        payload: { commandIndex: 0 },
+      }),
+    ],
+    [
+      runnerEventDraft({
+        type: "task.failed",
+        payload: {
+          classification: "infrastructure",
+          message: "First failure.",
+        },
+      }),
+      runnerEventDraft({
+        type: "task.cancelled",
+        payload: { forced: false, durationMs: 1 },
+      }),
+    ],
+  ])("rejects a non-terminal lifecycle batch %#", (drafts) => {
+    expect(() => terminalRunnerEventDrafts(drafts)).toThrow(
+      /terminal event batch/u,
+    );
   });
 });

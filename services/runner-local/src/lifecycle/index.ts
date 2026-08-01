@@ -1,4 +1,4 @@
-export { runnerEventDraft } from "./draft";
+export { runnerEventDraft, terminalRunnerEventDrafts } from "./draft";
 export type { RunnerEventDraft } from "./draft";
 export { localFailureEvidence } from "./failure-policy";
 export type {
