@@ -3489,6 +3489,9 @@ or abandoned release without scheduling another heartbeat. The first clean or
 abandon request wins, every caller joins the same terminal monitor promise, and
 neither path invokes local sandbox revocation: ADR-071 has already made closed
 observation and cleanup a prerequisite for publication ownership.
+Scheduler abort handling recognizes only the monitor's exact private
+`AbortSignal.reason`; an unrelated scheduler rejection that settles beside a
+release remains `scheduler_failed` and cannot be masked as owner release.
 
 A separate pure `TerminalPublicationAuthorityPolicy` maps an explicit
 `fulfilled` or `rejected` publication settlement without performing effects.

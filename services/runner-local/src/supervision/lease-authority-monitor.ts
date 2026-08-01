@@ -9,6 +9,7 @@ import type { SandboxLocalRevocation } from "./sandbox-cancellation-scope";
 import type { SandboxTerminationReceipt } from "../oci/termination";
 
 const checkpointWake = Symbol("lease-authority-checkpoint");
+const ownerReleaseWake = Symbol("lease-authority-owner-release");
 
 export interface LeaseAuthoritySupervisor {
   readonly leaseDurationMs: number;
@@ -27,6 +28,10 @@ export interface LeaseAuthorityRevocationTarget {
 
 export type LeaseAuthorityResult =
   | Readonly<{
+      state: "abandoned";
+      reason: "terminal_publication_failed";
+    }>
+  | Readonly<{
       state: "cancelled";
       cancellation: RunnerCancellationV1;
       termination: SandboxTerminationReceipt;
@@ -42,6 +47,7 @@ export class LeaseAuthorityMonitorError extends Error {
   constructor(
     readonly code:
       | "authority_uncertain"
+      | "monitor_abandoned"
       | "monitor_stopped"
       | "revocation_failed"
       | "scheduler_failed",
@@ -90,6 +96,8 @@ type TerminalMonitorState =
   | Readonly<{ state: "result"; result: LeaseAuthorityResult }>
   | Readonly<{ state: "error"; error: unknown }>;
 
+type OwnerReleaseIntent = "abandon" | "stop";
+
 export class LeaseAuthorityMonitor {
   readonly #execution: RunnerExecutionV1;
   readonly #supervisor: LeaseAuthoritySupervisor;
@@ -98,7 +106,7 @@ export class LeaseAuthorityMonitor {
   readonly #heartbeatIntervalMs: number;
   readonly #revocationGracePeriodMs: number;
   #operation: Promise<LeaseAuthorityResult> | undefined;
-  #stopRequested = false;
+  #releaseIntent: OwnerReleaseIntent | undefined;
   #scheduledWait: AbortController | undefined;
   #checkpoint: Checkpoint | undefined;
   #terminal: TerminalMonitorState | undefined;
@@ -148,9 +156,11 @@ export class LeaseAuthorityMonitor {
   }
 
   stop(): Promise<LeaseAuthorityResult> {
-    this.#stopRequested = true;
-    this.#scheduledWait?.abort();
-    return this.start();
+    return this.#release("stop");
+  }
+
+  abandonPublication(): Promise<LeaseAuthorityResult> {
+    return this.#release("abandon");
   }
 
   checkpoint(): Promise<LeaseAuthorityCheckpointResult> {
@@ -161,9 +171,14 @@ export class LeaseAuthorityMonitor {
       if (this.#terminal.result.state === "stopped") {
         return Promise.reject(this.#stoppedError());
       }
+      if (this.#terminal.result.state === "abandoned") {
+        return Promise.reject(this.#abandonedError());
+      }
       return Promise.resolve(this.#terminal.result);
     }
-    if (this.#stopRequested) return Promise.reject(this.#stoppedError());
+    if (this.#releaseIntent) {
+      return Promise.reject(this.#releaseError(this.#releaseIntent));
+    }
     if (this.#checkpoint) return this.#checkpoint.promise;
 
     const pending = checkpoint();
@@ -177,7 +192,13 @@ export class LeaseAuthorityMonitor {
     try {
       const result = await this.#monitor();
       this.#terminal = Object.freeze({ state: "result", result });
-      if (result.state !== "stopped") this.#resolveCheckpoint(result);
+      if (result.state === "stopped") {
+        this.#rejectCheckpoint(this.#stoppedError());
+      } else if (result.state === "abandoned") {
+        this.#rejectCheckpoint(this.#abandonedError());
+      } else {
+        this.#resolveCheckpoint(result);
+      }
       return result;
     } catch (cause) {
       this.#terminal = Object.freeze({ state: "error", error: cause });
@@ -187,7 +208,7 @@ export class LeaseAuthorityMonitor {
   }
 
   async #monitor(): Promise<LeaseAuthorityResult> {
-    while (!this.#stopRequested) {
+    while (!this.#releaseIntent) {
       let result: LeaseSupervisionResult;
       try {
         result = await this.#supervisor.supervise(this.#execution);
@@ -219,7 +240,7 @@ export class LeaseAuthorityMonitor {
           leaseExpiresAt: result.leaseExpiresAt,
         }),
       );
-      if (this.#stopRequested) break;
+      if (this.#releaseIntent) break;
 
       const wait = new AbortController();
       this.#scheduledWait = wait;
@@ -227,7 +248,7 @@ export class LeaseAuthorityMonitor {
         await this.#scheduler.wait(this.#heartbeatIntervalMs, wait.signal);
       } catch (cause) {
         if (
-          !this.#stopRequested &&
+          cause !== ownerReleaseWake &&
           !(cause === checkpointWake && this.#checkpoint)
         ) {
           await this.#revoke("scheduler_failure", cause);
@@ -241,8 +262,26 @@ export class LeaseAuthorityMonitor {
         if (this.#scheduledWait === wait) this.#scheduledWait = undefined;
       }
     }
-    this.#rejectCheckpoint(this.#stoppedError());
-    return Object.freeze({ state: "stopped" });
+    return this.#releaseResult(this.#releaseIntent!);
+  }
+
+  #release(intent: OwnerReleaseIntent): Promise<LeaseAuthorityResult> {
+    this.#releaseIntent ??= intent;
+    this.#scheduledWait?.abort(ownerReleaseWake);
+    return this.start();
+  }
+
+  #releaseResult(intent: OwnerReleaseIntent): LeaseAuthorityResult {
+    return intent === "stop"
+      ? Object.freeze({ state: "stopped" })
+      : Object.freeze({
+          state: "abandoned",
+          reason: "terminal_publication_failed",
+        });
+  }
+
+  #releaseError(intent: OwnerReleaseIntent): LeaseAuthorityMonitorError {
+    return intent === "stop" ? this.#stoppedError() : this.#abandonedError();
   }
 
   #resolveCheckpoint(result: LeaseAuthorityCheckpointResult): void {
@@ -263,6 +302,13 @@ export class LeaseAuthorityMonitor {
     return new LeaseAuthorityMonitorError(
       "monitor_stopped",
       "Lease authority monitor is stopped.",
+    );
+  }
+
+  #abandonedError(): LeaseAuthorityMonitorError {
+    return new LeaseAuthorityMonitorError(
+      "monitor_abandoned",
+      "Lease authority monitor was abandoned after terminal publication failure.",
     );
   }
 

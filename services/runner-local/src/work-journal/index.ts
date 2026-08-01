@@ -6,4 +6,5 @@ export * from "./reconciler";
 export * from "./store";
 export * from "./terminal-evidence-recovery";
 export * from "./terminal-evidence-publication";
+export * from "./terminal-publication-authority-policy";
 export * from "./terminal-publication-disposition";

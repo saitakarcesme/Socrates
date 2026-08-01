@@ -34,6 +34,9 @@ uncertainty, scheduler failure, and revocation failure still outrank either
 intent when already observed. A renewal that races release cannot schedule
 another wait or heartbeat. A checkpoint after clean stop remains
 `monitor_stopped`; a checkpoint after abandonment is `monitor_abandoned`.
+Only the exact private release value carried by `AbortSignal.reason` is treated
+as a normal scheduler wake; an adjacent unrelated rejection remains a scheduler
+failure.
 
 ## Pure publication policy
 

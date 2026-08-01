@@ -385,6 +385,133 @@ describe("LeaseAuthorityMonitor", () => {
     expect(value.revoke).not.toHaveBeenCalled();
   });
 
+  it("abandons before start without heartbeat or sandbox revocation", async () => {
+    const value = fixture({});
+    const abandoned = value.monitor.abandonPublication();
+
+    const result = await abandoned;
+    expect(result).toEqual({
+      state: "abandoned",
+      reason: "terminal_publication_failed",
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(value.monitor.start()).toBe(abandoned);
+    expect(value.supervise).not.toHaveBeenCalled();
+    expect(value.revoke).not.toHaveBeenCalled();
+    await expect(value.monitor.checkpoint()).rejects.toMatchObject({
+      code: "monitor_abandoned",
+      message:
+        "Lease authority monitor was abandoned after terminal publication failure.",
+    });
+  });
+
+  it("abandons a scheduled wait without another heartbeat or revocation", async () => {
+    const scheduler = new ManualScheduler();
+    const value = fixture({
+      steps: [{ state: "renewed", leaseExpiresAt: "ignored" }],
+      scheduler,
+    });
+    const running = value.monitor.start();
+    await vi.waitFor(() => expect(scheduler.waits).toHaveLength(1));
+
+    const abandoning = value.monitor.abandonPublication();
+    await expect(abandoning).resolves.toEqual({
+      state: "abandoned",
+      reason: "terminal_publication_failed",
+    });
+    expect(abandoning).toBe(running);
+    expect(scheduler.waits[0]?.signal.aborted).toBe(true);
+    expect(value.supervise).toHaveBeenCalledOnce();
+    expect(value.revoke).not.toHaveBeenCalled();
+  });
+
+  it("lets an in-flight renewal settle before abandonment", async () => {
+    const heartbeat = deferred<LeaseSupervisionResult>();
+    const scheduler = new ManualScheduler();
+    const value = fixture({ steps: [heartbeat], scheduler });
+    const running = value.monitor.start();
+    const abandoning = value.monitor.abandonPublication();
+    let settled = false;
+    void abandoning.finally(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    heartbeat.resolve({ state: "renewed", leaseExpiresAt: "ignored" });
+    await expect(abandoning).resolves.toMatchObject({ state: "abandoned" });
+    expect(abandoning).toBe(running);
+    expect(scheduler.waits).toHaveLength(0);
+    expect(value.supervise).toHaveBeenCalledOnce();
+    expect(value.revoke).not.toHaveBeenCalled();
+  });
+
+  it("settles a checkpoint already in flight before abandonment", async () => {
+    const heartbeat = deferred<LeaseSupervisionResult>();
+    const value = fixture({ steps: [heartbeat] });
+    const checkpoint = value.monitor.checkpoint();
+    const abandoning = value.monitor.abandonPublication();
+    heartbeat.resolve({
+      state: "renewed",
+      leaseExpiresAt: "2026-08-01T20:00:30.000Z",
+    });
+
+    await expect(checkpoint).resolves.toEqual({
+      state: "renewed",
+      leaseExpiresAt: "2026-08-01T20:00:30.000Z",
+    });
+    await expect(abandoning).resolves.toMatchObject({ state: "abandoned" });
+    await expect(value.monitor.checkpoint()).rejects.toMatchObject({
+      code: "monitor_abandoned",
+    });
+  });
+
+  it("uses the first clean or abandoned release intent for every caller", async () => {
+    const stopped = fixture({});
+    const clean = stopped.monitor.stop();
+    const lateAbandon = stopped.monitor.abandonPublication();
+    expect(lateAbandon).toBe(clean);
+    await expect(lateAbandon).resolves.toEqual({ state: "stopped" });
+
+    const abandoned = fixture({});
+    const failStop = abandoned.monitor.abandonPublication();
+    const lateStop = abandoned.monitor.stop();
+    const duplicate = abandoned.monitor.abandonPublication();
+    expect(lateStop).toBe(failStop);
+    expect(duplicate).toBe(failStop);
+    await expect(lateStop).resolves.toEqual({
+      state: "abandoned",
+      reason: "terminal_publication_failed",
+    });
+  });
+
+  it("does not mask an already rejected scheduler with abandonment", async () => {
+    const schedulerWait = deferred<void>();
+    const scheduler: LeaseAuthorityScheduler = {
+      wait: vi.fn(() => schedulerWait.promise),
+    };
+    const failure = new Error("scheduler failed before abandonment");
+    const value = fixture({
+      steps: [{ state: "renewed", leaseExpiresAt: "ignored" }],
+      scheduler,
+    });
+    const running = value.monitor.start();
+    await vi.waitFor(() => expect(scheduler.wait).toHaveBeenCalledOnce());
+
+    schedulerWait.reject(failure);
+    const abandoning = value.monitor.abandonPublication();
+
+    expect(abandoning).toBe(running);
+    await expect(abandoning).rejects.toMatchObject({
+      code: "scheduler_failed",
+      cause: failure,
+    });
+    expect(value.revoke).toHaveBeenCalledWith({
+      reason: "scheduler_failure",
+      gracePeriodMs: 0,
+    });
+  });
+
   it("lets an in-flight heartbeat settle before honoring stop", async () => {
     const heartbeat = deferred<LeaseSupervisionResult>();
     const value = fixture({ steps: [heartbeat] });
@@ -422,6 +549,62 @@ describe("LeaseAuthorityMonitor", () => {
     stale.resolve({ state: "stale" });
     await expect(staleStop).resolves.toEqual({ state: "stale" });
     expect(staleValue.revoke).toHaveBeenCalledOnce();
+  });
+
+  it("preserves cancellation, stale, and uncertainty over abandonment", async () => {
+    const cancelled = deferred<LeaseSupervisionResult>();
+    const cancelValue = fixture({ steps: [cancelled] });
+    cancelValue.monitor.start();
+    const cancelAbandon = cancelValue.monitor.abandonPublication();
+    cancelled.resolve({
+      state: "cancelled",
+      leaseExpiresAt: "ignored",
+      cancellation,
+      termination,
+    });
+    await expect(cancelAbandon).resolves.toMatchObject({ state: "cancelled" });
+
+    const stale = deferred<LeaseSupervisionResult>();
+    const staleValue = fixture({ steps: [stale] });
+    staleValue.monitor.start();
+    const staleAbandon = staleValue.monitor.abandonPublication();
+    stale.resolve({ state: "stale" });
+    await expect(staleAbandon).resolves.toEqual({ state: "stale" });
+    expect(staleValue.revoke).toHaveBeenCalledOnce();
+
+    const uncertain = deferred<LeaseSupervisionResult>();
+    const uncertainValue = fixture({ steps: [uncertain] });
+    uncertainValue.monitor.start();
+    const uncertainAbandon = uncertainValue.monitor.abandonPublication();
+    const failure = new Error("heartbeat failed");
+    uncertain.reject(failure);
+    await expect(uncertainAbandon).rejects.toMatchObject({
+      code: "authority_uncertain",
+      cause: failure,
+    });
+    expect(uncertainValue.revoke).toHaveBeenCalledOnce();
+  });
+
+  it("preserves revocation failure over abandonment", async () => {
+    const heartbeat = deferred<LeaseSupervisionResult>();
+    const heartbeatFailure = new Error("heartbeat failed");
+    const revocationFailure = new Error("sandbox revocation failed");
+    const value = fixture({
+      steps: [heartbeat],
+      revoke: vi.fn(async () => Promise.reject(revocationFailure)),
+    });
+    value.monitor.start();
+    const abandoning = value.monitor.abandonPublication();
+    heartbeat.reject(heartbeatFailure);
+
+    await expect(abandoning).rejects.toMatchObject({
+      code: "revocation_failed",
+    });
+    const failure = await abandoning.catch((cause: unknown) => cause);
+    expect((failure.cause as AggregateError).errors).toEqual([
+      heartbeatFailure,
+      revocationFailure,
+    ]);
   });
 
   it("revokes and classifies heartbeat uncertainty without leaking its text", async () => {
