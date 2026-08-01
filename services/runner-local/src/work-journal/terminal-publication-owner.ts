@@ -18,9 +18,9 @@ export interface TerminalPublicationAuthorityOwnerPort {
   abandonPublication(): Promise<LeaseAuthorityResult>;
 }
 
-type CompletedAuthorityResult = Exclude<
+type CompletedAuthorityResult = Extract<
   LeaseAuthorityResult,
-  Readonly<{ state: "abandoned" }>
+  Readonly<{ state: "cancelled" | "stale" | "stopped" }>
 >;
 
 export type TerminalPublicationOwnershipResult = Readonly<{

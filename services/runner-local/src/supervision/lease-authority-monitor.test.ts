@@ -673,4 +673,254 @@ describe("LeaseAuthorityMonitor", () => {
       message: "Lease authority monitor is stopped.",
     });
   });
+
+  it("releases before start without heartbeat or sandbox revocation", async () => {
+    const value = fixture({});
+    const releasing = value.monitor.releaseWithoutEvidence();
+
+    const result = await releasing;
+    expect(result).toEqual({
+      state: "released",
+      reason: "terminal_evidence_unavailable",
+    });
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(value.monitor.start()).toBe(releasing);
+    expect(value.supervise).not.toHaveBeenCalled();
+    expect(value.revoke).not.toHaveBeenCalled();
+    await expect(value.monitor.checkpoint()).rejects.toMatchObject({
+      code: "monitor_released",
+      message:
+        "Lease authority monitor was released without terminal evidence.",
+    });
+  });
+
+  it("releases a scheduled wait without another heartbeat or revocation", async () => {
+    const scheduler = new ManualScheduler();
+    const value = fixture({
+      steps: [{ state: "renewed", leaseExpiresAt: "ignored" }],
+      scheduler,
+    });
+    const running = value.monitor.start();
+    await vi.waitFor(() => expect(scheduler.waits).toHaveLength(1));
+
+    const releasing = value.monitor.releaseWithoutEvidence();
+    expect(releasing).toBe(running);
+    await expect(releasing).resolves.toEqual({
+      state: "released",
+      reason: "terminal_evidence_unavailable",
+    });
+    expect(scheduler.waits[0]?.signal.aborted).toBe(true);
+    expect(value.supervise).toHaveBeenCalledOnce();
+    expect(value.revoke).not.toHaveBeenCalled();
+  });
+
+  it("lets an in-flight renewal settle before evidence-free release", async () => {
+    const heartbeat = deferred<LeaseSupervisionResult>();
+    const scheduler = new ManualScheduler();
+    const value = fixture({ steps: [heartbeat], scheduler });
+    const running = value.monitor.start();
+    const releasing = value.monitor.releaseWithoutEvidence();
+    let settled = false;
+    void releasing.finally(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    heartbeat.resolve({ state: "renewed", leaseExpiresAt: "ignored" });
+    await expect(releasing).resolves.toEqual({
+      state: "released",
+      reason: "terminal_evidence_unavailable",
+    });
+    expect(releasing).toBe(running);
+    expect(scheduler.waits).toHaveLength(0);
+    expect(value.supervise).toHaveBeenCalledOnce();
+    expect(value.revoke).not.toHaveBeenCalled();
+  });
+
+  it("preserves cancellation and stale outcomes over evidence-free release", async () => {
+    const cancelled = deferred<LeaseSupervisionResult>();
+    const cancelValue = fixture({ steps: [cancelled] });
+    cancelValue.monitor.start();
+    const cancelRelease = cancelValue.monitor.releaseWithoutEvidence();
+    cancelled.resolve({
+      state: "cancelled",
+      leaseExpiresAt: "ignored",
+      cancellation,
+      termination,
+    });
+    await expect(cancelRelease).resolves.toMatchObject({ state: "cancelled" });
+    expect(cancelValue.revoke).not.toHaveBeenCalled();
+
+    const stale = deferred<LeaseSupervisionResult>();
+    const staleValue = fixture({ steps: [stale] });
+    staleValue.monitor.start();
+    const staleRelease = staleValue.monitor.releaseWithoutEvidence();
+    stale.resolve({ state: "stale" });
+    await expect(staleRelease).resolves.toEqual({ state: "stale" });
+    expect(staleValue.revoke).toHaveBeenCalledWith({
+      reason: "lease_stale",
+      gracePeriodMs: 0,
+    });
+  });
+
+  it("preserves heartbeat and revocation uncertainty over evidence-free release", async () => {
+    const heartbeat = deferred<LeaseSupervisionResult>();
+    const heartbeatFailure = new Error("secret heartbeat failure");
+    const revocationFailure = new Error("secret revocation failure");
+    const value = fixture({
+      steps: [heartbeat],
+      revoke: vi.fn(async () => Promise.reject(revocationFailure)),
+    });
+    value.monitor.start();
+    const releasing = value.monitor.releaseWithoutEvidence();
+    heartbeat.reject(heartbeatFailure);
+
+    const failure = await releasing.catch((cause: unknown) => cause);
+    expect(failure).toMatchObject({
+      code: "revocation_failed",
+      message: "Lease authority was lost and local revocation failed.",
+    });
+    expect((failure.cause as AggregateError).errors).toEqual([
+      heartbeatFailure,
+      revocationFailure,
+    ]);
+    expect((failure as Error).message).not.toContain("secret");
+  });
+
+  it("preserves heartbeat uncertainty over evidence-free release", async () => {
+    const heartbeat = deferred<LeaseSupervisionResult>();
+    const heartbeatFailure = new Error("secret heartbeat failure");
+    const value = fixture({ steps: [heartbeat] });
+    const running = value.monitor.start();
+    const releasing = value.monitor.releaseWithoutEvidence();
+    heartbeat.reject(heartbeatFailure);
+
+    expect(releasing).toBe(running);
+    await expect(releasing).rejects.toMatchObject({
+      code: "authority_uncertain",
+      message: "Lease authority became uncertain.",
+      cause: heartbeatFailure,
+    });
+    expect(value.revoke).toHaveBeenCalledWith({
+      reason: "lease_uncertain",
+      gracePeriodMs: 0,
+    });
+    await expect(releasing).rejects.not.toThrow("secret heartbeat failure");
+  });
+
+  it("does not mask an already failing scheduler with evidence-free release", async () => {
+    const schedulerWait = deferred<void>();
+    const scheduler: LeaseAuthorityScheduler = {
+      wait: vi.fn(() => schedulerWait.promise),
+    };
+    const schedulerFailure = new Error("secret scheduler failure");
+    const value = fixture({
+      steps: [{ state: "renewed", leaseExpiresAt: "ignored" }],
+      scheduler,
+    });
+    const running = value.monitor.start();
+    await vi.waitFor(() => expect(scheduler.wait).toHaveBeenCalledOnce());
+
+    const releasing = value.monitor.releaseWithoutEvidence();
+    schedulerWait.reject(schedulerFailure);
+
+    expect(releasing).toBe(running);
+    await expect(releasing).rejects.toMatchObject({
+      code: "scheduler_failed",
+      message: "Lease heartbeat scheduling failed.",
+      cause: schedulerFailure,
+    });
+    expect(value.revoke).toHaveBeenCalledWith({
+      reason: "scheduler_failure",
+      gracePeriodMs: 0,
+    });
+    await expect(releasing).rejects.not.toThrow("secret scheduler failure");
+  });
+
+  it("settles an in-flight checkpoint before evidence-free release", async () => {
+    const heartbeat = deferred<LeaseSupervisionResult>();
+    const value = fixture({ steps: [heartbeat] });
+    const checkpoint = value.monitor.checkpoint();
+    const releasing = value.monitor.releaseWithoutEvidence();
+    heartbeat.resolve({
+      state: "renewed",
+      leaseExpiresAt: "2026-08-01T20:00:30.000Z",
+    });
+
+    await expect(checkpoint).resolves.toEqual({
+      state: "renewed",
+      leaseExpiresAt: "2026-08-01T20:00:30.000Z",
+    });
+    await expect(releasing).resolves.toMatchObject({ state: "released" });
+    await expect(value.monitor.checkpoint()).rejects.toMatchObject({
+      code: "monitor_released",
+    });
+  });
+
+  it("seals a queued checkpoint when release wins the scheduled-wait race", async () => {
+    const scheduler = new ManualScheduler();
+    const value = fixture({
+      steps: [{ state: "renewed", leaseExpiresAt: "ignored" }],
+      scheduler,
+    });
+    const running = value.monitor.start();
+    await vi.waitFor(() => expect(scheduler.waits).toHaveLength(1));
+
+    const checkpoint = value.monitor.checkpoint();
+    const releasing = value.monitor.releaseWithoutEvidence();
+
+    await expect(checkpoint).rejects.toMatchObject({
+      code: "monitor_released",
+      message:
+        "Lease authority monitor was released without terminal evidence.",
+    });
+    await expect(releasing).resolves.toMatchObject({ state: "released" });
+    expect(releasing).toBe(running);
+    expect(value.supervise).toHaveBeenCalledOnce();
+    expect(value.revoke).not.toHaveBeenCalled();
+  });
+
+  it("uses the first release, stop, or abandonment intent for every caller", async () => {
+    const released = fixture({});
+    const release = released.monitor.releaseWithoutEvidence();
+    expect(released.monitor.stop()).toBe(release);
+    expect(released.monitor.abandonPublication()).toBe(release);
+    expect(released.monitor.releaseWithoutEvidence()).toBe(release);
+    await expect(release).resolves.toMatchObject({ state: "released" });
+
+    const stopped = fixture({});
+    const stop = stopped.monitor.stop();
+    expect(stopped.monitor.releaseWithoutEvidence()).toBe(stop);
+    await expect(stop).resolves.toEqual({ state: "stopped" });
+
+    const abandoned = fixture({});
+    const abandon = abandoned.monitor.abandonPublication();
+    expect(abandoned.monitor.releaseWithoutEvidence()).toBe(abandon);
+    await expect(abandon).resolves.toMatchObject({ state: "abandoned" });
+  });
+
+  it("cannot replace an already terminal authority outcome with release", async () => {
+    const staleValue = fixture({ steps: [{ state: "stale" }] });
+    const staleOperation = staleValue.monitor.start();
+    await expect(staleOperation).resolves.toEqual({ state: "stale" });
+    expect(staleValue.monitor.releaseWithoutEvidence()).toBe(staleOperation);
+    await expect(staleValue.monitor.releaseWithoutEvidence()).resolves.toEqual({
+      state: "stale",
+    });
+
+    const heartbeatFailure = new Error("terminal heartbeat failure");
+    const uncertainValue = fixture({ steps: [heartbeatFailure] });
+    const uncertainOperation = uncertainValue.monitor.start();
+    await expect(uncertainOperation).rejects.toMatchObject({
+      code: "authority_uncertain",
+      cause: heartbeatFailure,
+    });
+    expect(uncertainValue.monitor.releaseWithoutEvidence()).toBe(
+      uncertainOperation,
+    );
+    await expect(
+      uncertainValue.monitor.releaseWithoutEvidence(),
+    ).rejects.toMatchObject({ code: "authority_uncertain" });
+  });
 });

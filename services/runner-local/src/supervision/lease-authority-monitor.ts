@@ -36,6 +36,10 @@ export type LeaseAuthorityResult =
       cancellation: RunnerCancellationV1;
       termination: SandboxTerminationReceipt;
     }>
+  | Readonly<{
+      state: "released";
+      reason: "terminal_evidence_unavailable";
+    }>
   | Readonly<{ state: "stale" }>
   | Readonly<{ state: "stopped" }>;
 
@@ -48,6 +52,7 @@ export class LeaseAuthorityMonitorError extends Error {
     readonly code:
       | "authority_uncertain"
       | "monitor_abandoned"
+      | "monitor_released"
       | "monitor_stopped"
       | "revocation_failed"
       | "scheduler_failed",
@@ -96,7 +101,7 @@ type TerminalMonitorState =
   | Readonly<{ state: "result"; result: LeaseAuthorityResult }>
   | Readonly<{ state: "error"; error: unknown }>;
 
-type OwnerReleaseIntent = "abandon" | "stop";
+type OwnerReleaseIntent = "abandon" | "release" | "stop";
 
 export class LeaseAuthorityMonitor {
   readonly #execution: RunnerExecutionV1;
@@ -163,6 +168,10 @@ export class LeaseAuthorityMonitor {
     return this.#release("abandon");
   }
 
+  releaseWithoutEvidence(): Promise<LeaseAuthorityResult> {
+    return this.#release("release");
+  }
+
   checkpoint(): Promise<LeaseAuthorityCheckpointResult> {
     if (this.#terminal) {
       if (this.#terminal.state === "error") {
@@ -173,6 +182,9 @@ export class LeaseAuthorityMonitor {
       }
       if (this.#terminal.result.state === "abandoned") {
         return Promise.reject(this.#abandonedError());
+      }
+      if (this.#terminal.result.state === "released") {
+        return Promise.reject(this.#releasedError());
       }
       return Promise.resolve(this.#terminal.result);
     }
@@ -196,6 +208,8 @@ export class LeaseAuthorityMonitor {
         this.#rejectCheckpoint(this.#stoppedError());
       } else if (result.state === "abandoned") {
         this.#rejectCheckpoint(this.#abandonedError());
+      } else if (result.state === "released") {
+        this.#rejectCheckpoint(this.#releasedError());
       } else {
         this.#resolveCheckpoint(result);
       }
@@ -272,16 +286,23 @@ export class LeaseAuthorityMonitor {
   }
 
   #releaseResult(intent: OwnerReleaseIntent): LeaseAuthorityResult {
-    return intent === "stop"
-      ? Object.freeze({ state: "stopped" })
-      : Object.freeze({
-          state: "abandoned",
-          reason: "terminal_publication_failed",
-        });
+    if (intent === "stop") return Object.freeze({ state: "stopped" });
+    if (intent === "release") {
+      return Object.freeze({
+        state: "released",
+        reason: "terminal_evidence_unavailable",
+      });
+    }
+    return Object.freeze({
+      state: "abandoned",
+      reason: "terminal_publication_failed",
+    });
   }
 
   #releaseError(intent: OwnerReleaseIntent): LeaseAuthorityMonitorError {
-    return intent === "stop" ? this.#stoppedError() : this.#abandonedError();
+    if (intent === "stop") return this.#stoppedError();
+    if (intent === "release") return this.#releasedError();
+    return this.#abandonedError();
   }
 
   #resolveCheckpoint(result: LeaseAuthorityCheckpointResult): void {
@@ -309,6 +330,13 @@ export class LeaseAuthorityMonitor {
     return new LeaseAuthorityMonitorError(
       "monitor_abandoned",
       "Lease authority monitor was abandoned after terminal publication failure.",
+    );
+  }
+
+  #releasedError(): LeaseAuthorityMonitorError {
+    return new LeaseAuthorityMonitorError(
+      "monitor_released",
+      "Lease authority monitor was released without terminal evidence.",
     );
   }
 

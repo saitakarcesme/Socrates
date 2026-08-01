@@ -137,6 +137,10 @@ const abandoned = Object.freeze({
   state: "abandoned" as const,
   reason: "terminal_publication_failed" as const,
 });
+const released = Object.freeze({
+  state: "released" as const,
+  reason: "terminal_evidence_unavailable" as const,
+});
 const cancelled = Object.freeze({
   state: "cancelled" as const,
   cancellation,
@@ -285,6 +289,20 @@ describe("TerminalPublicationOwner", () => {
       authority: { state: "invalid" },
       publication: completed(),
     });
+  });
+
+  it("does not treat evidence-free release as completed publication", async () => {
+    const value = fixture({
+      publications: [resolves(completed())],
+      stops: [resolves(released)],
+    });
+
+    await expect(value.value.complete()).rejects.toMatchObject({
+      code: "release_conflict",
+      authority: released,
+      publication: completed(),
+    });
+    expect(value.abandonPublication).not.toHaveBeenCalled();
   });
 
   it("retains proven completion when clean release rejects", async () => {
@@ -503,6 +521,25 @@ describe("TerminalPublicationOwner", () => {
     expect(value.abandonPublication).not.toHaveBeenCalled();
   });
 
+  it("fails closed when pending recovery observes evidence-free release", async () => {
+    const reason = deferred("pending");
+    const value = fixture({
+      publications: [rejects(reason)],
+      checkpoints: [
+        resolves(released as unknown as LeaseAuthorityCheckpointResult),
+      ],
+      maximumRecoveryAttempts: 1,
+    });
+
+    const failure = await failureOf(value.value);
+    expect(failure).toMatchObject({ code: "authority_checkpoint_uncertain" });
+    expect((failure as Error).cause).toBeInstanceOf(AggregateError);
+    expect(((failure as Error).cause as AggregateError).errors[0]).toBe(reason);
+    expect(value.publish).toHaveBeenCalledOnce();
+    expect(value.stop).not.toHaveBeenCalled();
+    expect(value.abandonPublication).not.toHaveBeenCalled();
+  });
+
   it.each([
     {
       label: "work identity",
@@ -678,6 +715,21 @@ describe("TerminalPublicationOwner", () => {
       code: "release_conflict",
       authority: { state: "invalid" },
     });
+  });
+
+  it("does not treat evidence-free release as publication abandonment", async () => {
+    const publicationFailure = new Error("fatal publication");
+    const value = fixture({
+      publications: [rejects(publicationFailure)],
+      abandonments: [resolves(released)],
+    });
+
+    await expect(value.value.complete()).rejects.toMatchObject({
+      code: "release_conflict",
+      authority: released,
+      cause: publicationFailure,
+    });
+    expect(value.stop).not.toHaveBeenCalled();
   });
 
   it("retains both causes when abandonment rejects", async () => {
