@@ -3135,6 +3135,22 @@ failure classification, heartbeat lifetime, polling loop, garbage collection,
 or runner enablement. It creates the single terminal publication primitive
 needed by a future one-attempt session.
 
+Validation amendment, 2026-08-01: implementation commit `86d7e01` passed every
+local repository gate, including 425 runner-local tests and the low-severity
+dependency audit. Eighteen focused publication tests proved pre-effect input
+validation, exact journal ownership, existing-evidence precedence, completed
+replay, active-state revalidation, ambiguity propagation, one-append
+concurrency, and invariant failure after an unrecoverable append. A real
+filesystem test published through the journal, spool, sender, and completion
+coordinator, reopened both durable stores, and recovered completion without a
+new event ID, clock read, or network send. Spool tests proved invalid lifecycle
+batches leave the attempts directory unchanged. GitHub Actions run
+`30706571197` passed every PostgreSQL, authenticated API, and runner
+integration, both Linux native durability probes, the Chromium product
+journey, and all production builds. This admits ADR-067 and closes Slice 2.30;
+execution, session composition, polling, and runner enablement remain
+disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

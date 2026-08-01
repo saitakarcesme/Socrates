@@ -1,6 +1,6 @@
 # Slice 2.30 terminal evidence publication
 
-Status: Planned
+Status: Complete
 
 Date: 2026-08-01
 
@@ -81,3 +81,20 @@ Generated event IDs and sequences are not returned as caller authority.
 5. Concurrent duplicate calls cannot allocate duplicate event identities.
 6. Execution, session composition, polling, and runner enablement remain
    disabled.
+
+## Validation
+
+Implementation commit `86d7e01` passed every local repository gate, including
+425 runner-local tests and the low-severity dependency audit. Eighteen focused
+publication tests cover invalid input, journal identity and state, existing
+evidence, completed replay, ambiguity, active-state revalidation, append
+invariants, and concurrent duplicate calls. A real durable-store test
+published and completed a terminal batch, reopened the journal and spool, and
+recovered it without allocating an event identity, reading the spool clock, or
+sending a network request. Invalid spool batches were also proven to leave the
+attempts directory unchanged.
+
+GitHub Actions run `30706571197` passed every PostgreSQL, authenticated API,
+and runner integration, both Linux native durability probes, the Chromium
+product journey, and all production builds. ADR-067 is admitted; execution,
+session composition, polling, and runner enablement remain disabled.

@@ -974,7 +974,7 @@ native durability probes, Chromium, and production builds.
 
 ### Slice 2.30 — terminal evidence publication
 
-Status: Planned on 2026-08-01.
+Status: Complete on 2026-08-01.
 
 Architecture decision: ADR-067.
 
@@ -990,6 +990,13 @@ Detailed plan: `docs/plans/slice-2.30-terminal-evidence-publication.md`.
 
 Exit: mutation, fault-boundary, restart, identity, and concurrency tests prove
 fresh terminal evidence cannot allocate duplicate event identities on retry.
+
+Evidence: implementation commit `86d7e01`; 18 focused publication tests and
+425 runner-local tests passed locally with every repository quality gate. A
+real durable-store restart recovered completed evidence without a new event
+identity, clock read, or network send. GitHub Actions run `30706571197` passed
+every integration suite, both Linux native durability probes, Chromium, and
+production builds.
 
 ## Acceptance gates
 
