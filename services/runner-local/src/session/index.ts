@@ -15,6 +15,15 @@ export {
   type RecoveryPendingWorkAdmission,
 } from "./restart-terminal-recovery-session";
 export {
+  LocalAttemptOwner,
+  LocalAttemptOwnerError,
+  type LocalAttemptJournalConfiguration,
+  type LocalAttemptOwnerOptions,
+  type LocalAttemptSandboxOwner,
+  type LocalAttemptSourceOwner,
+  type LocalAttemptSpoolConfiguration,
+} from "./local-attempt-owner";
+export {
   StartupGatedAttemptDispatcher,
   StartupGatedAttemptDispatcherError,
   type StartupGatedAttemptComposition,

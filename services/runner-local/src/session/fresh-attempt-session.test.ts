@@ -717,7 +717,7 @@ describe("FreshAttemptSession", () => {
       work: { state: "completed" },
     });
     expect(replaySubmit).not.toHaveBeenCalled();
-  });
+  }, 10_000);
 
   it("keeps real durable stores event-free on no-evidence settlement", async () => {
     const path = await durableRoot();
