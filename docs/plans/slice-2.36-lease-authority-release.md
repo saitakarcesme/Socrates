@@ -1,6 +1,6 @@
 # Slice 2.36 lease-authority release
 
-Status: Planned
+Status: Implemented
 
 Date: 2026-08-01
 
@@ -86,3 +86,19 @@ clock, or sandbox dependency.
 4. Publication evidence maps to exactly one frozen authority decision.
 5. No dependency cause enters a result or policy decision.
 6. No retry, reconciliation, session, polling loop, or runner is enabled.
+
+## Admission evidence
+
+Implementation commit `59341f8` passed all local repository gates, including 34
+lease-authority-monitor tests, 21 publication-authority-policy tests, and all
+573 runner-local tests. The focused suites prove first-wins release intent,
+clean/abandoned separation, exact scheduler wake identity, authority outcome
+precedence, no release revocation, exhaustive publication settlement mapping,
+redaction, immutability, and malformed-input fail-closed behavior.
+
+Main CI run `30711742434` passed formatting, type checks, lint, both dependency
+boundary audits, PostgreSQL migration and seed, workspace and integration
+tests, native spool and work-journal durability, the Chromium product journey,
+production builds, and evidence upload. ADR-073 is admitted with publication
+retry, reconciliation, session composition, acquisition polling, and runner
+enablement still excluded.

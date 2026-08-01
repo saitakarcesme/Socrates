@@ -3511,6 +3511,21 @@ race promises. This slice adds the semantic primitive needed by a later
 publication owner; it does not add that owner, a retry scheduler, session
 composition, acquisition polling, or runner enablement.
 
+Implementation commit `59341f8` passed every local repository gate, including
+34 lease-authority-monitor tests, 21 publication-authority-policy tests, all 573
+runner-local tests, production builds, and the dependency audit. These tests
+prove first-wins clean/abandoned release, exact scheduler-wake identity,
+cancellation/stale/uncertainty/revocation precedence, no release-time sandbox
+revocation, exhaustive settlement mapping, fail-closed malformed input,
+redaction, and immutable decisions.
+
+GitHub Actions run `30711742434` passed every PostgreSQL, authenticated API,
+runner integration, Linux native spool/work-journal durability, Chromium
+product-journey, production-build, and evidence-upload gate. This admits
+ADR-073 and closes Slice 2.36. Publication retry/recovery ownership,
+reconciliation order, session composition, acquisition polling, and runner
+enablement remain disabled pending their own architecture decision.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

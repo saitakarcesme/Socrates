@@ -1137,7 +1137,7 @@ ownership remain deliberately unresolved for the next architecture slice.
 
 ### Slice 2.36 — explicit lease-authority release
 
-Status: Planned on 2026-08-01.
+Status: Complete on 2026-08-01.
 
 Architecture decision: ADR-073.
 
@@ -1155,6 +1155,13 @@ Detailed plan: `docs/plans/slice-2.36-lease-authority-release.md`.
 Exit: adversarial monitor and policy tests prove every publication state has
 one exact retain/stop/abandon decision and abandonment cannot be observed as
 clean completion.
+
+Evidence: implementation commit `59341f8`; 34 lease-authority-monitor and 21
+publication-authority-policy tests passed with all 573 runner-local tests and
+every local repository gate. Main CI run `30711742434` passed all PostgreSQL,
+API, runner, native durability, Chromium product-journey, production-build, and
+evidence-upload gates. ADR-073 is admitted; retry/recovery ownership remains a
+separate prerequisite before session composition.
 
 ## Acceptance gates
 
