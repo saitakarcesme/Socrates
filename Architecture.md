@@ -3781,6 +3781,25 @@ or enable the runner. Fresh `ready` work and recovered `claimed` work still
 require the later full attempt session; runner startup must still complete the
 ADR-057 owned-resource barrier before admission can produce this handoff.
 
+Implementation commit `a49fb60` adds the closed restart recovery session,
+narrows lease supervision to a heartbeat-only control-plane capability, and
+starts the first serialized heartbeat before any publication audit effect.
+Thirty-one focused session tests cover strict handoff validation, construction
+without effects, exact identity binding, pending checkpoints, acknowledged
+local retry, cancellation, stale and uncertain authority, scheduler and
+revocation failures, bounded exhaustion, in-flight heartbeat release,
+single-flight settlement, immutable inputs, and redacted failures. Real
+restarted journal/spool cases prove pending recovery submits only its existing
+event and acknowledged recovery completes without submitting one.
+
+All 727 runner-local tests and every locally applicable repository gate passed,
+including the PostgreSQL-backed Chromium measured-research journey. GitHub
+Actions run `30716554709` passed every PostgreSQL migration, seed,
+database/API/runner integration, Linux native spool/work-journal durability,
+Chromium product-journey, production-build, and evidence-upload gate. This
+admits ADR-077 and closes Slice 2.40. Fresh attempt execution, startup
+orchestration, acquisition polling, and runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

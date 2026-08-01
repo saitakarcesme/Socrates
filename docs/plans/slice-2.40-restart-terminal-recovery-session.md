@@ -1,6 +1,6 @@
 # Slice 2.40 restart terminal recovery session
 
-Status: Planned
+Status: Complete
 
 Date: 2026-08-01
 
@@ -87,3 +87,24 @@ fresh append.
    capability or a new event ID.
 5. No fresh execution, polling loop, backoff, startup orchestration, or runner
    enablement is added.
+
+## Admission evidence
+
+Implementation commit `a49fb60` introduced the closed restart recovery session
+and narrowed `LeaseSupervisor` to a heartbeat-only control-plane capability.
+All 31 focused session tests passed, covering strict handoff validation,
+construction without effects, heartbeat-before-audit ordering, pending and
+acknowledged ownership, authenticated cancellation, stale/uncertain authority,
+scheduler and revocation failure, bounded exhaustion, in-flight release,
+single-flight settlement, mutation, and redaction. Real restarted pending and
+acknowledged journal/spool cases prove the composition cannot append or invent
+an event.
+
+The complete runner-local suite passed with 727 tests, and every locally
+applicable repository gate passed, including the PostgreSQL-backed Chromium
+measured-research journey. GitHub Actions run `30716554709` passed formatting,
+type checking, lint, Phase 1/2 dependency audits, PostgreSQL migration and seed,
+workspace/database/API/runner tests, Linux native spool and work-journal
+durability, Chromium product journey, production build, and evidence upload.
+ADR-077 is admitted without enabling execution, startup orchestration, polling,
+or the runner.

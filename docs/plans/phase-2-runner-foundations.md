@@ -1244,7 +1244,7 @@ runner enablement remain separate decisions.
 
 ### Slice 2.40 — restart terminal recovery session
 
-Status: Planned on 2026-08-01.
+Status: Complete on 2026-08-01.
 
 Architecture decision: ADR-077.
 
@@ -1263,6 +1263,13 @@ Exit: adversarial ordering and integration tests prove a restart handoff can
 settle existing evidence under one exact lease owner, while malformed identity,
 terminal authority, and publication failure cannot orphan supervision or gain
 append authority.
+
+Evidence: implementation commit `a49fb60`; 31 restart recovery session tests
+passed with all 727 runner-local tests and every local repository gate. Main CI
+run `30716554709` passed all PostgreSQL, API, runner, Linux native durability,
+Chromium product-journey, production-build, and evidence-upload gates. ADR-077
+is admitted; fresh attempt execution, startup orchestration, polling, and runner
+enablement remain separate decisions.
 
 ## Acceptance gates
 
