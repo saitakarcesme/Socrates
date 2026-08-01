@@ -1384,6 +1384,29 @@ PostgreSQL, API, runner, native durability, Chromium journey, production-build,
 and evidence-upload gate. ADR-081 is admitted. Concrete process composition,
 polling, concurrency scheduling, and runner enablement remain deferred.
 
+### Slice 2.45 — recovery-bound local attempt composition
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-082.
+
+Detailed plan: `docs/plans/slice-2.45-recovery-bound-attempt-composition.md`.
+
+- introduce one effect-free `LocalAttemptOwner` as the concrete explicit-
+  dispatch assembly boundary;
+- bind the exact sandbox/source owners to both ADR-057 recovery and every
+  later session capability;
+- open one non-overlapping journal/spool pair only after startup succeeds;
+- share one sender, completion, recovery, disposition, and admission graph;
+- capture narrow dependency methods and freeze bounded configuration before
+  any dispatch effect;
+- preserve ADR-081 serialization and fail-stop behavior without adding a
+  process root, timer, polling loop, backoff, or runner enablement.
+
+Exit: real-store and adversarial composition tests prove recovery precedes
+store opening, recovered owners cannot be swapped, all attempt paths share one
+durable graph, partial composition cannot retry, and construction is inert.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

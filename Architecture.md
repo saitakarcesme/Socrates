@@ -4083,6 +4083,67 @@ and evidence-upload gates. This admits ADR-081 and closes Slice 2.44. Concrete
 process composition, timers, polling, backoff, concurrency scheduling, and
 runner enablement remain separate decisions.
 
+### ADR-082: One recovery-bound owner composes the local attempt graph
+
+ADR-081 orders startup recovery before deferred composition, but its two
+constructor arguments can still be assembled incorrectly by a future process
+root. A barrier could recover one sandbox or source owner while the deferred
+factory gives sessions a different instance. The journal, spool, sender,
+completion, recovery, disposition, admission, and session graph can likewise
+be duplicated or partially constructed before recovery. Correct individual
+classes do not make a miswired object graph safe.
+
+One effect-free `LocalAttemptOwner` will therefore become the only concrete
+assembly boundary for explicit local attempt dispatch. Its constructor accepts
+the exact sandbox and source owners, narrow control-plane and preparation
+ports, immutable execution/storage policy, and no environment reader. It
+constructs one ADR-057 barrier and one ADR-081 dispatcher internally. The same
+captured sandbox object is used for owned-sandbox recovery, runtime execution,
+cancellation, and both session paths; the same captured source object is used
+for owned-source recovery, materialization, and release. Callers cannot supply
+a separately constructed barrier or composition factory.
+
+Construction validates and snapshots bounded configuration but performs no
+filesystem, network, process, recovery, admission, scheduler, or timer effect.
+The first explicit `dispatchNext()` delegates to ADR-081. Only after the shared
+startup barrier succeeds does a private deferred factory open exactly one
+`LocalWorkJournal` followed by exactly one `LocalEventSpool`. Their resolved
+roots must be distinct and non-overlapping. A store-open failure exposes no
+composition and inherits ADR-081 fail-stop behavior; uncertain filesystem
+state is not deleted or retried in-process and must be inspected by a fresh
+process.
+
+The post-open graph shares those exact store instances. It binds one
+`SequentialSpoolSender`, one `WorkCompletionCoordinator`, one
+`TerminalEvidenceRecoveryCoordinator`, one
+`TerminalPublicationDispositionAuditor`, and one `WorkAdmissionCoordinator`.
+The auditor and recovery coordinator form the admission terminal-evidence
+port. Fresh session factories receive the same journal, spool, recovery,
+sandbox, source, control-plane, scheduler, time source, preparation ports, and
+frozen policy. Restart session factories receive the same auditor, recovery,
+sandbox, control-plane, scheduler, and frozen timing/retry policy. Dependency
+methods are captured into narrow facades during effect-free construction so
+later property mutation cannot redirect authority, persistence, execution, or
+transport.
+
+Every duration, byte/item limit, runtime limit, execution policy, and root is
+validated before the owner can dispatch. Heartbeat interval remains at most
+one third of lease duration; recovery attempts remain explicitly bounded.
+Journal and spool identity sources remain explicit capabilities and are never
+derived from delivery or attempt data. The startup cleanup counts are retained
+as diagnostic evidence only and cannot alter store, admission, or session
+policy.
+
+`LocalAttemptOwner` exposes only `dispatchNext(signal?)` and returns the exact
+ADR-081 immutable result. It does not expose stores, coordinators, session
+factories, credentials, roots, or recovered owner capabilities. It adds no
+environment loading, readiness probe, signal handler, process entry point,
+sleep, timer implementation, polling, jitter, backoff, concurrency setting,
+shutdown protocol, or automatic retry. `LocalRunnerNotEnabledError` remains
+the production entry-point behavior. Concrete Node timing adapters, repeated
+dispatch lifecycle, process configuration, and runner enablement remain later
+independent decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
