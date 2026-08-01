@@ -4157,6 +4157,61 @@ evidence-upload gates. This admits ADR-082 and closes Slice 2.45. Node timing
 adapters, repeated dispatch lifecycle, process configuration, and runner
 enablement remain separate decisions.
 
+### ADR-083: Node attempt timing preserves exact abort authority
+
+ADR-026 and ADR-082 still require callers to supply a
+`LeaseAuthorityScheduler` and `MonotonicTimeSource`. Tests use deterministic
+fakes, but there is no admitted Node implementation. A naive
+`node:timers/promises.setTimeout()` adapter is not equivalent to the existing
+monitor contract: aborting it rejects an `AbortError` wrapper rather than the
+exact `AbortSignal.reason` sentinel used by ADR-026 to distinguish checkpoint
+wake-up, clean owner release, and genuine scheduler failure. Treating that
+wrapper as a scheduler failure would revoke a healthy sandbox during normal
+settlement.
+
+One effect-free `NodeLeaseAuthorityScheduler` will therefore implement only
+attempt-authority waits. `wait(delayMs, signal)` accepts a positive safe
+integer no greater than `2_147_483_647`, preventing Node's oversized-delay
+clamping from turning a long heartbeat interval into an immediate timer. It
+creates exactly one referenced Node timer and one abort listener per active
+wait. Normal expiry removes the listener and resolves `undefined`. Abort
+cancels the timer, removes the listener, and rejects with the exact current
+`signal.reason` object, including symbol and object identity. An already-
+aborted signal schedules no timer.
+
+Timer expiry and abort are first-settlement-wins. A late callback after abort
+or a late abort after expiry is inert. The production timer cancellation API
+does not throw; an injected fault seam may do so for tests, but cancellation
+failure cannot replace the authoritative abort reason. The callback remains
+guarded and performs no later effect. Timer scheduling failure rejects one
+fixed `NodeAttemptTimingError` with code `schedule_failed`; its public message
+contains no callback, signal reason, path, or dependency detail while the
+private cause remains available in memory. Invalid delay or signal input fails
+before a timer/listener effect with code `invalid_wait`. A malformed timer
+driver fails during inert construction with code `invalid_driver`.
+
+The timer remains referenced deliberately: a process that still owns an
+active lease-authority monitor must not exit merely because the next heartbeat
+is waiting. This scheduler does not interpret lease timestamps, calculate
+heartbeat cadence, retry a heartbeat, add jitter, poll for work, sleep after
+idle admission, or schedule concurrent attempts. Those policies remain with
+their explicit owners.
+
+One frozen `nodeMonotonicTimeSource` will read `performance.now()` on demand.
+It performs no read at module initialization, never uses wall-clock
+`Date.now()`, does not persist a process-relative value, and does not round or
+convert it. ADR-079 remains responsible for validating finite non-negative
+readings and converting elapsed duration to an integer. The monotonic source
+is valid only for one in-process observation; restart recovery never attempts
+to resume a prior process's runtime timer.
+
+Both adapters are exported through the existing supervision/execution module
+boundaries but are not installed as hidden defaults in `LocalAttemptOwner`.
+Process composition must still choose them explicitly. This slice adds no
+environment loading, process entry point, OS signal handler, repeated dispatch
+lifecycle, idle timer, polling, backoff, shutdown owner, or `LocalRunner`
+enablement.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

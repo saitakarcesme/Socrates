@@ -1415,6 +1415,29 @@ and evidence-upload gate. ADR-082 is admitted. Node timing adapters, repeated
 dispatch lifecycle, process configuration, and runner enablement remain
 deferred.
 
+### Slice 2.46 — Node attempt timing adapters
+
+Status: Planned on 2026-08-02.
+
+Architecture decision: ADR-083.
+
+Detailed plan: `docs/plans/slice-2.46-node-attempt-timing-adapters.md`.
+
+- implement one bounded, referenced Node authority scheduler;
+- preserve exact `AbortSignal.reason` identity for ADR-026 checkpoint and
+  owner-release sentinels;
+- make expiry/abort races single-settlement with complete listener/timer
+  cleanup and inert late callbacks;
+- add a frozen on-demand `performance.now()` monotonic source;
+- keep both capabilities explicit in `LocalAttemptOwner` composition;
+- exclude work polling, idle waits, retry/backoff, process startup, shutdown,
+  and runner enablement.
+
+Exit: fake-timer and real-clock tests prove exact abort identity, bounded Node
+delay semantics, no detached callback/listener effects, monotonic source
+behavior, fixed errors, and successful integration with the admitted lease
+monitor and timing barrier.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
