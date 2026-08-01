@@ -3980,6 +3980,38 @@ timestamps, retry a session, poll, back off, schedule concurrency, or enable a
 runner entry point. Those root lifecycle decisions remain separate after the
 one-attempt ownership boundary is proven closed.
 
+Implementation commit `95d11c3` adds the exact ready-handoff parser, shared
+authority-settlement equality, and one `FreshAttemptSession` that constructs
+the cancellation, heartbeat, execution, observation, arbitration, and
+publication collaborators from narrow capabilities. Recovery bounds are
+validated during construction. Authority begins before the first preparation
+effect, the checkpoint follows observer cleanup, and publication is allocated
+only for an evidence decision. A no-evidence decision performs only ADR-078
+release. An unexpected observer rejection also awaits evidence-free monitor
+closure before returning a fixed consistency error, so no internal error can
+detach heartbeat ownership.
+
+Twenty-three focused session tests cover fresh and recovered handoffs,
+construction without effects, authority-first ordering, success and
+cancellation publication, start and timing uncertainty, pre-execution
+cancellation, stale and uncertain authority, recovered evidence, publication
+abandonment, single-flight settlement, strict handoff rejection, bounded
+configuration, immutable results, and evidence-free isolation. Real local
+journal, spool, sender, and completion tests prove successful evidence is
+durably appended, acknowledged, completed, and replayed without another event
+ID or send; the real no-evidence path allocates no event ID, creates no spool,
+and leaves active journal work for restart triage.
+
+All 782 runner-local tests and every local repository gate passed against the
+fresh `socrates_ci_adr080` PostgreSQL database, including the Chromium
+measured-research journey and production build. GitHub Actions run
+`30720392087` passed every format, type, lint, Phase 1/2 boundary,
+PostgreSQL migration/seed, workspace/database/API/runner integration, Linux
+native spool/work-journal durability, Chromium product-journey,
+production-build, and evidence-upload gate. This admits ADR-080 and closes
+Slice 2.43. Startup ownership, acquisition, polling, concurrency scheduling,
+and runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

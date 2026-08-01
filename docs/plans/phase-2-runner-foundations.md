@@ -1328,7 +1328,7 @@ publication wiring, polling, and runner enablement remain separate decisions.
 
 ### Slice 2.43 — fresh attempt session ownership
 
-Status: Planned on 2026-08-01.
+Status: Complete on 2026-08-01.
 
 Architecture decision: ADR-080.
 
@@ -1347,6 +1347,14 @@ Detailed plan: `docs/plans/slice-2.43-fresh-attempt-session-ownership.md`.
 Exit: adversarial ordering and durable-store tests prove every supported
 one-attempt result closes local capabilities, authority, and publication under
 one owner without promise-race policy or detached supervision.
+
+Evidence: implementation commit `95d11c3`; 23 focused fresh-session tests
+passed with all 782 runner-local tests and every local repository gate against
+fresh PostgreSQL database `socrates_ci_adr080`. Main CI run `30720392087`
+passed all PostgreSQL, API, runner, Linux native durability, Chromium
+product-journey, production-build, and evidence-upload gates. ADR-080 is
+admitted; startup ownership, acquisition, polling, concurrency scheduling, and
+runner enablement remain separate decisions.
 
 ## Acceptance gates
 

@@ -1,6 +1,6 @@
 # Slice 2.43 fresh attempt session ownership
 
-Status: Planned
+Status: Complete
 
 Date: 2026-08-01
 
@@ -131,3 +131,15 @@ start another attempt.
 5. Promise order and local lease-time interpretation cannot affect policy.
 6. No startup root, acquisition, polling, backoff, concurrency scheduler, or
    runner enablement is added.
+
+## Admission evidence
+
+- Implementation commit: `95d11c3`.
+- Focused fresh-session tests: 23, including real durable journal/spool
+  publication, restart replay, and evidence-free isolation.
+- Runner-local suite: 782 passed against fresh PostgreSQL database
+  `socrates_ci_adr080`.
+- Local gates: formatting, typecheck, lint, Phase 2 boundary audit, full
+  workspace tests, Chromium measured-research E2E, and production build.
+- GitHub Actions: run `30720392087` passed all required Linux, PostgreSQL,
+  browser, native durability, build, and evidence-upload gates.
