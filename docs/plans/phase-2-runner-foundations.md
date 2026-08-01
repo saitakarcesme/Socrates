@@ -1109,7 +1109,7 @@ the admitted runtime on real rootless infrastructure.
 
 ### Slice 2.35 — durable publication disposition
 
-Status: Planned on 2026-08-01.
+Status: Complete on 2026-08-01.
 
 Architecture decision: ADR-072.
 
@@ -1127,6 +1127,13 @@ Detailed plan: `docs/plans/slice-2.35-publication-disposition.md`.
 Exit: failure-injection and mutation tests prove every publication boundary
 either reports its exact durable disposition, recovers completed success, or
 fails closed without changing durable state.
+
+Evidence: implementation commit `2066567`; 22 disposition-auditor and 24
+publication-coordinator tests passed with all 544 runner-local tests and every
+local repository gate. Main CI run `30711001656` passed all PostgreSQL, API,
+runner, native durability, Chromium product-journey, production-build, and
+evidence-upload gates. ADR-072 is admitted; publication retry and monitor
+ownership remain deliberately unresolved for the next architecture slice.
 
 ## Acceptance gates
 

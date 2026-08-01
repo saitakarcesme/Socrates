@@ -3449,6 +3449,21 @@ separately designed fail-stop abandonment path for fatal `absent` publication.
 This slice adds no retry scheduler, monitor abandonment, reconciliation-order
 change, session composition, acquisition polling, or runner enablement.
 
+Implementation commit `2066567` passed every local repository gate, including
+22 disposition-auditor tests, 24 publication-coordinator tests, all 544
+runner-local tests, production builds, and the dependency audit. These tests
+prove the four exact frozen dispositions, all three fixed failure boundaries,
+lost-completion recovery, redacted and immutable deferred/uncertain errors,
+serialized duplicates, impossible-state rejection, and read-only inspection of
+real durable journal/spool state without a second append.
+
+GitHub Actions run `30711001656` passed every PostgreSQL, authenticated API,
+runner integration, Linux native spool/work-journal durability, Chromium
+product-journey, production-build, and evidence-upload gate. This admits
+ADR-072 and closes Slice 2.35. Publication retry, monitor abandonment,
+reconciliation order, session composition, acquisition polling, and runner
+enablement remain disabled pending their own architecture decision.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

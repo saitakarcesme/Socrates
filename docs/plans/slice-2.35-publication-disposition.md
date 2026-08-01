@@ -1,6 +1,6 @@
 # Slice 2.35 publication disposition
 
-Status: Planned
+Status: Implemented
 
 Date: 2026-08-01
 
@@ -100,3 +100,19 @@ boundary and both causes only in memory.
 4. Impossible or unauditable state never produces a guessed disposition.
 5. Failure causes remain in memory and never enter product evidence.
 6. No retry, monitor ownership change, polling loop, or runner is enabled.
+
+## Admission evidence
+
+Implementation commit `2066567` passed all local repository gates, including
+46 focused disposition/publication tests and all 544 runner-local tests. The
+focused suites prove exact absent, pending, acknowledged, and completed states;
+fixed failure boundaries; lost-response recovery; audit fail-closed behavior;
+deep immutability; serialized duplicates; and read-only inspection of real
+durable journal/spool state without a second append.
+
+Main CI run `30711001656` passed formatting, type checks, lint, both dependency
+boundary audits, PostgreSQL migration and seed, workspace and integration
+tests, native spool and work-journal durability, the Chromium product journey,
+production builds, and evidence upload. ADR-072 is admitted with retry,
+monitor abandonment, reconciliation-order changes, session composition,
+acquisition polling, and runner enablement still excluded.
