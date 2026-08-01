@@ -5,7 +5,6 @@ import type { SandboxCancellationBackend } from "../supervision/sandbox-cancella
 import { SandboxCancellationScope } from "../supervision/sandbox-cancellation-scope";
 import {
   LeaseAuthorityMonitor,
-  type LeaseAuthorityResult,
   type LeaseAuthorityScheduler,
 } from "../supervision/lease-authority-monitor";
 import {
@@ -27,6 +26,7 @@ import {
   TerminalPublicationOwner,
   type TerminalPublicationOwnershipResult,
 } from "../work-journal/terminal-publication-owner";
+import { sameLeaseAuthorityResult } from "./authority-settlement";
 
 export type RecoveryPendingWorkAdmission = Extract<
   WorkAdmissionResult,
@@ -116,39 +116,6 @@ function handoffSnapshot(candidate: unknown): RecoveryPendingWorkAdmission {
   }
 }
 
-function sameTermination(
-  left: Extract<LeaseAuthorityResult, { state: "cancelled" }>["termination"],
-  right: Extract<LeaseAuthorityResult, { state: "cancelled" }>["termination"],
-): boolean {
-  return (
-    left.state === right.state &&
-    (left.state === "absent" ||
-      (right.state === "terminated" && left.forced === right.forced))
-  );
-}
-
-function sameAuthority(
-  left: TerminalPublicationOwnershipResult["authority"],
-  right: LeaseAuthorityResult,
-): boolean {
-  if (left.state !== right.state) return false;
-  if (left.state === "stopped" || left.state === "stale") return true;
-  if (left.state !== "cancelled" || right.state !== "cancelled") return false;
-  const a = left.cancellation;
-  const b = right.cancellation;
-  return (
-    a.version === b.version &&
-    a.runnerId === b.runnerId &&
-    a.taskId === b.taskId &&
-    a.attemptId === b.attemptId &&
-    a.fence === b.fence &&
-    a.requestedAt === b.requestedAt &&
-    a.gracePeriodMs === b.gracePeriodMs &&
-    a.reason === b.reason &&
-    sameTermination(left.termination, right.termination)
-  );
-}
-
 export class RestartTerminalRecoverySession {
   readonly #authority: LeaseAuthorityMonitor;
   readonly #owner: TerminalPublicationOwner;
@@ -215,7 +182,7 @@ export class RestartTerminalRecoverySession {
     if (ownership.status === "rejected") throw ownership.reason;
     if (
       authority.status === "rejected" ||
-      !sameAuthority(ownership.value.authority, authority.value)
+      !sameLeaseAuthorityResult(ownership.value.authority, authority.value)
     ) {
       throw new RestartTerminalRecoverySessionError(
         "settlement_inconsistent",
