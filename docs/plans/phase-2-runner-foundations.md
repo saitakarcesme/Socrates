@@ -1417,7 +1417,7 @@ deferred.
 
 ### Slice 2.46 — Node attempt timing adapters
 
-Status: Planned on 2026-08-02.
+Status: Completed on 2026-08-02.
 
 Architecture decision: ADR-083.
 
@@ -1437,6 +1437,14 @@ Exit: fake-timer and real-clock tests prove exact abort identity, bounded Node
 delay semantics, no detached callback/listener effects, monotonic source
 behavior, fixed errors, and successful integration with the admitted lease
 monitor and timing barrier.
+
+Admission: implementation commit `1d96858`; 35 focused timing-adapter tests
+and all 879 runner-local tests passed against fresh migrated PostgreSQL
+database `socrates_ci_adr083`. Main CI run `30723737177` passed every required
+Linux, PostgreSQL, API, runner, native durability, Chromium journey,
+production-build, and evidence-upload gate. ADR-083 is admitted. Repeated
+dispatch lifecycle, process configuration, shutdown ownership, and runner
+enablement remain deferred.
 
 ## Acceptance gates
 

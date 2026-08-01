@@ -1,6 +1,6 @@
 # Slice 2.46 Node attempt timing adapters
 
-Status: Planned
+Status: Completed
 
 Date: 2026-08-02
 
@@ -90,3 +90,19 @@ ADR-079 validates readings and computes elapsed milliseconds.
 6. `LocalAttemptOwner` still requires explicit scheduler/time capabilities.
 7. No work polling, idle delay, retry/backoff, process entry point, OS signal
    handling, shutdown lifecycle, or runner enablement lands.
+
+## Admission evidence
+
+- Architecture commit: `3380609`.
+- Implementation commit: `1d96858`.
+- Focused adapter tests: 35, covering invalid construction and waits, minimum
+  and maximum delays, exact string/symbol/object/Error/DOMException identity,
+  listener cleanup, synchronous and late races, driver mutation and faults,
+  independent reuse, real monitor sentinel wake-ups, and real timing-barrier
+  integration.
+- Runner-local suite: all 879 tests passed against fresh migrated PostgreSQL
+  database `socrates_ci_adr083`.
+- Local gates: Phase 2 boundary audit, formatting, typecheck, lint, full
+  workspace tests, Chromium measured-research E2E, and production build.
+- GitHub Actions: run `30723737177` passed all required Linux, PostgreSQL, API,
+  runner, native durability, browser, build, and evidence-upload gates.

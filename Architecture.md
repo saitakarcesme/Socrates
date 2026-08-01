@@ -4212,6 +4212,18 @@ environment loading, process entry point, OS signal handler, repeated dispatch
 lifecycle, idle timer, polling, backoff, shutdown owner, or `LocalRunner`
 enablement.
 
+Evidence: architecture commit `3380609` preceded production code.
+Implementation commit `1d96858` added the bounded referenced scheduler, frozen
+monotonic source, and 35 focused fault, race, identity, cleanup, mutation,
+monitor, and timing-barrier tests. All 879 runner-local tests and every local
+repository gate passed against fresh migrated PostgreSQL database
+`socrates_ci_adr083`, including the Chromium measured-research journey and
+production build. Main CI run `30723737177` passed all PostgreSQL, API, runner,
+Linux native durability, Chromium product-journey, production-build, and
+evidence-upload gates. This admits ADR-083 and closes Slice 2.46. Repeated
+dispatch lifecycle, process configuration, shutdown ownership, and runner
+enablement remain separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
