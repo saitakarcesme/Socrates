@@ -1024,6 +1024,27 @@ durability probes, Chromium, and production builds. OCI reference-host run
 `30707705105` passed guarded backend and admitted runtime validation; schema
 versions 3 and 6 both recorded exact forced-termination receipts with cleanup.
 
+### Slice 2.32 — terminal outcome arbitration policy
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-069.
+
+Detailed plan: `docs/plans/slice-2.32-terminal-outcome-arbitration.md`.
+
+- define closed terminal candidate, execution-start, and authority facts;
+- apply one authority-first precedence table without promise or clock order;
+- let a terminated cancellation receipt override local candidates;
+- preserve complete runtime evidence when cancellation observes no sandbox;
+- return closed `no_evidence` decisions for stale, uncertain, or contradictory
+  observations;
+- keep session composition, side effects, polling, and runner enablement out of
+  scope.
+
+Exit: exhaustive table and mutation tests prove every supported race has one
+deterministic frozen decision and no ambiguous authority state can create
+terminal evidence.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

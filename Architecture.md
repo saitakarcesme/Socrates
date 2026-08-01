@@ -3207,6 +3207,48 @@ and schema-version 6 runtime evidence both record exact-fence cancellation as
 ADR-068 and closes Slice 2.31; session composition, terminal outcome
 arbitration, polling, and runner enablement remain disabled.
 
+### ADR-069: Terminal outcome arbitration is a pure authority-first policy
+
+Runtime completion, authenticated cancellation, and lease-authority loss can
+settle near one another. Promise settlement order, local wall-clock order, and
+exception arrival order are not durable facts and must not decide which
+terminal event is published. The session will eventually observe these
+concurrently, but the precedence policy must exist and be tested before any
+session composes them.
+
+One pure `TerminalOutcomeArbiter` therefore accepts only four closed facts: the
+validated frozen execution identity, the durable execution-start latch with a
+bounded elapsed duration only when started, one trusted terminal candidate, and
+one sealed authority observation. A candidate is either a validated complete
+runtime lifecycle batch, one runner-owned `task.failed` draft, or explicitly
+absent. The authority observation is `stopped`, authenticated `cancelled` with
+its exact termination receipt, `stale`, or redacted `uncertain`. It never
+contains an exception, stack, host path, lease timestamp, or arbitrary reason.
+
+Precedence is fixed. Stale or uncertain authority produces `no_evidence`
+regardless of a local candidate. Authenticated cancellation with a
+`terminated` receipt produces `task.cancelled` and uses the receipt's exact
+`forced` value; termination without a durable execution start is an observation
+conflict and produces no evidence. Authenticated cancellation with an `absent`
+receipt preserves a complete runtime candidate because the cancellation did
+not terminate that sandbox. Otherwise the authenticated directive produces a
+non-forced cancellation, including cancellation before sandbox creation. A
+clean owner-stopped monitor preserves its trusted runtime or local-failure
+candidate. Owner stop without a candidate is incomplete and produces no
+evidence.
+
+Runtime candidates must pass the existing terminal-batch contract and may
+contain intermediate evidence followed by exactly one terminal event. Local
+failure candidates must contain exactly one `task.failed` draft; cancellation
+drafts are created only inside the arbiter from an authenticated directive.
+Every decision and nested value is frozen. `no_evidence` reasons are a closed,
+redacted union and are not converted into another failure draft.
+
+The arbiter performs no clock read, heartbeat, sandbox operation, journal or
+spool mutation, network request, publication, completion, or retry. This slice
+defines deterministic precedence only. Session composition, concurrent
+execution, polling, and runner enablement remain disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
