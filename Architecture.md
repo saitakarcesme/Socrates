@@ -4012,6 +4012,65 @@ production-build, and evidence-upload gate. This admits ADR-080 and closes
 Slice 2.43. Startup ownership, acquisition, polling, concurrency scheduling,
 and runner enablement remain disabled.
 
+### ADR-081: Startup recovery gates one serialized attempt dispatcher
+
+ADR-057 proves stale exact-owned sandboxes and source trees can be removed
+once, but the admitted barrier remains detached from ADR-075 work admission
+and ADR-077/080 session ownership. A future polling loop must not be the first
+caller to invent this ordering. It could construct store, admission, or
+session services before recovery succeeds, acquire a second delivery while a
+first attempt still owns resources, retry an uncertain failure in-process, or
+route `recovery_pending` work through fresh execution.
+
+One `StartupGatedAttemptDispatcher` will therefore own the process-local
+ordering boundary without becoming a process entry point. Its constructor
+accepts only one `RunnerStartupRecoveryBarrier` and one deferred composition
+factory. Construction has no effects. The first `dispatchNext()` call awaits
+the exact shared startup result before invoking that factory. The factory may
+then open and bind durable stores, work admission, and session factories to
+the already-recovered sandbox/source owners; it is never invoked after a
+failed or partially successful startup barrier. Startup and composition
+success or failure are retained for the lifetime of the dispatcher.
+
+The post-recovery composition exposes one admission operation plus two narrow
+session constructors. One constructor accepts only ADR-075 `ready` and owns an
+ADR-080 fresh session. The other accepts only `recovery_pending` and owns an
+ADR-077 restart publication session. The dispatcher calls `prepareNext()` at
+most once per explicit dispatch and routes its exact immutable result:
+
+- `ready` constructs and fully settles only the fresh session;
+- `recovery_pending` constructs and fully settles only the restart session;
+- `idle`, `rejected`, `indeterminate`, `retired`, and `completed` construct no
+  session and return their admitted state unchanged.
+
+The dispatcher serializes the entire operation, not only admission. A second
+explicit dispatch cannot inspect the journal or acquire work until the first
+fresh/recovery session has closed local capabilities, authority, and
+publication. Concurrent callers queue in call order and receive distinct
+dispatch results; they are not coalesced into one attempt. An optional signal
+is forwarded only to admission. Once a session handoff exists, cancellation
+authority remains the server-authenticated ADR-072 scope and cannot be
+replaced by a caller abort.
+
+Any startup, composition, admission, session-construction, or session-
+settlement rejection permanently poisons this dispatcher. The first fixed
+failure is retained and replayed to later callers without another cleanup,
+compose, admission, heartbeat, session, or publication effect. Recovery from
+an external condition requires a new process with fresh owners, matching
+ADR-057. Successful terminal or no-evidence dispatches do not poison the
+dispatcher; a later explicit call may let ADR-075 triage the remaining durable
+work before acquiring anything new.
+
+Successful session dispatch returns one deeply immutable wrapper naming
+`fresh` or `restart_recovery`, the exact delivery/execution identity, and the
+already-admitted session result. Non-session admissions remain deeply frozen
+and are never reinterpreted. The dispatcher does not inspect lease timestamps,
+invent terminal evidence, open stores itself, allocate event IDs, choose a
+poll interval, sleep, back off, retry, schedule concurrency, install signal
+handlers, read environment configuration, or enable `LocalRunner`. Concrete
+process composition and any repeated polling lifecycle remain later,
+independent decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

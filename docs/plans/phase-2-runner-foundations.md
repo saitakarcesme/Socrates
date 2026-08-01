@@ -1356,6 +1356,27 @@ product-journey, production-build, and evidence-upload gates. ADR-080 is
 admitted; startup ownership, acquisition, polling, concurrency scheduling, and
 runner enablement remain separate decisions.
 
+### Slice 2.44 — startup-gated attempt dispatch
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-081.
+
+Detailed plan: `docs/plans/slice-2.44-startup-gated-attempt-dispatch.md`.
+
+- defer all admission/session composition until ADR-057 succeeds;
+- serialize each explicit admission through complete session settlement;
+- route `ready` only to ADR-080 and `recovery_pending` only to ADR-077;
+- return non-session admission states without constructing a session;
+- retain the first failed startup, composition, admission, or session boundary
+  and prohibit in-process retry;
+- keep concrete process startup, timers, polling, backoff, concurrency, and
+  runner enablement out of scope.
+
+Exit: adversarial routing and ordering tests prove no admission can precede
+startup cleanup, no second attempt can overlap the first, and no failed process
+boundary can retry or detach attempt ownership.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
