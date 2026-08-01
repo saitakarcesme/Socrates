@@ -330,7 +330,7 @@ describe("AttemptExecutionObserver", () => {
     expect(value.preparation.release).toHaveBeenCalledOnce();
   });
 
-  it("shares timing uncertainty and still releases the prepared source", async () => {
+  it("shares redacted timing uncertainty and still releases the prepared source", async () => {
     const cause = new Error("clock unavailable");
     const barrier = new DurableExecutionTimingBarrier({
       barrier: { cross: vi.fn(async () => undefined) },
@@ -345,10 +345,15 @@ describe("AttemptExecutionObserver", () => {
     const right = value.observer.observe();
 
     expect(right).toBe(left);
-    await expect(left).rejects.toMatchObject({
-      code: "timing_uncertain",
+    const observation = await left;
+    await expect(right).resolves.toBe(observation);
+    expect(observation).toEqual({
+      timing: { state: "uncertain", boundary: "monotonic_time" },
+      candidate: { state: "none" },
     });
-    await expect(right).rejects.toBeInstanceOf(Error);
+    expect(Object.isFrozen(observation)).toBe(true);
+    expect(Object.isFrozen(observation.timing)).toBe(true);
+    expect(JSON.stringify(observation)).not.toContain(cause.message);
     expect(value.preparation.release).toHaveBeenCalledOnce();
   });
 
@@ -372,9 +377,9 @@ describe("AttemptExecutionObserver", () => {
           ),
         ),
     });
-    await expect(uncertain.observer.observe()).rejects.toMatchObject({
-      code: "timing_uncertain",
-      cause: timingFailure,
+    await expect(uncertain.observer.observe()).resolves.toEqual({
+      timing: { state: "uncertain", boundary: "monotonic_time" },
+      candidate: { state: "none" },
     });
 
     const startFailure = new DurableExecutionTimingBarrierError(
@@ -395,6 +400,62 @@ describe("AttemptExecutionObserver", () => {
       timing: { state: "not_started" },
       candidate: { state: "none" },
     });
+  });
+
+  it("closes final elapsed-time uncertainty after safe runtime cleanup", async () => {
+    const value = harness({ timing: timing([10, 9]) });
+
+    const observation = await value.observer.observe();
+    expect(observation.timing).toEqual({
+      state: "uncertain",
+      boundary: "monotonic_time",
+    });
+    expect(observation.candidate.state).toBe("runtime");
+    expect(value.preparation.release).toHaveBeenCalledOnce();
+    expect(JSON.stringify(observation)).not.toContain("missing time");
+  });
+
+  it("preserves cleanup classification under redacted timing uncertainty", async () => {
+    const barrier = new DurableExecutionTimingBarrier({
+      barrier: { cross: vi.fn(async () => undefined) },
+      time: {
+        now: vi.fn(() => {
+          throw new Error("private monotonic source");
+        }),
+      },
+    });
+    const value = harness({
+      timing: barrier,
+      release: async () => Promise.reject(new Error("private source path")),
+    });
+
+    const observation = await value.observer.observe();
+    expect(observation.timing).toEqual({
+      state: "uncertain",
+      boundary: "monotonic_time",
+    });
+    expect(failurePayload(observation)).toEqual({
+      classification: "infrastructure",
+      message: "The runner could not prove complete attempt resource cleanup.",
+    });
+    expect(JSON.stringify(observation)).not.toContain("private");
+  });
+
+  it("does not accept a lookalike error as timing uncertainty", async () => {
+    const disguised = Object.assign(new Error("private forged clock error"), {
+      code: "timing_uncertain",
+    });
+    const value = harness({
+      execute: async () => Promise.reject(disguised),
+    });
+
+    const observation = await value.observer.observe();
+    expect(observation.timing).toEqual({ state: "not_started" });
+    expect(failurePayload(observation)).toEqual({
+      classification: "infrastructure",
+      message: "The runner encountered an unexpected controlled failure.",
+    });
+    expect(JSON.stringify(observation)).not.toContain(disguised.message);
   });
 
   it("lets cleanup uncertainty override successful runtime evidence", async () => {

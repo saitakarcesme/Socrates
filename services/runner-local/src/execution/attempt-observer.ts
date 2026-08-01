@@ -34,17 +34,6 @@ export type AttemptExecutionObservation = Readonly<{
   candidate: TerminalOutcomeCandidate;
 }>;
 
-export class AttemptExecutionObservationError extends Error {
-  constructor(
-    readonly code: "timing_uncertain",
-    message: string,
-    options?: ErrorOptions,
-  ) {
-    super(message, options);
-    this.name = "AttemptExecutionObservationError";
-  }
-}
-
 export type AttemptExecutionPreparationPort = Pick<
   AttemptPreparationCoordinator,
   "prepare" | "release"
@@ -78,12 +67,11 @@ function failure(code: LocalFailureCode): TerminalOutcomeCandidate {
   return deepFreeze({ state: "failure", draft: decision.draft });
 }
 
-function timingUncertain(cause: unknown): never {
-  throw new AttemptExecutionObservationError(
-    "timing_uncertain",
-    "Local execution timing is uncertain.",
-    { cause },
-  );
+function uncertainTiming(): TerminalExecutionTiming {
+  return Object.freeze({
+    state: "uncertain",
+    boundary: "monotonic_time",
+  });
 }
 
 function timingBoundary(
@@ -152,11 +140,6 @@ function runtimeFailure(error: RuntimeSandboxError): TerminalOutcomeCandidate {
 }
 
 function candidateFor(cause: unknown, signal?: AbortSignal) {
-  const boundary = timingBoundary(cause);
-  if (boundary) {
-    if (boundary.code === "timing_uncertain") timingUncertain(boundary);
-    return none();
-  }
   if (cause instanceof AttemptPreparationError) {
     return preparationFailure(cause);
   }
@@ -209,6 +192,7 @@ export class AttemptExecutionObserver {
     let prepared: PreparedExecutionAttempt | undefined;
     let candidate: TerminalOutcomeCandidate = none();
     let observationFailure: unknown;
+    let timingIsUncertain = false;
     try {
       prepared = await this.#preparation.prepare(this.#signal);
       this.#assertPrepared(prepared);
@@ -230,10 +214,16 @@ export class AttemptExecutionObserver {
         }),
       });
     } catch (cause) {
-      try {
-        candidate = candidateFor(cause, this.#signal);
-      } catch (normalizationFailure) {
-        observationFailure = normalizationFailure;
+      const boundary = timingBoundary(cause);
+      if (boundary) {
+        timingIsUncertain = boundary.code === "timing_uncertain";
+        candidate = none();
+      } else {
+        try {
+          candidate = candidateFor(cause, this.#signal);
+        } catch (normalizationFailure) {
+          observationFailure = normalizationFailure;
+        }
       }
     }
 
@@ -246,11 +236,15 @@ export class AttemptExecutionObserver {
     }
     if (observationFailure) throw observationFailure;
 
-    let timing: TerminalExecutionTiming;
-    try {
-      timing = this.#timing.snapshot();
-    } catch (cause) {
-      timingUncertain(cause);
+    let timing = timingIsUncertain ? uncertainTiming() : undefined;
+    if (!timing) {
+      try {
+        timing = this.#timing.snapshot();
+      } catch (cause) {
+        const boundary = timingBoundary(cause);
+        if (boundary?.code !== "timing_uncertain") throw cause;
+        timing = uncertainTiming();
+      }
     }
     return deepFreeze({ timing, candidate });
   }

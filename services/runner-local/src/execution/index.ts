@@ -1,5 +1,4 @@
 export {
-  AttemptExecutionObservationError,
   AttemptExecutionObserver,
   type AttemptExecutionObservation,
   type AttemptExecutionPreparationPort,

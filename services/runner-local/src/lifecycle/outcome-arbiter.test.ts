@@ -229,6 +229,71 @@ describe("TerminalOutcomeArbiter", () => {
     },
   );
 
+  it.each([
+    [runtimeCandidate(), authorities.renewed, "observation_uncertain"],
+    [failureCandidate(), authorities.renewed, "observation_uncertain"],
+    [{ state: "none" }, authorities.renewed, "observation_uncertain"],
+    [runtimeCandidate(), authorities.absent, "observation_uncertain"],
+    [failureCandidate(), authorities.graceful, "observation_uncertain"],
+    [{ state: "none" }, authorities.forced, "observation_uncertain"],
+    [runtimeCandidate(), authorities.stale, "authority_lost"],
+    [runtimeCandidate(), authorities.uncertain, "authority_uncertain"],
+  ] as const)(
+    "suppresses candidate %# for closed uncertain timing and authority precedence",
+    (candidate, authority, reason) => {
+      const decision = new TerminalOutcomeArbiter(execution).decide({
+        timing: { state: "uncertain", boundary: "monotonic_time" },
+        candidate,
+        authority,
+      });
+      expect(decision).toEqual({ state: "no_evidence", reason });
+      expect(Object.isFrozen(decision)).toBe(true);
+    },
+  );
+
+  it("validates cancellation identity before suppressing uncertain timing", () => {
+    expect(() =>
+      new TerminalOutcomeArbiter(execution).decide({
+        timing: { state: "uncertain", boundary: "monotonic_time" },
+        candidate: { state: "none" },
+        authority: {
+          ...authorities.absent,
+          cancellation: {
+            ...cancellation,
+            attemptId: "90000000-0000-4000-8000-000000000009",
+          },
+        },
+      }),
+    ).toThrowError(
+      expect.objectContaining<Partial<TerminalOutcomeArbiterError>>({
+        code: "identity_mismatch",
+      }),
+    );
+  });
+
+  it("validates the complete candidate before suppressing uncertain timing", () => {
+    expect(() =>
+      new TerminalOutcomeArbiter(execution).decide({
+        timing: { state: "uncertain", boundary: "monotonic_time" },
+        candidate: {
+          state: "runtime",
+          drafts: [
+            runnerEventDraft({
+              type: "action.started",
+              payload: { commandIndex: 0 },
+            }),
+          ],
+        },
+        authority: authorities.renewed,
+      }),
+    ).toThrowError(
+      expect.objectContaining<Partial<TerminalOutcomeArbiterError>>({
+        code: "invalid_input",
+        message: "Terminal outcome input is invalid.",
+      }),
+    );
+  });
+
   it("accepts zero and maximum safe started cancellation durations", () => {
     const arbiter = new TerminalOutcomeArbiter(execution);
     for (const elapsedMs of [0, Number.MAX_SAFE_INTEGER]) {
@@ -274,6 +339,14 @@ describe("TerminalOutcomeArbiter", () => {
     { timing: { state: "started", elapsedMs: -1 } },
     { timing: { state: "started", elapsedMs: 0.5 } },
     { timing: { state: "not_started", elapsedMs: 0 } },
+    { timing: { state: "uncertain", boundary: "wall_clock" } },
+    {
+      timing: {
+        state: "uncertain",
+        boundary: "monotonic_time",
+        cause: new Error("C:/secret/token"),
+      },
+    },
     { candidate: { state: "failure", draft: runtimeCandidate().drafts?.[1] } },
     {
       candidate: {

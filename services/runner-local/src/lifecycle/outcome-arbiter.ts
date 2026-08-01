@@ -19,7 +19,8 @@ import { localFailureEvidence } from "./failure-policy";
 
 export type TerminalExecutionTiming =
   | Readonly<{ state: "not_started" }>
-  | Readonly<{ state: "started"; elapsedMs: number }>;
+  | Readonly<{ state: "started"; elapsedMs: number }>
+  | Readonly<{ state: "uncertain"; boundary: "monotonic_time" }>;
 
 export type TerminalOutcomeCandidate =
   | Readonly<{ state: "none" }>
@@ -43,7 +44,8 @@ export type TerminalOutcomeNoEvidenceReason =
   | "authority_lost"
   | "authority_uncertain"
   | "candidate_missing"
-  | "observation_conflict";
+  | "observation_conflict"
+  | "observation_uncertain";
 
 export type TerminalOutcomeDecision =
   | Readonly<{
@@ -100,6 +102,16 @@ function parseTiming(candidate: unknown): TerminalExecutionTiming {
   const value = record(candidate);
   if (value["state"] === "not_started" && hasExactKeys(value, ["state"])) {
     return Object.freeze({ state: "not_started" });
+  }
+  if (
+    value["state"] === "uncertain" &&
+    value["boundary"] === "monotonic_time" &&
+    hasExactKeys(value, ["state", "boundary"])
+  ) {
+    return Object.freeze({
+      state: "uncertain",
+      boundary: "monotonic_time",
+    });
   }
   if (
     value["state"] === "started" &&
@@ -243,17 +255,23 @@ export class TerminalOutcomeArbiter {
     if (authority.state === "uncertain") {
       return noEvidence("authority_uncertain");
     }
+    if (
+      authority.state === "cancelled" &&
+      !this.#matches(authority.cancellation)
+    ) {
+      throw new TerminalOutcomeArbiterError(
+        "identity_mismatch",
+        "Cancellation authority does not match the terminal outcome execution.",
+      );
+    }
+    if (timing.state === "uncertain") {
+      return noEvidence("observation_uncertain");
+    }
     if (candidate.state === "runtime" && timing.state === "not_started") {
       return noEvidence("observation_conflict");
     }
 
     if (authority.state === "cancelled") {
-      if (!this.#matches(authority.cancellation)) {
-        throw new TerminalOutcomeArbiterError(
-          "identity_mismatch",
-          "Cancellation authority does not match the terminal outcome execution.",
-        );
-      }
       if (authority.termination.state === "terminated") {
         if (timing.state === "not_started") {
           return noEvidence("observation_conflict");
