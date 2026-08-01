@@ -82,7 +82,8 @@ authority, or authority uncertainty.
 
 1. Promise timing and local wall clocks cannot affect precedence.
 2. Stale or uncertain authority can never create terminal evidence.
-3. `forced` originates only from a terminated backend receipt.
+3. `forced: true` originates only from a terminated backend receipt; absence
+   maps to the contractually non-forced pre-sandbox outcome.
 4. Cancellation absence preserves only complete runtime evidence.
 5. Every evidence result is a valid frozen terminal batch.
 6. Session composition, side effects, polling, and runner enablement remain
