@@ -64,7 +64,10 @@ function failureCandidate(): TerminalOutcomeCandidate {
 }
 
 const authorities = {
-  stopped: Object.freeze({ state: "stopped" as const }),
+  renewed: Object.freeze({
+    state: "renewed" as const,
+    leaseExpiresAt: "2026-08-01T18:00:30.000Z",
+  }),
   stale: Object.freeze({ state: "stale" as const }),
   uncertain: Object.freeze({
     state: "uncertain" as const,
@@ -114,11 +117,11 @@ function summarize(
 
 describe("TerminalOutcomeArbiter", () => {
   it.each([
-    [runtimeCandidate(), authorities.stopped, "task.succeeded", undefined],
+    [runtimeCandidate(), authorities.renewed, "task.succeeded", undefined],
     [runtimeCandidate(), authorities.absent, "task.succeeded", undefined],
     [runtimeCandidate(), authorities.graceful, "task.cancelled", false],
     [runtimeCandidate(), authorities.forced, "task.cancelled", true],
-    [failureCandidate(), authorities.stopped, "task.failed", undefined],
+    [failureCandidate(), authorities.renewed, "task.failed", undefined],
     [failureCandidate(), authorities.absent, "task.cancelled", false],
     [failureCandidate(), authorities.graceful, "task.cancelled", false],
     [failureCandidate(), authorities.forced, "task.cancelled", true],
@@ -155,7 +158,7 @@ describe("TerminalOutcomeArbiter", () => {
     [runtimeCandidate(), authorities.uncertain, "authority_uncertain"],
     [failureCandidate(), authorities.uncertain, "authority_uncertain"],
     [{ state: "none" }, authorities.uncertain, "authority_uncertain"],
-    [{ state: "none" }, authorities.stopped, "candidate_missing"],
+    [{ state: "none" }, authorities.renewed, "candidate_missing"],
   ] as const)(
     "suppresses candidate %# under closed authority outcome",
     (candidate, authority, reason) => {
@@ -202,7 +205,7 @@ describe("TerminalOutcomeArbiter", () => {
       new TerminalOutcomeArbiter(execution).decide({
         timing: { state: "not_started" },
         candidate: runtimeCandidate(),
-        authority: authorities.stopped,
+        authority: authorities.renewed,
       }),
     ).toEqual({
       state: "no_evidence",
@@ -323,12 +326,19 @@ describe("TerminalOutcomeArbiter", () => {
         termination: { state: "terminated" },
       },
     },
+    { authority: { state: "stopped" } },
+    {
+      authority: {
+        state: "renewed",
+        leaseExpiresAt: "not-an-instant",
+      },
+    },
   ])("rejects malformed strict input %# without exposing it", (override) => {
     expect(() =>
       new TerminalOutcomeArbiter(execution).decide({
         timing: { state: "started", elapsedMs: 1 },
         candidate: failureCandidate(),
-        authority: authorities.stopped,
+        authority: authorities.renewed,
         ...override,
       } as never),
     ).toThrowError(

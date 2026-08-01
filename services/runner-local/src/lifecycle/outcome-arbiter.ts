@@ -4,6 +4,7 @@ import {
   type RunnerCancellationV1,
   type RunnerExecutionV1,
 } from "@socrates/contracts";
+import { z } from "zod";
 
 import {
   sandboxTerminationReceipt,
@@ -26,7 +27,7 @@ export type TerminalOutcomeCandidate =
   | Readonly<{ state: "failure"; draft: RunnerEventDraft }>;
 
 export type TerminalAuthorityObservation =
-  | Readonly<{ state: "stopped" }>
+  | Readonly<{ state: "renewed"; leaseExpiresAt: string }>
   | Readonly<{ state: "stale" }>
   | Readonly<{
       state: "uncertain";
@@ -145,11 +146,17 @@ function parseCandidate(candidate: unknown): ParsedCandidate {
 
 function parseAuthority(candidate: unknown): TerminalAuthorityObservation {
   const value = record(candidate);
+  if (value["state"] === "stale" && hasExactKeys(value, ["state"])) {
+    return Object.freeze({ state: "stale" });
+  }
   if (
-    (value["state"] === "stopped" || value["state"] === "stale") &&
-    hasExactKeys(value, ["state"])
+    value["state"] === "renewed" &&
+    hasExactKeys(value, ["state", "leaseExpiresAt"])
   ) {
-    return Object.freeze({ state: value["state"] });
+    return Object.freeze({
+      state: "renewed",
+      leaseExpiresAt: z.iso.datetime().parse(value["leaseExpiresAt"]),
+    });
   }
   if (
     value["state"] === "uncertain" &&

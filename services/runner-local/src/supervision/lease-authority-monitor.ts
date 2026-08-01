@@ -8,6 +8,8 @@ import type { LeaseSupervisionResult } from "./lease-supervisor";
 import type { SandboxLocalRevocation } from "./sandbox-cancellation-scope";
 import type { SandboxTerminationReceipt } from "../oci/termination";
 
+const checkpointWake = Symbol("lease-authority-checkpoint");
+
 export interface LeaseAuthoritySupervisor {
   readonly leaseDurationMs: number;
   supervise(execution: RunnerExecutionV1): Promise<LeaseSupervisionResult>;
@@ -32,10 +34,17 @@ export type LeaseAuthorityResult =
   | Readonly<{ state: "stale" }>
   | Readonly<{ state: "stopped" }>;
 
+export type LeaseAuthorityCheckpointResult =
+  | Readonly<{ state: "renewed"; leaseExpiresAt: string }>
+  | Extract<LeaseAuthorityResult, { state: "cancelled" | "stale" }>;
+
 export class LeaseAuthorityMonitorError extends Error {
   constructor(
     readonly code:
-      "authority_uncertain" | "revocation_failed" | "scheduler_failed",
+      | "authority_uncertain"
+      | "monitor_stopped"
+      | "revocation_failed"
+      | "scheduler_failed",
     message: string,
     options?: ErrorOptions,
   ) {
@@ -59,6 +68,28 @@ function deepFreeze<T>(value: T): T {
   return Object.freeze(value);
 }
 
+type Checkpoint = Readonly<{
+  promise: Promise<LeaseAuthorityCheckpointResult>;
+  resolve(result: LeaseAuthorityCheckpointResult): void;
+  reject(cause: unknown): void;
+}>;
+
+function checkpoint(): Checkpoint {
+  let resolve!: (result: LeaseAuthorityCheckpointResult) => void;
+  let reject!: (cause: unknown) => void;
+  const promise = new Promise<LeaseAuthorityCheckpointResult>(
+    (resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    },
+  );
+  return { promise, resolve, reject };
+}
+
+type TerminalMonitorState =
+  | Readonly<{ state: "result"; result: LeaseAuthorityResult }>
+  | Readonly<{ state: "error"; error: unknown }>;
+
 export class LeaseAuthorityMonitor {
   readonly #execution: RunnerExecutionV1;
   readonly #supervisor: LeaseAuthoritySupervisor;
@@ -69,6 +100,8 @@ export class LeaseAuthorityMonitor {
   #operation: Promise<LeaseAuthorityResult> | undefined;
   #stopRequested = false;
   #scheduledWait: AbortController | undefined;
+  #checkpoint: Checkpoint | undefined;
+  #terminal: TerminalMonitorState | undefined;
 
   constructor(options: {
     execution: RunnerExecutionV1;
@@ -120,7 +153,40 @@ export class LeaseAuthorityMonitor {
     return this.start();
   }
 
+  checkpoint(): Promise<LeaseAuthorityCheckpointResult> {
+    if (this.#terminal) {
+      if (this.#terminal.state === "error") {
+        return Promise.reject(this.#terminal.error);
+      }
+      if (this.#terminal.result.state === "stopped") {
+        return Promise.reject(this.#stoppedError());
+      }
+      return Promise.resolve(this.#terminal.result);
+    }
+    if (this.#stopRequested) return Promise.reject(this.#stoppedError());
+    if (this.#checkpoint) return this.#checkpoint.promise;
+
+    const pending = checkpoint();
+    this.#checkpoint = pending;
+    void this.start().catch(() => undefined);
+    this.#scheduledWait?.abort(checkpointWake);
+    return pending.promise;
+  }
+
   async #run(): Promise<LeaseAuthorityResult> {
+    try {
+      const result = await this.#monitor();
+      this.#terminal = Object.freeze({ state: "result", result });
+      if (result.state !== "stopped") this.#resolveCheckpoint(result);
+      return result;
+    } catch (cause) {
+      this.#terminal = Object.freeze({ state: "error", error: cause });
+      this.#rejectCheckpoint(cause);
+      throw cause;
+    }
+  }
+
+  async #monitor(): Promise<LeaseAuthorityResult> {
     while (!this.#stopRequested) {
       let result: LeaseSupervisionResult;
       try {
@@ -135,16 +201,24 @@ export class LeaseAuthorityMonitor {
       }
 
       if (result.state === "cancelled") {
-        return Object.freeze({
+        const cancelled = Object.freeze({
           state: "cancelled",
           cancellation: deepFreeze({ ...result.cancellation }),
           termination: result.termination,
         });
+        return cancelled;
       }
       if (result.state === "stale") {
         await this.#revoke("lease_stale");
-        return Object.freeze({ state: "stale" });
+        const stale = Object.freeze({ state: "stale" as const });
+        return stale;
       }
+      this.#resolveCheckpoint(
+        Object.freeze({
+          state: "renewed",
+          leaseExpiresAt: result.leaseExpiresAt,
+        }),
+      );
       if (this.#stopRequested) break;
 
       const wait = new AbortController();
@@ -152,7 +226,10 @@ export class LeaseAuthorityMonitor {
       try {
         await this.#scheduler.wait(this.#heartbeatIntervalMs, wait.signal);
       } catch (cause) {
-        if (!this.#stopRequested) {
+        if (
+          !this.#stopRequested &&
+          !(cause === checkpointWake && this.#checkpoint)
+        ) {
           await this.#revoke("scheduler_failure", cause);
           throw new LeaseAuthorityMonitorError(
             "scheduler_failed",
@@ -164,7 +241,29 @@ export class LeaseAuthorityMonitor {
         if (this.#scheduledWait === wait) this.#scheduledWait = undefined;
       }
     }
+    this.#rejectCheckpoint(this.#stoppedError());
     return Object.freeze({ state: "stopped" });
+  }
+
+  #resolveCheckpoint(result: LeaseAuthorityCheckpointResult): void {
+    const pending = this.#checkpoint;
+    if (!pending) return;
+    this.#checkpoint = undefined;
+    pending.resolve(deepFreeze(result));
+  }
+
+  #rejectCheckpoint(cause: unknown): void {
+    const pending = this.#checkpoint;
+    if (!pending) return;
+    this.#checkpoint = undefined;
+    pending.reject(cause);
+  }
+
+  #stoppedError(): LeaseAuthorityMonitorError {
+    return new LeaseAuthorityMonitorError(
+      "monitor_stopped",
+      "Lease authority monitor is stopped.",
+    );
   }
 
   async #revoke(

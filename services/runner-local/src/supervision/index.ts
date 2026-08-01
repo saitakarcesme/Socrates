@@ -6,6 +6,7 @@ export {
 export {
   LeaseAuthorityMonitor,
   LeaseAuthorityMonitorError,
+  type LeaseAuthorityCheckpointResult,
   type LeaseAuthorityResult,
   type LeaseAuthorityRevocationTarget,
   type LeaseAuthorityScheduler,

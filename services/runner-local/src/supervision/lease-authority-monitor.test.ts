@@ -67,11 +67,9 @@ class ManualScheduler implements LeaseAuthorityScheduler {
 
   wait(delayMs: number, signal: AbortSignal): Promise<void> {
     const operation = deferred<void>();
-    signal.addEventListener(
-      "abort",
-      () => operation.reject(new DOMException("Stopped", "AbortError")),
-      { once: true },
-    );
+    signal.addEventListener("abort", () => operation.reject(signal.reason), {
+      once: true,
+    });
     this.waits.push({ delayMs, signal, operation });
     return operation.promise;
   }
@@ -158,6 +156,198 @@ describe("LeaseAuthorityMonitor", () => {
       reason: "lease_stale",
       gracePeriodMs: 0,
     });
+  });
+
+  it("joins concurrent checkpoints to the initial in-flight heartbeat", async () => {
+    const heartbeat = deferred<LeaseSupervisionResult>();
+    const scheduler = new ManualScheduler();
+    const value = fixture({ steps: [heartbeat], scheduler });
+
+    const first = value.monitor.checkpoint();
+    const duplicate = value.monitor.checkpoint();
+    const running = value.monitor.start();
+    expect(duplicate).toBe(first);
+    expect(value.supervise).toHaveBeenCalledOnce();
+
+    heartbeat.resolve({
+      state: "renewed",
+      leaseExpiresAt: "2026-08-01T20:00:30.000Z",
+    });
+    const observation = await first;
+    await expect(duplicate).resolves.toBe(observation);
+    expect(observation).toEqual({
+      state: "renewed",
+      leaseExpiresAt: "2026-08-01T20:00:30.000Z",
+    });
+    expect(Object.isFrozen(observation)).toBe(true);
+
+    await vi.waitFor(() => expect(scheduler.waits).toHaveLength(1));
+    await expect(value.monitor.stop()).resolves.toEqual({ state: "stopped" });
+    await expect(running).resolves.toEqual({ state: "stopped" });
+  });
+
+  it("wakes a scheduled wait for one immediate checkpoint heartbeat", async () => {
+    const scheduler = new ManualScheduler();
+    const value = fixture({
+      steps: [
+        {
+          state: "renewed",
+          leaseExpiresAt: "2026-08-01T20:00:30.000Z",
+        },
+        {
+          state: "renewed",
+          leaseExpiresAt: "2026-08-01T20:01:00.000Z",
+        },
+      ],
+      scheduler,
+    });
+
+    const running = value.monitor.start();
+    await vi.waitFor(() => expect(scheduler.waits).toHaveLength(1));
+    const observation = value.monitor.checkpoint();
+    expect(scheduler.waits[0]?.signal.aborted).toBe(true);
+    await expect(observation).resolves.toEqual({
+      state: "renewed",
+      leaseExpiresAt: "2026-08-01T20:01:00.000Z",
+    });
+    expect(value.supervise).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(scheduler.waits).toHaveLength(2));
+
+    await value.monitor.stop();
+    await running;
+  });
+
+  it("uses a fresh heartbeat for each sequential checkpoint", async () => {
+    const scheduler = new ManualScheduler();
+    const value = fixture({
+      steps: [
+        {
+          state: "renewed",
+          leaseExpiresAt: "2026-08-01T20:00:30.000Z",
+        },
+        {
+          state: "renewed",
+          leaseExpiresAt: "2026-08-01T20:01:00.000Z",
+        },
+      ],
+      scheduler,
+    });
+
+    const first = await value.monitor.checkpoint();
+    await vi.waitFor(() => expect(scheduler.waits).toHaveLength(1));
+    const second = await value.monitor.checkpoint();
+    expect(first).not.toBe(second);
+    expect(value.supervise).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(scheduler.waits).toHaveLength(2));
+    await value.monitor.stop();
+  });
+
+  it("settles checkpoint and monitor with the same cancellation object", async () => {
+    const value = fixture({
+      steps: [
+        {
+          state: "cancelled",
+          leaseExpiresAt: "ignored",
+          cancellation,
+          termination,
+        },
+      ],
+    });
+
+    const checkpoint = value.monitor.checkpoint();
+    const running = value.monitor.start();
+    const observation = await checkpoint;
+    await expect(running).resolves.toBe(observation);
+    await expect(value.monitor.checkpoint()).resolves.toBe(observation);
+    expect(value.supervise).toHaveBeenCalledOnce();
+  });
+
+  it("settles checkpoint and monitor with the same stale object", async () => {
+    const value = fixture({ steps: [{ state: "stale" }] });
+
+    const checkpoint = value.monitor.checkpoint();
+    const running = value.monitor.start();
+    const observation = await checkpoint;
+    await expect(running).resolves.toBe(observation);
+    await expect(value.monitor.checkpoint()).resolves.toBe(observation);
+    expect(value.revoke).toHaveBeenCalledOnce();
+  });
+
+  it("rejects checkpoint and monitor with the same uncertainty", async () => {
+    const failure = new Error("secret checkpoint failure");
+    const value = fixture({ steps: [failure] });
+
+    const checkpoint = value.monitor.checkpoint();
+    const running = value.monitor.start();
+    const checkpointError = await checkpoint.catch((cause: unknown) => cause);
+    const monitorError = await running.catch((cause: unknown) => cause);
+    expect(checkpointError).toBe(monitorError);
+    expect(checkpointError).toMatchObject({ code: "authority_uncertain" });
+  });
+
+  it("contains the background monitor rejection for checkpoint-only callers", async () => {
+    const value = fixture({ steps: [new Error("heartbeat failed")] });
+
+    await expect(value.monitor.checkpoint()).rejects.toMatchObject({
+      code: "authority_uncertain",
+    });
+    await Promise.resolve();
+  });
+
+  it("lets an in-flight checkpoint settle before owner stop", async () => {
+    const heartbeat = deferred<LeaseSupervisionResult>();
+    const value = fixture({ steps: [heartbeat] });
+
+    const checkpoint = value.monitor.checkpoint();
+    const stopping = value.monitor.stop();
+    heartbeat.resolve({
+      state: "renewed",
+      leaseExpiresAt: "2026-08-01T20:00:30.000Z",
+    });
+
+    await expect(checkpoint).resolves.toMatchObject({ state: "renewed" });
+    await expect(stopping).resolves.toEqual({ state: "stopped" });
+  });
+
+  it("does not mask a settled scheduler failure with a checkpoint wake", async () => {
+    const schedulerWait = deferred<void>();
+    const scheduler: LeaseAuthorityScheduler = {
+      wait: vi.fn(() => schedulerWait.promise),
+    };
+    const value = fixture({
+      steps: [{ state: "renewed", leaseExpiresAt: "ignored" }],
+      scheduler,
+    });
+    const running = value.monitor.start();
+    await vi.waitFor(() => expect(scheduler.wait).toHaveBeenCalledOnce());
+
+    const failure = new Error("scheduler failed before wake");
+    schedulerWait.reject(failure);
+    const checkpoint = value.monitor.checkpoint();
+    const checkpointError = await checkpoint.catch((cause: unknown) => cause);
+    const monitorError = await running.catch((cause: unknown) => cause);
+    expect(checkpointError).toBe(monitorError);
+    expect(monitorError).toMatchObject({
+      code: "scheduler_failed",
+      cause: failure,
+    });
+  });
+
+  it("clones and freezes checkpoint renewal observations", async () => {
+    const renewal = {
+      state: "renewed" as const,
+      leaseExpiresAt: "2026-08-01T20:00:30.000Z",
+    };
+    const value = fixture({ steps: [renewal] });
+
+    const observation = await value.monitor.checkpoint();
+    renewal.leaseExpiresAt = "mutated";
+    expect(observation).toEqual({
+      state: "renewed",
+      leaseExpiresAt: "2026-08-01T20:00:30.000Z",
+    });
+    expect(Object.isFrozen(observation)).toBe(true);
+    await value.monitor.stop();
   });
 
   it("returns authenticated cancellation without local revocation", async () => {
@@ -295,5 +485,9 @@ describe("LeaseAuthorityMonitor", () => {
     expect(value.monitor.start()).toBe(stopped);
     expect(value.supervise).not.toHaveBeenCalled();
     expect(value.revoke).not.toHaveBeenCalled();
+    await expect(value.monitor.checkpoint()).rejects.toMatchObject({
+      code: "monitor_stopped",
+      message: "Lease authority monitor is stopped.",
+    });
   });
 });
