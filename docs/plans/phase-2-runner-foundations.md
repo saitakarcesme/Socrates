@@ -1081,7 +1081,7 @@ disabled.
 
 ### Slice 2.34 — closed local attempt observation
 
-Status: Planned on 2026-08-01.
+Status: Complete on 2026-08-01.
 
 Architecture decision: ADR-071.
 
@@ -1098,6 +1098,14 @@ Detailed plan: `docs/plans/slice-2.34-local-attempt-observation.md`.
 Exit: adversarial stage, cancellation, timing, cleanup, and re-entry tests prove
 one local attempt closes into one immutable arbitration observation without
 publishing an event or owning lease authority.
+
+Evidence: implementation commit `f750aa1`; 13 observer, 11 durable-timing, 16
+preparation, 19 runtime-executor, and 23 OCI-backend tests passed with all 516
+runner-local tests and every local repository gate. Main CI run `30710103241`
+passed all database, API, runner, native durability, Chromium, and build gates.
+OCI reference-host run `30710335532` independently proved forced exact-fence
+termination, complete cleanup, source release, guarded backend execution, and
+the admitted runtime on real rootless infrastructure.
 
 ## Acceptance gates
 

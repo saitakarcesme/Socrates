@@ -3377,6 +3377,26 @@ ADR-069, and keep supervision owned through recoverable publication and durable
 completion. Publication ownership, session composition, acquisition polling,
 and runner enablement remain separate decisions.
 
+Implementation commit `f750aa1` passed every local repository gate, including
+13 focused observer tests, 11 focused durable-timing tests, the expanded
+16-test preparation, 19-test runtime-executor, and 23-test OCI-backend suites,
+516 runner-local tests, production builds, and the low-severity dependency
+audit. The tests prove exact single-flight identity, stage redaction, exact
+abort recognition, durable-start timing, nested uncertainty precedence,
+prepared-identity binding, cleanup precedence, and deep immutability. GitHub
+Actions run `30710103241` passed every PostgreSQL, authenticated API, runner,
+Linux native durability, Chromium product-journey, and production-build gate.
+
+Disposable OCI reference-host run `30710335532` independently passed the
+rootless engine comparison, guarded production backend, and admitted task
+runtime on the same commit. Its new backend schema-v3 and runtime schema-v6
+evidence both record exact-fence termination as `terminated` and forced, plus
+complete cleanup; runtime evidence additionally proves source release and the
+same forced termination receipt through `RuntimeSandboxError`. This admits
+ADR-071 and closes Slice 2.34. Authority ownership, terminal publication,
+session composition, acquisition polling, and runner enablement remain
+disabled.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

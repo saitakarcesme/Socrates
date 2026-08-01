@@ -1,6 +1,6 @@
 # Slice 2.34 local attempt observation
 
-Status: Planned
+Status: Complete
 
 Date: 2026-08-01
 
@@ -116,3 +116,21 @@ lease expiry are unreachable.
 4. Cleanup uncertainty overrides all otherwise publishable local evidence.
 5. Returned timing, candidates, drafts, and payloads are deeply immutable.
 6. No event is appended and no lease, polling loop, or runner is enabled.
+
+## Validation
+
+Implementation commit `f750aa1` passed formatting, type checking, linting,
+both architecture audits, every workspace test and build, and the low-severity
+dependency audit. Focused proof comprises 13 observer and 11 timing tests; the
+expanded preparation, runtime-executor, and OCI-backend suites contain 16, 19,
+and 23 tests respectively. The complete runner-local suite contains 516 passing
+tests.
+
+GitHub Actions run `30710103241` passed PostgreSQL migrations and integrations,
+authenticated API and runner integrations, both Linux native durability probes,
+the Chromium product journey, and production builds. Disposable OCI
+reference-host run `30710335532` passed rootless engine comparison, guarded
+backend validation, and admitted runtime validation. Its generated backend
+schema-v3 and runtime schema-v6 evidence both record forced exact-fence
+termination and complete cleanup; runtime evidence also records source release
+and the exact forced termination receipt.
