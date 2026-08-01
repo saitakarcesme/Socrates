@@ -4224,6 +4224,67 @@ evidence-upload gates. This admits ADR-083 and closes Slice 2.46. Repeated
 dispatch lifecycle, process configuration, shutdown ownership, and runner
 enablement remain separate decisions.
 
+### ADR-084: Repeated local dispatch is one observed fail-stop lifecycle
+
+ADR-082 exposes one safe `dispatchNext()` boundary and ADR-083 supplies the
+required Node timing primitives, but a future process root could still invent
+unsafe repetition. A naive loop could overlap attempts, busy-spin on idle,
+use local wall time to reinterpret an indeterminate lease, discard dispatch
+outcomes, retry an uncertain owner failure, or let shutdown detach an active
+session. Repetition is therefore admitted as its own lifecycle before process
+configuration or runner enablement.
+
+One effect-free `LocalAttemptDispatchLoop` will accept only a narrow
+`dispatchNext(signal?)` owner, a narrow delay capability, one observer, and one
+fixed `pollIntervalMs`. The interval is snapshotted as an integer in
+`[1, 2_147_483_647]`, matching the admitted Node timer bound. Dependency
+methods are captured during construction so later mutation cannot redirect
+dispatch, delay, or observation. Construction performs no recovery, store,
+network, timer, clock, callback, or process effect.
+
+The first explicit `run(signal)` creates one retained operation; every later
+call returns that exact promise and cannot replace its shutdown signal. The
+loop performs exactly one awaited `dispatchNext(signal)` at a time. It awaits
+the deeply immutable result, validates the closed ADR-081 state union, and
+then awaits `observe(result)` before selecting another transition. No next
+dispatch or delay can begin until observation succeeds. The observer is a
+process-local operational boundary only: it cannot mutate durable attempt
+truth or authorize the next transition.
+
+`idle` and `indeterminate` are the only delayed outcomes. Idle delay prevents
+empty acquisition from becoming a busy loop. Indeterminate delay permits a
+later exact control-plane reconciliation without reading or calculating from
+`leaseExpiresAt`; the server/database clock remains the only retirement
+authority. `settled`, `completed`, `retired`, and `rejected` advance directly
+to the next explicit durable transition because the preceding call has
+already fully settled or recorded its closed local truth. There is no delay
+after those results and no attempt concurrency.
+
+Shutdown remains cooperative and non-authoritative. An already-aborted signal
+returns one frozen `stopped` result without dispatch, delay, or observation.
+Abort during admission may stop the loop only when the rejection is the exact
+current `signal.reason`. Abort during an owned session cannot replace ADR-072
+cancellation authority: ADR-081 waits for the session to settle, the loop
+observes that result, and only then stops before another transition. Abort
+during a poll delay must likewise reject with exact reason identity; the loop
+then returns `stopped`. The stopped result never exposes the possibly private
+abort reason.
+
+Every other dispatch, observation, or delay rejection is terminal and becomes
+one fixed `LocalAttemptDispatchLoopError` with a redacted message and retained
+cause. Invalid result shape is a separate fixed failure. No uncertain failure
+is retried in-process, no later observer runs, and no later timer or dispatch
+is created. A fresh process with new owners remains the only recovery path.
+
+This lifecycle adds no exponential backoff, jitter, adaptive cadence,
+concurrency setting, retry budget, wall-clock lease calculation, environment
+loading, credentials, logging implementation, process entry point, OS signal
+handler, shutdown timeout, resource construction, or `LocalRunner` enablement.
+The concrete process root must later choose the owner, delay adapter, observer,
+configuration source, and shutdown authority explicitly. Until that separate
+decision is admitted, `LocalRunnerNotEnabledError` remains the production
+entry-point behavior.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

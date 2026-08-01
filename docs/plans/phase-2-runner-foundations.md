@@ -1446,6 +1446,29 @@ production-build, and evidence-upload gate. ADR-083 is admitted. Repeated
 dispatch lifecycle, process configuration, shutdown ownership, and runner
 enablement remain deferred.
 
+### Slice 2.47 — observed fail-stop local dispatch lifecycle
+
+Status: Planned on 2026-08-02.
+
+Architecture decision: ADR-084.
+
+Detailed plan: `docs/plans/slice-2.47-local-attempt-dispatch-loop.md`.
+
+- repeat only the admitted `LocalAttemptOwner.dispatchNext()` boundary;
+- serialize dispatch, result validation, and observation with no overlap;
+- delay only `idle` and server-authoritative `indeterminate` results by one
+  fixed bounded interval;
+- preserve exact abort identity as cooperative shutdown without replacing
+  authenticated attempt cancellation authority;
+- fail-stop on every other dispatch, observer, delay, or result-shape failure;
+- keep environment loading, process startup, OS signals, shutdown timeout,
+  adaptive backoff, concurrency, and runner enablement out of scope.
+
+Exit: adversarial lifecycle tests prove no attempt overlap or busy idle loop,
+every result is observed before advancement, indeterminate work is never
+retired from local time, shutdown waits for owned settlement, and uncertainty
+cannot retry or detach work.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
