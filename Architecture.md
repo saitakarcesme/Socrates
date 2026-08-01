@@ -4144,6 +4144,19 @@ the production entry-point behavior. Concrete Node timing adapters, repeated
 dispatch lifecycle, process configuration, and runner enablement remain later
 independent decisions.
 
+Evidence: architecture commit `0309df8` preceded production code.
+Implementation commit `6046a23` added the recovery-bound owner, separated
+captured configuration from graph assembly, and passed 20 focused inertness,
+ordering, root-isolation, fail-stop, mutation, concurrency, fresh-publication,
+and restart-recovery tests. All 844 runner-local tests and every local
+repository gate passed against fresh migrated PostgreSQL database
+`socrates_ci_adr082b`, including the Chromium measured-research journey and
+production build. Main CI run `30722897508` passed all PostgreSQL, API, runner,
+Linux native durability, Chromium product-journey, production-build, and
+evidence-upload gates. This admits ADR-082 and closes Slice 2.45. Node timing
+adapters, repeated dispatch lifecycle, process configuration, and runner
+enablement remain separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

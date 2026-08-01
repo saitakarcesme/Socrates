@@ -1386,7 +1386,7 @@ polling, concurrency scheduling, and runner enablement remain deferred.
 
 ### Slice 2.45 — recovery-bound local attempt composition
 
-Status: Planned on 2026-08-01.
+Status: Completed on 2026-08-01.
 
 Architecture decision: ADR-082.
 
@@ -1406,6 +1406,14 @@ Detailed plan: `docs/plans/slice-2.45-recovery-bound-attempt-composition.md`.
 Exit: real-store and adversarial composition tests prove recovery precedes
 store opening, recovered owners cannot be swapped, all attempt paths share one
 durable graph, partial composition cannot retry, and construction is inert.
+
+Admission: implementation commit `6046a23`; 20 focused owner tests and all 844
+runner-local tests passed against fresh migrated PostgreSQL database
+`socrates_ci_adr082b`. Main CI run `30722897508` passed every required Linux,
+PostgreSQL, API, runner, native durability, Chromium journey, production-build,
+and evidence-upload gate. ADR-082 is admitted. Node timing adapters, repeated
+dispatch lifecycle, process configuration, and runner enablement remain
+deferred.
 
 ## Acceptance gates
 

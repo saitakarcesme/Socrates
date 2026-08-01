@@ -1,6 +1,6 @@
 # Slice 2.45 recovery-bound local attempt composition
 
-Status: Planned
+Status: Completed
 
 Date: 2026-08-01
 
@@ -126,3 +126,18 @@ Startup cleanup counts remain diagnostic only.
 6. All configuration is bounded, validated, immutable, and mutation-resistant.
 7. No environment loader, process entry point, signal handler, timer, polling,
    backoff, automatic retry, concurrency scheduler, or runner enablement lands.
+
+## Admission evidence
+
+- Architecture commit: `0309df8`.
+- Implementation commit: `6046a23`.
+- Focused owner tests: 20, covering inert construction, strict root/config
+  validation, dependency getters/proxies and mutation, exact startup ordering,
+  partial store-open fail-stop behavior, concurrent dispatch serialization,
+  real fresh publication, and real restart pending-spool recovery.
+- Runner-local suite: all 844 tests passed against fresh migrated PostgreSQL
+  database `socrates_ci_adr082b`.
+- Local gates: Phase 2 boundary audit, formatting, typecheck, lint, full
+  workspace tests, Chromium measured-research E2E, and production build.
+- GitHub Actions: run `30722897508` passed all required Linux, PostgreSQL, API,
+  runner, native durability, browser, build, and evidence-upload gates.
