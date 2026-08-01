@@ -3800,6 +3800,52 @@ Chromium product-journey, production-build, and evidence-upload gate. This
 admits ADR-077 and closes Slice 2.40. Fresh attempt execution, startup
 orchestration, acquisition polling, and runner enablement remain disabled.
 
+### ADR-078: No-evidence closure is neither completion nor publication abandonment
+
+The future fresh attempt session must arbitrate an ADR-071 local observation
+against an ADR-070 authority checkpoint. ADR-069 may legitimately return
+`no_evidence`: authority can be stale or uncertain, a trusted candidate can be
+missing, or execution timing can contradict the candidate. Once the observer
+has released its source, request, and sandbox capabilities, the session still
+owns the authority monitor. ADR-073 `stop()` is forbidden because no terminal
+acknowledgement or durable work completion exists. ADR-073
+`abandonPublication()` is also false because no publication may have started.
+Leaving the monitor detached is not an option.
+
+`LeaseAuthorityMonitor` will therefore gain one distinct
+`releaseWithoutEvidence()` owner operation. It records the first release intent
+and returns the closed result
+`{ state: "released", reason: "terminal_evidence_unavailable" }` only after any
+in-flight heartbeat has settled as renewed. It aborts a scheduled wait and
+sends no new heartbeat. An authenticated cancellation or stale response from
+an in-flight heartbeat outranks release and returns its existing terminal
+result. Heartbeat, scheduler, or revocation uncertainty keeps the existing
+fail-stop rejection and local revocation behavior; it is never converted into
+a clean release.
+
+Evidence-free release performs no sandbox cancellation of its own because the
+future caller may invoke it only after ADR-071 observation has closed and
+released every local capability. It does not mutate the work journal, retire an
+attempt, complete work, notify the control plane, emit an event, or infer lease
+expiry from a clock. The active durable work remains for ADR-075 restart
+triage; stopping renewals merely permits the control plane to classify it
+authoritatively later.
+
+The new result is not accepted as clean completion or publication abandonment.
+ADR-074 retains its exact result sets, so seeing `released` through `stop()`,
+`abandonPublication()`, or a publication checkpoint remains a release conflict.
+`checkpoint()` after evidence-free release rejects with fixed
+`monitor_released`. A checkpoint already joined to an in-flight heartbeat
+settles from that heartbeat before release can complete; a queued checkpoint
+that cannot begin before release is sealed rejects with the same fixed error.
+The first owner release intent remains final and repeatable across later calls.
+
+This slice defines only the missing authority terminal state and its ownership
+invariants. It does not call the arbiter, construct a fresh attempt session,
+execute a sandbox, append evidence, mutate admission, poll, back off, or enable
+the runner. The later session may select this release only from an exact frozen
+ADR-069 `no_evidence` decision after local observation cleanup.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

@@ -1271,6 +1271,26 @@ Chromium product-journey, production-build, and evidence-upload gates. ADR-077
 is admitted; fresh attempt execution, startup orchestration, polling, and runner
 enablement remain separate decisions.
 
+### Slice 2.41 — no-evidence authority release
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-078.
+
+Detailed plan: `docs/plans/slice-2.41-no-evidence-authority-release.md`.
+
+- distinguish missing terminal evidence from completion and publication
+  abandonment;
+- abort only a scheduled wait and send no heartbeat for release;
+- let an in-flight cancellation, stale result, or uncertainty outrank release;
+- leave active journal work untouched for authoritative restart triage;
+- reject checkpoints and publication-owner release conflicts after release;
+- keep arbitration, fresh sessions, polling, and enablement out of scope.
+
+Exit: monitor and owner-policy tests prove an evidence-free attempt can release
+heartbeat ownership without claiming completion, publication failure, server
+retirement, or a locally inferred lease outcome.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
