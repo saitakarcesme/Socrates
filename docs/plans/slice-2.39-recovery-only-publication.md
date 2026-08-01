@@ -16,6 +16,7 @@ terminal evidence, but it has no drafts and no append capability.
 
 `RecoveryOnlyTerminalPublication` binds:
 
+- the exact frozen active work from ADR-075 `recovery_pending`;
 - one validated delivery ID;
 - one deeply frozen execution;
 - the existing bounded terminal recovery port;
@@ -26,7 +27,10 @@ Its constructor receives no event drafts, event ID source, clock, spool
 appender, or generic sender. `publish()` is serialized and repeatable so the
 ADR-074 owner can invoke the same fixed operation after each prescribed
 authority decision. The publication primitive does not own retry count or
-lease release.
+lease release. Constructor validation requires claimed or execution-started
+work with exact delivery/task/attempt identity. Every active audit must match
+the bound state snapshot; completed audits must preserve that snapshot and add
+only the exact durable completion identity.
 
 ## State ordering
 
@@ -50,8 +54,8 @@ publication.
 
 ## Failure matrix
 
-- initial work: claimed, execution-started, completed, retired, rejected,
-  pending-claim, and absent;
+- bound work: claimed and execution-started success; completed, retired,
+  rejected, pending-claim, absent, malformed, and identity drift rejection;
 - recovery: completed, none, synchronous rejection, asynchronous rejection,
   malformed result, identity drift, state drift, and acknowledgement drift;
 - post-failure audit: absent, pending, acknowledged, completed, rejection,

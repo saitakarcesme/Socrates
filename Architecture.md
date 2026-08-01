@@ -3679,14 +3679,18 @@ startup, recovery could cross into a new append and manufacture different
 terminal evidence. A type-level promise to call recovery first is not enough;
 the restart handoff must be incapable of appending.
 
-One `RecoveryOnlyTerminalPublication` will therefore bind an exact delivery and
-execution to the existing durable recovery operation and read-only ADR-072
-auditor. It receives no drafts and no appender capability. Each serialized
-`publish()` call may drain only the already-existing terminal spool and either
-return the standard frozen `{ state: "completed", publication: "recovered" }`
-result or fail closed. It is repeatable rather than single-flight because the
-ADR-074 owner must be able to retry a retained disposition; ADR-074 remains the
-single owner of retry count, authority checkpoints, and terminal release.
+One `RecoveryOnlyTerminalPublication` will therefore bind the exact frozen
+active work, delivery, and execution from ADR-075 to the existing durable
+recovery operation and read-only ADR-072 auditor. The bound work must be
+`claimed` or `execution_started`; an audited active disposition must preserve
+its full identity and state snapshot, while a completed disposition may add
+only the matching durable completion. It receives no drafts and no appender
+capability. Each serialized `publish()` call may drain only the already-existing
+terminal spool and either return the standard frozen
+`{ state: "completed", publication: "recovered" }` result or fail closed. It is
+repeatable rather than single-flight because the ADR-074 owner must be able to
+retry a retained disposition; ADR-074 remains the single owner of retry count,
+authority checkpoints, and terminal release.
 
 Every invocation audits before recovery. Audited `completed` evidence returns
 recovered success without probing; audited `absent` is a fixed
