@@ -4,11 +4,11 @@ import {
 } from "@socrates/contracts";
 import { describe, expect, it, vi } from "vitest";
 
+import { RunnerTransportError } from "../transport/client";
 import {
-  RunnerTransportError,
-  type RunnerControlPlaneClient,
-} from "../transport/client";
-import { LeaseSupervisor } from "./lease-supervisor";
+  LeaseSupervisor,
+  type RunnerHeartbeatControlPlane,
+} from "./lease-supervisor";
 import taskFixture from "../../../../packages/contracts/fixtures/runner/task-v2.json";
 
 const termination = Object.freeze({
@@ -35,7 +35,7 @@ function supervisor(options: {
 }) {
   const cancel = options.cancel ?? vi.fn(async () => termination);
   const heartbeat = vi.fn(options.heartbeat);
-  const client = { heartbeat } as unknown as RunnerControlPlaneClient;
+  const client: RunnerHeartbeatControlPlane = { heartbeat };
   return {
     cancel,
     heartbeat,

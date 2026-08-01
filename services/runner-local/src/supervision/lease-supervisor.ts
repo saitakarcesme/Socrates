@@ -4,16 +4,26 @@ import {
   runnerTaskHeartbeatRequestV1Schema,
   type RunnerCancellationV1,
   type RunnerExecutionV1,
+  type RunnerTaskHeartbeatRequestV1,
+  type RunnerTaskHeartbeatResponseV1,
 } from "@socrates/contracts";
 
-import {
-  RunnerTransportError,
-  type RunnerControlPlaneClient,
-} from "../transport/client";
+import { RunnerTransportError } from "../transport/client";
 import type { SandboxTerminationReceipt } from "../oci/termination";
 
 export interface RunnerCancellationTarget {
   cancel(command: RunnerCancellationV1): Promise<SandboxTerminationReceipt>;
+}
+
+export interface RunnerHeartbeatControlPlane {
+  heartbeat(
+    input: {
+      taskId: string;
+      attemptId: string;
+      request: RunnerTaskHeartbeatRequestV1;
+    },
+    signal?: AbortSignal,
+  ): Promise<RunnerTaskHeartbeatResponseV1>;
 }
 
 export type LeaseSupervisionResult =
@@ -27,13 +37,13 @@ export type LeaseSupervisionResult =
   | Readonly<{ state: "stale" }>;
 
 export class LeaseSupervisor {
-  readonly #client: RunnerControlPlaneClient;
+  readonly #client: RunnerHeartbeatControlPlane;
   readonly #target: RunnerCancellationTarget;
   readonly leaseDurationMs: number;
-  #operationTail: Promise<void> = Promise.resolve();
+  #operationTail: Promise<void> | undefined;
 
   constructor(options: {
-    client: RunnerControlPlaneClient;
+    client: RunnerHeartbeatControlPlane;
     target: RunnerCancellationTarget;
     leaseDurationMs: number;
   }) {
@@ -109,8 +119,8 @@ export class LeaseSupervisor {
     const current = new Promise<void>((resolve) => {
       release = resolve;
     });
-    this.#operationTail = previous.then(() => current);
-    await previous;
+    this.#operationTail = previous ? previous.then(() => current) : current;
+    if (previous) await previous;
     try {
       return await operation();
     } finally {

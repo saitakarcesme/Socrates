@@ -2,6 +2,7 @@ export {
   LeaseSupervisor,
   type LeaseSupervisionResult,
   type RunnerCancellationTarget,
+  type RunnerHeartbeatControlPlane,
 } from "./lease-supervisor";
 export {
   LeaseAuthorityMonitor,
