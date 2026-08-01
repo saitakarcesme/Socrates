@@ -1242,6 +1242,28 @@ Chromium product-journey, production-build, and evidence-upload gates. ADR-076
 is admitted; monitor construction, attempt-session composition, polling, and
 runner enablement remain separate decisions.
 
+### Slice 2.40 — restart terminal recovery session
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-077.
+
+Detailed plan: `docs/plans/slice-2.40-restart-terminal-recovery-session.md`.
+
+- accept only an exact ADR-075 `recovery_pending` handoff;
+- construct one identity-bound cancellation scope, supervisor, authority
+  monitor, recovery-only publication, and bounded publication owner;
+- start and observe authority before recovery publication begins;
+- settle owner and monitor together without Promise-race policy;
+- prove every success and failure path leaves no owned heartbeat behind;
+- keep fresh execution, outcome arbitration, polling, and enablement out of
+  scope.
+
+Exit: adversarial ordering and integration tests prove a restart handoff can
+settle existing evidence under one exact lease owner, while malformed identity,
+terminal authority, and publication failure cannot orphan supervision or gain
+append authority.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

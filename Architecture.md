@@ -3735,6 +3735,52 @@ admits ADR-076 and closes Slice 2.39. Monitor construction, attempt-session
 composition, acquisition polling, and runner enablement remain disabled
 pending their own architecture decision.
 
+### ADR-077: Restart terminal recovery has one closed session owner
+
+ADR-075 can now return an exact `recovery_pending` handoff, and ADR-076 can
+settle its existing spool without append authority. Calling that publication
+operation directly would still leave lease supervision outside the ownership
+boundary. A caller could start recovery before the heartbeat monitor, fail to
+observe a rejected monitor Promise, bind cancellation to another execution, or
+return while authority remained active. Wiring independent objects in a future
+polling loop would make those ordering errors production-reachable.
+
+One `RestartTerminalRecoverySession` will therefore accept only an exact,
+deeply frozen ADR-075 `recovery_pending` handoff and construct all identity-
+bound collaborators itself. It creates the cancellation scope for the handed-
+off execution, the heartbeat-only lease supervisor, the ADR-073 authority
+monitor, the ADR-076 recovery-only publication, and the ADR-074 bounded owner.
+Its dependency surface contains a heartbeat capability, sandbox cancellation
+backend, abort-aware authority scheduler, terminal disposition auditor, and
+terminal recovery port. It receives no event drafts, append port, event ID
+source, wall clock, execution observer, or acquisition capability.
+
+`settle()` is single-flight. It starts the authority monitor before invoking
+the publication owner and immediately observes both Promises. The initial
+heartbeat may remain in flight while the recovery-only operation audits
+durable evidence; remote event submission remains fenced transactionally, and
+the owner requires a fresh serialized checkpoint before every retained
+`pending` retry. An `acknowledged` retry remains local and requires no extra
+heartbeat. The session does not interpret the reconciliation timestamps as
+authority and never compares a local clock with them.
+
+The session awaits both ownership and monitor settlement without using
+Promise settlement order as policy. A successful ownership result must contain
+the same terminal authority result produced by the monitor. Every owner error
+path must already have either abandoned the monitor or observed its terminal
+cancelled, stale, or uncertain result. Contradictory fulfilled results,
+unexpected detached authority, malformed handoff state, or identity drift fail
+closed through a fixed session error while retaining causes only in memory.
+No clean return may leave a scheduled or in-flight heartbeat owned by the
+session.
+
+This session handles only restart recovery of already-durable terminal
+evidence. It does not execute a sandbox, arbitrate new outcomes, create fresh
+terminal evidence, admit another task, run the startup barrier, poll, back off,
+or enable the runner. Fresh `ready` work and recovered `claimed` work still
+require the later full attempt session; runner startup must still complete the
+ADR-057 owned-resource barrier before admission can produce this handoff.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
