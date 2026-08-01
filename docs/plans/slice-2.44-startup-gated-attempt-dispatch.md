@@ -1,6 +1,6 @@
 # Slice 2.44 startup-gated attempt dispatch
 
-Status: Planned
+Status: Completed
 
 Date: 2026-08-01
 
@@ -126,3 +126,18 @@ runs ADR-075 restart-first triage before any new acquire.
 6. Caller signals cannot become attempt cancellation authority after handoff.
 7. No process entry point, environment loading, signal handler, timer, polling,
    backoff, concurrency scheduler, or runner enablement is added.
+
+## Admission evidence
+
+- Architecture commit: `4a2a520`.
+- Implementation commit: `f805358`.
+- Focused dispatcher tests: 42, covering construction isolation, startup and
+  composition ordering, every admission route, whole-session serialization,
+  caller-signal confinement, strict immutable results, dependency mutation,
+  and retained fail-stop behavior.
+- Runner-local suite: all 824 tests passed against fresh migrated PostgreSQL
+  database `socrates_ci_adr081`.
+- Local gates: Phase 2 boundary audit, formatting, typecheck, lint, full
+  workspace tests, Chromium measured-research E2E, and production build.
+- GitHub Actions: run `30721734779` passed all required Linux, PostgreSQL, API,
+  runner, native durability, browser, build, and evidence-upload gates.

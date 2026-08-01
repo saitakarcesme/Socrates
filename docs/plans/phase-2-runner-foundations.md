@@ -1358,7 +1358,7 @@ runner enablement remain separate decisions.
 
 ### Slice 2.44 — startup-gated attempt dispatch
 
-Status: Planned on 2026-08-01.
+Status: Completed on 2026-08-01.
 
 Architecture decision: ADR-081.
 
@@ -1376,6 +1376,13 @@ Detailed plan: `docs/plans/slice-2.44-startup-gated-attempt-dispatch.md`.
 Exit: adversarial routing and ordering tests prove no admission can precede
 startup cleanup, no second attempt can overlap the first, and no failed process
 boundary can retry or detach attempt ownership.
+
+Admission: implementation commit `f805358`; 42 focused dispatcher tests and
+all 824 runner-local tests passed against fresh migrated PostgreSQL database
+`socrates_ci_adr081`. Main CI run `30721734779` passed every required Linux,
+PostgreSQL, API, runner, native durability, Chromium journey, production-build,
+and evidence-upload gate. ADR-081 is admitted. Concrete process composition,
+polling, concurrency scheduling, and runner enablement remain deferred.
 
 ## Acceptance gates
 

@@ -4071,6 +4071,18 @@ handlers, read environment configuration, or enable `LocalRunner`. Concrete
 process composition and any repeated polling lifecycle remain later,
 independent decisions.
 
+Evidence: architecture commit `4a2a520` preceded production code.
+Implementation commit `f805358` added the deferred-composition dispatcher,
+strict result contracts, and 42 focused ordering, routing, identity,
+immutability, mutation, and fail-stop tests. All 824 runner-local tests and
+every local repository gate passed against fresh migrated PostgreSQL database
+`socrates_ci_adr081`, including the Chromium measured-research journey and
+production build. Main CI run `30721734779` passed all PostgreSQL, API,
+runner, Linux native durability, Chromium product-journey, production-build,
+and evidence-upload gates. This admits ADR-081 and closes Slice 2.44. Concrete
+process composition, timers, polling, backoff, concurrency scheduling, and
+runner enablement remain separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
