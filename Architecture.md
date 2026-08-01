@@ -3263,6 +3263,47 @@ durability, Chromium product-journey, and production-build gate. This admits
 ADR-069 and closes Slice 2.32; session composition, side effects, polling, and
 runner enablement remain disabled.
 
+### ADR-070: Publication requires a serialized authority checkpoint
+
+ADR-063 permits `LeaseAuthorityMonitor.stop()` only after terminal
+acknowledgement and durable work completion. The first ADR-069 policy used
+`stopped` as the clean-authority branch for a trusted candidate, but a future
+session cannot obtain that observation before publication without violating
+ADR-063. Treating an unresolved monitor Promise, a cached renewal, or local
+lease-time comparison as equivalent authority would reintroduce race and clock
+inference.
+
+`LeaseAuthorityMonitor` therefore gains one explicit `checkpoint()` operation.
+It never reads a clock and never grants a lease. It joins an already in-flight
+heartbeat or interrupts only the scheduled wait so the monitor performs one
+immediate serialized heartbeat. A successful authenticated renewal returns a
+deeply frozen `renewed` checkpoint with the server lease-expiry value preserved
+only as opaque evidence. Authenticated cancellation and stale results retain
+their existing closed forms. Authority, scheduler, or revocation uncertainty
+rejects through the existing bounded monitor error taxonomy.
+
+Concurrent checkpoint callers join the same current or next heartbeat and
+receive the same frozen result object. No checkpoint heartbeat may overlap the
+cadence. A checkpoint requested before `start()` participates in the initial
+immediate heartbeat. Cancellation, stale authority, or monitor uncertainty
+settles the main monitor and every waiting checkpoint consistently. Explicit
+owner stop never manufactures renewal: a checkpoint that cannot be served
+before a sealed stop rejects with a fixed `monitor_stopped` error.
+
+The terminal arbiter replaces its pre-publication `stopped` authority branch
+with `renewed`. `stopped` is removed from arbiter input and remains solely the
+post-completion monitor result defined by ADR-063. A renewed checkpoint
+preserves a trusted runtime or local-failure candidate; renewal without a
+candidate remains `no_evidence`. Cancellation, stale, uncertainty, receipt,
+and contradiction precedence otherwise remain unchanged.
+
+A checkpoint does not freeze future control-plane state. The future session
+must keep the monitor running through durable local append, remote
+acknowledgement, and work completion; event endpoints still enforce the exact
+fence transactionally. Only after completion may the owner call `stop()`. This
+slice adds no terminal publication, session composition, acquisition loop,
+polling, or runner enablement.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

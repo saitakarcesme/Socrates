@@ -1051,6 +1051,27 @@ receipt validator now lives in a pure contract module outside the backend
 adapter. GitHub Actions run `30708344642` passed every integration suite, both
 Linux native durability probes, Chromium, and production builds.
 
+### Slice 2.33 — publication authority checkpoint
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-070.
+
+Detailed plan: `docs/plans/slice-2.33-publication-authority-checkpoint.md`.
+
+- serialize an explicit checkpoint with the monitor heartbeat cadence;
+- join the in-flight heartbeat or wake one scheduled wait without overlap;
+- return only renewed, authenticated cancellation, or stale checkpoint facts;
+- settle concurrent checkpoint callers through one frozen observation;
+- replace the arbiter's pre-publication stopped branch with renewed;
+- reserve monitor stop for post-acknowledgement durable completion;
+- keep publication, session composition, polling, and runner enablement out of
+  scope.
+
+Exit: cadence and arbiter tests prove publication eligibility can be observed
+without local clock inference, overlapping heartbeats, or premature monitor
+stop.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
