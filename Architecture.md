@@ -3397,6 +3397,57 @@ ADR-071 and closes Slice 2.34. Authority ownership, terminal publication,
 session composition, acquisition polling, and runner enablement remain
 disabled.
 
+### ADR-072: Publication failure must expose a durable disposition
+
+A future session cannot decide whether to retain, stop, or abandon lease
+supervision from a thrown publication exception alone. The same transport or
+filesystem rejection can occur before a terminal batch exists, after its commit
+is durable, after the control plane acknowledged every event, or after durable
+work completion committed but before the caller observed success. Retrying
+blindly risks duplicate side effects; stopping blindly can strand committed
+evidence; keeping the monitor forever can prevent lease-expiry reconciliation.
+
+`TerminalEvidencePublicationCoordinator` therefore audits durable state after
+every dependency failure at one of three fixed boundaries:
+`recovery_before_append`, `append`, or `recovery_after_append`. The audit is
+read-only. It validates the exact delivery, execution digest, attempt identity,
+work-journal state, spool attempt key, terminal marker, acknowledgement cursor,
+last sequence, and pending count. It cannot append, send, acknowledge, complete,
+retry, consult a lease clock, or invoke authority supervision.
+
+The resulting deeply frozen `TerminalPublicationDisposition` is one of:
+
+- `absent`: active claimed or execution-started work has no committed terminal
+  batch; a manifest-only empty spool is equivalent to no batch;
+- `pending`: one committed terminal batch has at least one unacknowledged event,
+  with exact acknowledged, last, and pending counters;
+- `acknowledged`: the complete terminal batch is durably acknowledged but work
+  completion is not yet durable;
+- `completed`: work completion is durable and the spool retains the matching
+  complete terminal acknowledgement.
+
+Impossible combinations are not coerced. Completed work without the matching
+terminal acknowledgement, non-terminal non-empty evidence, counter drift,
+identity mismatch, retired or rejected work, or an audit dependency failure
+reject as `publication_state_uncertain`. No guessed disposition is returned.
+Invalid caller input and pre-existing identity or work-state conflicts retain
+their current fixed errors and do not enter deferred recovery policy.
+
+If a dependency failed but the audit proves `completed`, publication returns a
+normal recovered completion because the durable postcondition outranks the
+lost response. Otherwise it throws one redacted
+`TerminalEvidencePublicationDeferredError` containing only the fixed boundary
+and frozen disposition; the original cause remains in memory through
+`Error.cause`. Concurrent publication calls remain serialized, and auditing a
+failure cannot create a second append or drain.
+
+This disposition is evidence for a later ownership decision, not that decision
+itself. A future publication owner may retry `pending` or `acknowledged` while
+authority remains owned, may stop only after `completed`, and must use a
+separately designed fail-stop abandonment path for fatal `absent` publication.
+This slice adds no retry scheduler, monitor abandonment, reconciliation-order
+change, session composition, acquisition polling, or runner enablement.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

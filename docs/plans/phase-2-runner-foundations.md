@@ -1107,6 +1107,27 @@ OCI reference-host run `30710335532` independently proved forced exact-fence
 termination, complete cleanup, source release, guarded backend execution, and
 the admitted runtime on real rootless infrastructure.
 
+### Slice 2.35 — durable publication disposition
+
+Status: Planned on 2026-08-01.
+
+Architecture decision: ADR-072.
+
+Detailed plan: `docs/plans/slice-2.35-publication-disposition.md`.
+
+- audit exact journal and spool state after each publication dependency failure;
+- distinguish absent, pending, acknowledged, and completed durable outcomes;
+- return recovered success when durable completion outruns a lost response;
+- reject impossible or unauditable combinations without guessing;
+- preserve causes only in memory behind redacted boundary errors;
+- prove failure auditing performs no append, send, acknowledgement, or complete;
+- keep retries, abandonment, session composition, polling, and enablement out of
+  scope.
+
+Exit: failure-injection and mutation tests prove every publication boundary
+either reports its exact durable disposition, recovers completed success, or
+fails closed without changing durable state.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
