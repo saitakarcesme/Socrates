@@ -32,3 +32,4 @@ export * from "./execution/index";
 export * from "./session/index";
 export * from "./configuration/index";
 export * from "./platform/index";
+export * from "./deployment/index";
