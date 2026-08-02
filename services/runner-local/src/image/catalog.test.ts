@@ -7,8 +7,8 @@ import { SandboxImageCatalog, SandboxImageCatalogError } from "./catalog";
 import type {
   SandboxImageHandshakeVerifier,
   SandboxImageInspector,
-  TrustedSandboxImage,
 } from "./catalog";
+import type { TrustedSandboxImage } from "./configuration-contracts";
 import type { SandboxImageInspection } from "./inspection";
 
 const manifestDigest = `sha256:${"a".repeat(64)}`;
@@ -21,8 +21,7 @@ function declaration(
   overrides: Partial<TrustedSandboxImage> = {},
 ): TrustedSandboxImage {
   return {
-    reference,
-    manifestDigest,
+    digest: manifestDigest,
     manifestMediaType: "application/vnd.oci.image.manifest.v1+json",
     configurationDigest,
     architecture: "amd64",
@@ -180,7 +179,7 @@ describe("trusted sandbox image catalog", () => {
   });
 
   it.each([
-    ["duplicate", [declaration(), declaration()]],
+    ["duplicate", [declaration(), declaration({ architecture: "arm64" })]],
     [
       "credential environment",
       [declaration({ environment: ["API_TOKEN=secret"] })],
@@ -189,7 +188,18 @@ describe("trusted sandbox image catalog", () => {
       "mutable reference",
       [
         declaration({
-          reference: "registry.example/socrates/task-runtime:latest",
+          digest: "registry.example/socrates/task-runtime:latest",
+        }),
+      ],
+    ],
+    [
+      "dot-segment executable",
+      [
+        declaration({
+          runtime: {
+            executable: "/usr/../node",
+            arguments: [],
+          },
         }),
       ],
     ],

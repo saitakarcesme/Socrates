@@ -238,6 +238,34 @@ describe("parseLocalRunnerConfiguration", () => {
     expect(String(error)).not.toContain("private");
   });
 
+  it("normalizes a proxy that changes behavior after structural admission", () => {
+    const target = configuration();
+    let descriptors = 0;
+    const candidate = new Proxy(target, {
+      ownKeys: () => {
+        descriptors += 1;
+        return Reflect.ownKeys(target);
+      },
+      get: (object, property, receiver) => {
+        if (descriptors > 0 && property === "version") {
+          throw new Error("private late proxy value");
+        }
+        return Reflect.get(object, property, receiver);
+      },
+    });
+
+    const error = (() => {
+      try {
+        parseLocalRunnerConfiguration(candidate);
+      } catch (cause) {
+        return cause;
+      }
+      throw new Error("Expected parser failure.");
+    })();
+    expect(error).toMatchObject({ code: "invalid_candidate" });
+    expect(String(error)).not.toContain("private");
+  });
+
   it("rejects cyclic candidates", () => {
     const candidate: Record<string, unknown> = {};
     candidate["self"] = candidate;

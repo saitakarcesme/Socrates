@@ -1,5 +1,22 @@
 export { SandboxImageCatalog, SandboxImageCatalogError } from "./catalog";
 export {
+  maximumTrustedImageCatalogImages,
+  maximumTrustedImageCommandArguments,
+  maximumTrustedImageCommandBytes,
+  maximumTrustedImageCommandValueBytes,
+  maximumTrustedImageConfigurationDepth,
+  maximumTrustedImageConfigurationNodes,
+  maximumTrustedImageEnvironmentBytes,
+  maximumTrustedImageEnvironmentEntries,
+  maximumTrustedImageEnvironmentEntryBytes,
+  type LocalRunnerTrustedImageCatalogConfigurationV1,
+  type TrustedSandboxImage,
+} from "./configuration-contracts";
+export {
+  LocalRunnerTrustedImageConfigurationError,
+  parseLocalRunnerTrustedImageCatalogConfiguration,
+} from "./configuration-parser";
+export {
   NerdctlImageInspector,
   parseSandboxImageInspection,
   SandboxImageInspectionError,
@@ -11,7 +28,6 @@ export type { AdmittedSandboxImage } from "./capability";
 export type {
   SandboxImageHandshakeVerifier,
   SandboxImageInspector,
-  TrustedSandboxImage,
 } from "./catalog";
 export type {
   NerdctlImageInspectorOptions,

@@ -220,8 +220,7 @@ const pipelineInspection = await inspector.inspect({
 const catalog = new SandboxImageCatalog(
   [
     {
-      reference: imageReference,
-      manifestDigest: pipelineInspection.manifestDigest,
+      digest: pipelineInspection.manifestDigest,
       manifestMediaType: pipelineInspection.manifestMediaType,
       configurationDigest: pipelineInspection.configurationDigest,
       architecture: architectureName,

@@ -7,23 +7,9 @@ import {
 
 import type { AdmittedSandboxImage } from "./capability";
 import type { InspectedSandboxImage } from "./capability";
+import type { TrustedSandboxImage } from "./configuration-contracts";
 import type { SandboxImageInspection } from "./inspection";
 import type { SandboxCommand } from "../oci/profile";
-
-export type TrustedSandboxImage = Readonly<{
-  reference: string;
-  manifestDigest: string;
-  manifestMediaType:
-    | "application/vnd.docker.distribution.manifest.v2+json"
-    | "application/vnd.oci.image.manifest.v1+json";
-  configurationDigest: string;
-  architecture: "amd64" | "arm64";
-  runtimeBuildDigest: string;
-  runtimeBundleDigest: string;
-  runtime: SandboxCommand;
-  profileProbe: SandboxCommand;
-  environment: readonly string[];
-}>;
 
 export interface SandboxImageInspector {
   inspect(input: {
@@ -52,8 +38,7 @@ export class SandboxImageCatalogError extends Error {
 }
 
 const digestPattern = /^sha256:[a-f0-9]{64}$/u;
-const executablePattern =
-  /^\/(?:[^/\0.][^/\0]*|\.(?!\.?\/)[^/\0]+)(?:\/[^/\0]+)*$/u;
+const absoluteExecutablePattern = /^\/[^/\0]+(?:\/[^/\0]+)*$/u;
 const environmentNamePattern = /^[A-Z_][A-Z0-9_]*$/u;
 const credentialNamePattern =
   /(?:AUTH|COOKIE|CREDENTIAL|KEY|PASS(?:WORD)?|SECRET|TOKEN)/u;
@@ -68,7 +53,11 @@ function key(digest: string, architecture: "amd64" | "arm64"): string {
 
 function assertCommand(command: SandboxCommand, field: string): void {
   if (
-    !executablePattern.test(command.executable) ||
+    !absoluteExecutablePattern.test(command.executable) ||
+    command.executable
+      .split("/")
+      .slice(1)
+      .some((segment) => segment === "." || segment === "..") ||
     command.arguments.length > 128 ||
     command.arguments.some(
       (argument) => argument.length > 4_096 || argument.includes("\0"),
@@ -111,9 +100,7 @@ function sameStrings(
 
 function validateDeclaration(image: TrustedSandboxImage): void {
   if (
-    !digestPattern.test(image.reference) ||
-    !digestPattern.test(image.manifestDigest) ||
-    image.reference !== image.manifestDigest ||
+    !digestPattern.test(image.digest) ||
     !digestPattern.test(image.configurationDigest) ||
     !digestPattern.test(image.runtimeBuildDigest) ||
     !digestPattern.test(image.runtimeBundleDigest) ||
@@ -158,8 +145,8 @@ function assertInspection(
     ...expected.runtime.arguments,
   ];
   if (
-    observed.reference !== expected.reference ||
-    observed.manifestDigest !== expected.manifestDigest ||
+    observed.reference !== expected.digest ||
+    observed.manifestDigest !== expected.digest ||
     observed.manifestMediaType !== expected.manifestMediaType ||
     observed.configurationDigest !== expected.configurationDigest ||
     observed.platform !== "linux" ||
@@ -195,11 +182,11 @@ export class SandboxImageCatalog {
         "Trusted image catalog cannot be empty.",
       );
     }
-    const references = new Set<string>();
+    const digests = new Set<string>();
     for (const image of images) {
       validateDeclaration(image);
-      const imageKey = key(image.manifestDigest, image.architecture);
-      if (this.#images.has(imageKey) || references.has(image.reference)) {
+      const imageKey = key(image.digest, image.architecture);
+      if (this.#images.has(imageKey) || digests.has(image.digest)) {
         throw new SandboxImageCatalogError(
           "configuration",
           "Trusted image catalog contains a duplicate identity.",
@@ -217,7 +204,7 @@ export class SandboxImageCatalog {
           arguments: Object.freeze([...image.profileProbe.arguments]),
         }),
       });
-      references.add(configured.reference);
+      digests.add(configured.digest);
       this.#images.set(imageKey, configured);
     }
   }
@@ -250,7 +237,7 @@ export class SandboxImageCatalog {
     let inspection: SandboxImageInspection;
     try {
       inspection = await this.inspector.inspect({
-        reference: image.reference,
+        reference: image.digest,
         architecture: image.architecture,
       });
     } catch (cause) {
@@ -267,9 +254,9 @@ export class SandboxImageCatalog {
     try {
       handshake = await this.handshake.verify({
         image: issueInspectedSandboxImage({
-          reference: image.reference,
+          reference: image.digest,
           localName: inspection.localName,
-          digest: image.manifestDigest,
+          digest: image.digest,
           configurationDigest: image.configurationDigest,
           architecture: image.architecture,
           profileProbe: image.profileProbe,
@@ -296,9 +283,9 @@ export class SandboxImageCatalog {
       );
     }
     return issueAdmittedSandboxImage({
-      reference: image.reference,
+      reference: image.digest,
       localName: inspection.localName,
-      digest: image.manifestDigest,
+      digest: image.digest,
       configurationDigest: image.configurationDigest,
       architecture: image.architecture,
       runtime: image.runtime,
