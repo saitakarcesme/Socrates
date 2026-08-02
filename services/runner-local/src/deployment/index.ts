@@ -17,3 +17,9 @@ export {
   type NodeBoundedRegularFileReadRequest,
 } from "./bounded-regular-file-contracts";
 export { NodeBoundedRegularFileReader } from "./bounded-regular-file-reader";
+export {
+  LocalRunnerPublicDeploymentLoadError,
+  type LocalRunnerPublicDeploymentLoadErrorCode,
+  type LocalRunnerPublicDeploymentInputs,
+} from "./public-deployment-contracts";
+export { NodeLocalRunnerPublicDeploymentLoader } from "./public-deployment-loader";

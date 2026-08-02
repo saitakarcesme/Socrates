@@ -194,7 +194,9 @@ function admitJson<T>(
   return admitted;
 }
 
-function admitConfiguration(bytes: unknown): LocalRunnerConfigurationV1 {
+export function admitLocalRunnerConfigurationBytes(
+  bytes: unknown,
+): LocalRunnerConfigurationV1 {
   return admitJson(
     bytes,
     "configuration",
@@ -203,7 +205,7 @@ function admitConfiguration(bytes: unknown): LocalRunnerConfigurationV1 {
   );
 }
 
-function admitTrustedImages(
+export function admitLocalRunnerTrustedImageBytes(
   bytes: unknown,
 ): LocalRunnerTrustedImageCatalogConfigurationV1 {
   return admitJson(
@@ -238,7 +240,7 @@ export function parseLocalRunnerDeploymentBytes(
   } catch {
     return fail("configuration", "invalid_owner");
   }
-  const configuration = admitConfiguration(configurationBytes);
+  const configuration = admitLocalRunnerConfigurationBytes(configurationBytes);
 
   let trustedImageBytes: unknown;
   try {
@@ -246,7 +248,7 @@ export function parseLocalRunnerDeploymentBytes(
   } catch {
     return fail("trusted_images", "invalid_owner");
   }
-  const trustedImages = admitTrustedImages(trustedImageBytes);
+  const trustedImages = admitLocalRunnerTrustedImageBytes(trustedImageBytes);
 
   let credentialBytes: unknown;
   try {

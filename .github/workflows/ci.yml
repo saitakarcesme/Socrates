@@ -23,6 +23,7 @@ jobs:
       DATABASE_URL: postgresql://socrates:socrates@localhost:5432/socrates_ci
       MANUAL_RESEARCH_ENABLED: "true"
       SOCRATES_TEST_FIFO: /tmp/socrates-ci-bounded-reader/input.fifo
+      SOCRATES_TEST_PUBLIC_DEPLOYMENT: "1"
 
     services:
       postgres:
@@ -85,6 +86,14 @@ jobs:
           install -d -m 0700 "$(dirname "$SOCRATES_TEST_FIFO")"
           mkfifo -m 0444 "$SOCRATES_TEST_FIFO"
 
+      - name: Provision public deployment fixture
+        run: |
+          sudo install -d -o root -g root -m 0755 /etc/socrates/runner-local
+          sudo install -o root -g root -m 0444 .github/fixtures/local-runner/configuration.v1.canonical /etc/socrates/runner-local/configuration.v1.json
+          sudo install -o root -g root -m 0444 .github/fixtures/local-runner/trusted-images.v1.canonical /etc/socrates/runner-local/trusted-images.v1.json
+          sudo truncate -s -1 /etc/socrates/runner-local/configuration.v1.json
+          sudo truncate -s -1 /etc/socrates/runner-local/trusted-images.v1.json
+
       - name: Test workspace units
         run: DATABASE_URL= pnpm test
 
@@ -100,6 +109,12 @@ jobs:
       - name: Remove bounded-reader FIFO fixture
         if: ${{ always() }}
         run: rm -f "$SOCRATES_TEST_FIFO"
+
+      - name: Remove public deployment fixture
+        if: ${{ always() }}
+        run: |
+          sudo rm -f /etc/socrates/runner-local/configuration.v1.json /etc/socrates/runner-local/trusted-images.v1.json
+          sudo rmdir /etc/socrates/runner-local /etc/socrates
 
       - name: Validate native runner spool durability
         run: pnpm --filter @socrates/runner-local test:native-spool
