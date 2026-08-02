@@ -1639,7 +1639,7 @@ remain deferred.
 
 ### Slice 2.53 — OCI platform composition
 
-Status: Planned on 2026-08-02.
+Status: Admitted on 2026-08-02.
 
 Architecture decision: ADR-090.
 
@@ -1662,6 +1662,17 @@ Exit: adversarial and behavioral composition tests prove configuration-first
 ordering, exact policy derivation, one process/host/clock/identity authority,
 catalog/backend sharing, immutable ports, zero construction effects, and no
 runner activation.
+
+Admission: architecture commit `64f6299` preceded implementation commit
+`48f641b`; 18 platform tests, ten identity-source tests, 24 backend tests, six
+handshake tests, and all 1,168 runner-local tests passed with every local
+repository gate green against fresh migrated PostgreSQL. The final local
+Chromium journey passed against `socrates_ci_adr090_e2e`. Main CI run
+`30731093798` passed every required Linux, PostgreSQL, API, runner, native
+durability, Chromium journey, production-build, and evidence-upload gate.
+ADR-090 is admitted. Concrete system adapters, loaders, lifecycle bootstrap,
+process entry, shutdown ownership, feature flags, and activation remain
+deferred.
 
 ## Acceptance gates
 

@@ -1,6 +1,6 @@
 # Slice 2.53 OCI platform composition
 
-Status: Planned
+Status: Admitted
 
 Date: 2026-08-02
 
@@ -142,3 +142,20 @@ authoritative.
 5. Construction is inert, opaque, immutable, deterministic, and redacted.
 6. No system adapter, loader, lifecycle, entry point, shutdown owner, feature
    flag, or runner activation lands.
+
+## Admission evidence
+
+Architecture commit `64f6299` preceded production code. Implementation commit
+`48f641b` delivered the frozen OCI platform, validated captured clock and probe
+identity authorities, exact resource-policy derivation, and explicit identity
+injection for backend profile attestation and image handshake probes.
+
+The final local pass covered 18 platform tests, ten identity-source tests, 24
+backend tests, six handshake tests, all 1,168 runner-local tests, formatting,
+types, lint, both architecture audits, the production build, and the Chromium
+measured project-to-learning journey against fresh migrated PostgreSQL. Main CI
+run `30731093798` passed every required Linux, PostgreSQL, API, runner, native
+durability, Chromium journey, production-build, and evidence-upload gate. No
+concrete system adapter, environment or credential loader, lifecycle
+bootstrap, process entry, shutdown owner, feature flag, or runner activation
+landed.

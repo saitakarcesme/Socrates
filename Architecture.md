@@ -4756,6 +4756,28 @@ flag, or activate the runner. A later bootstrap ADR must supply the concrete
 system adapters and compose this platform with ADR-088 before any process can
 start. `LocalRunnerNotEnabledError` remains production behavior.
 
+Architecture commit `64f6299` preceded production code. Implementation commit
+`48f641b` adds the frozen opaque OCI platform, one validated non-regressing
+epoch-clock adapter, one duplicate-rejecting probe-identity authority, exact
+engine and probe-profile policy derivation, and explicit probe identity
+injection into the existing backend and handshake verifier. Eighteen platform
+tests, ten identity-source tests, 24 backend tests, and six handshake tests
+prove configuration-first ordering, inert construction, method capture, exact
+policy mapping, clock rejection, identity uniqueness, recovery binding, and a
+successful inspector-to-readiness-to-attestation-to-handshake-to-catalog image
+admission through one resource graph.
+
+All 1,168 runner-local tests and every local repository gate passed against
+fresh migrated PostgreSQL databases, including production build and the final
+Chromium measured project-to-learning journey against
+`socrates_ci_adr090_e2e`. Main CI run `30731093798` passed every formatting,
+type, lint, architecture-audit, PostgreSQL, API, runner, Linux native
+durability, Chromium product-journey, production-build, and evidence-upload
+gate. This admits ADR-090 and closes Slice 2.53. Concrete process/host/identity
+adapters, environment and credential loading, lifecycle bootstrap, process
+entry, shutdown ownership, feature flags, and runner activation remain
+separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
