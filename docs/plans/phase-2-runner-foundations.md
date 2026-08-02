@@ -1573,7 +1573,7 @@ loading, process startup, shutdown ownership, and enablement remain deferred.
 
 ### Slice 2.51 — authenticated control-plane composition
 
-Status: Planned on 2026-08-02.
+Status: Admitted on 2026-08-02.
 
 Architecture decision: ADR-088.
 
@@ -1593,6 +1593,16 @@ Detailed plan: `docs/plans/slice-2.51-authenticated-control-plane-composition.md
 Exit: adversarial and transport integrations prove configuration-before-secret
 ordering, inert construction, exact authenticated client mapping, credential
 redaction, one retained lifecycle, and no ambient or duplicate authority.
+
+Admission: architecture commit `e1150cf` preceded implementation commit
+`01c49fd`; 19 focused authenticated lifecycle tests and the strict heartbeat
+transport regression passed, with all 1,077 runner-local tests and every local
+repository gate green against fresh migrated PostgreSQL. Main CI run
+`30728698907` passed every required Linux, PostgreSQL, API, runner, native
+durability, Chromium journey, production-build, and evidence-upload gate.
+ADR-088 is admitted. Credential loading/refresh, environment, trusted image
+declarations, OCI/platform bootstrap, process startup, shutdown ownership, and
+enablement remain deferred.
 
 ## Acceptance gates
 

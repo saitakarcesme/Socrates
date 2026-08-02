@@ -4587,6 +4587,26 @@ handshake verifier, process entry point, OS signal handling, shutdown timeout,
 feature flag, or runner activation. ADR-086 engine fields remain unconsumed and
 `LocalRunnerNotEnabledError` remains the production entry-point behavior.
 
+Architecture commit `e1150cf` preceded production code. Implementation commit
+`01c49fd` adds the frozen opaque authenticated lifecycle, constructs one exact
+`RunnerHttpClient`, fixes strict heartbeat route-parameter projection, and
+isolates the fake-runner integration from shared demo data. Nineteen focused
+composition tests prove configuration-before-secret ordering, inert and
+redacted construction, dependency capture, retained failure, exact timeout and
+response/source bounds, authenticated idle operation, and one measured source
+flow through the same client. The transport suite separately locks the valid
+heartbeat request and route projection.
+
+All 1,077 runner-local tests and every locally applicable repository gate
+passed with fresh migrated PostgreSQL, including a parallel full-workspace run
+against `socrates_ci_adr088_full_retry`, the Chromium measured-research journey
+against `socrates_ci_adr088_e2e`, and the production build. Main CI run
+`30728698907` passed every PostgreSQL, API, runner, Linux native durability,
+Chromium product-journey, production-build, and evidence-upload gate. This
+admits ADR-088 and closes Slice 2.51. Credential loading and refresh, trusted
+image declarations, OCI/platform bootstrap, process entry, shutdown ownership,
+feature flags, and runner enablement remain separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

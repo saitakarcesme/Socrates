@@ -1,6 +1,6 @@
 # Slice 2.51 authenticated control-plane composition
 
-Status: Planned
+Status: Admitted
 
 Date: 2026-08-02
 
@@ -94,3 +94,22 @@ returned or retried.
 5. Configuration and explicit injected inputs are the only authorities.
 6. No loader, refresh, OCI/image bootstrap, process entry, shutdown owner,
    feature flag, or runner enablement lands.
+
+## Admission evidence
+
+Architecture commit `e1150cf` preceded production code. Implementation commit
+`01c49fd` adds the frozen opaque authenticated lifecycle and one exactly mapped
+HTTP client. Nineteen focused tests cover the adversarial matrix, configured
+timeout and response/source ceilings, authenticated idle operation, and a real
+measured source flow; the transport suite locks the strict heartbeat route and
+body projection. The fake-runner PostgreSQL integration now owns an isolated
+workspace graph, so parallel repository tests cannot mutate demo read-model
+fixtures.
+
+All 1,077 runner-local tests and every local format, type, lint, dependency-
+audit, workspace-test, Chromium journey, and production-build gate passed with
+fresh migrated PostgreSQL. Main CI run `30728698907` passed every PostgreSQL,
+API, runner, Linux native durability, Chromium product-journey, production-
+build, and evidence-upload gate. Credential loading and refresh, environment,
+trusted image declarations, OCI/platform bootstrap, process entry, shutdown
+ownership, feature flags, and runner activation did not land.
