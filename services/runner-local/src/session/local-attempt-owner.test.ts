@@ -28,6 +28,7 @@ import {
   LocalAttemptOwnerError,
   type LocalAttemptOwnerOptions,
 } from "./local-attempt-owner";
+import { LocalAttemptDispatchLoop } from "./local-attempt-dispatch-loop";
 import taskFixture from "../../../../packages/contracts/fixtures/runner/task-v2.json";
 import { issueVerifiedArtifact } from "../../../../packages/artifact-store/src/verification";
 
@@ -346,6 +347,36 @@ function harness(
 }
 
 describe("LocalAttemptOwner", () => {
+  it("drives one real idle owner cycle through the observed dispatch lifecycle", async () => {
+    const parent = await root();
+    const value = harness(parent);
+    const owner = new LocalAttemptOwner(value.options);
+    const controller = new AbortController();
+    const reason = Symbol("idle lifecycle stop");
+    const wait = vi.fn(async () => {
+      controller.abort(reason);
+      return Promise.reject(reason);
+    });
+    const observe = vi.fn(async () => undefined);
+    const loop = new LocalAttemptDispatchLoop({
+      owner,
+      delay: { wait },
+      observer: { observe },
+      pollIntervalMs: 25,
+    });
+
+    await expect(loop.run(controller.signal)).resolves.toEqual({
+      state: "stopped",
+    });
+    expect(value.acquireTaskDelivery).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledWith({ state: "idle" });
+    expect(wait).toHaveBeenCalledWith(25, controller.signal);
+    expect(value.order.slice(0, 2)).toEqual([
+      "sandbox.recover",
+      "source.recover",
+    ]);
+  });
+
   it("constructs without recovery, filesystem, transport, or session effects", async () => {
     const parent = await root();
     const value = harness(parent);

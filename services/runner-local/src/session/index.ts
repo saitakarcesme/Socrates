@@ -24,6 +24,14 @@ export {
   type LocalAttemptSpoolConfiguration,
 } from "./local-attempt-owner";
 export {
+  LocalAttemptDispatchLoop,
+  LocalAttemptDispatchLoopError,
+  type LocalAttemptDispatchDelay,
+  type LocalAttemptDispatchLoopResult,
+  type LocalAttemptDispatchObserver,
+  type LocalAttemptDispatchOwner,
+} from "./local-attempt-dispatch-loop";
+export {
   StartupGatedAttemptDispatcher,
   StartupGatedAttemptDispatcherError,
   type StartupGatedAttemptComposition,
