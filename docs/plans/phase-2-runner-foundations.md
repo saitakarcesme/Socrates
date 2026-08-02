@@ -1546,6 +1546,8 @@ Architecture decision: ADR-087.
 Detailed plan: `docs/plans/slice-2.50-attempt-lifecycle-composition.md`.
 
 - admit configuration before touching any external capability;
+- align outer configuration bounds with every admitted constructor before
+  composing the graph;
 - compose artifact, source, resolver, request, owner, and dispatch resources
   from the single configuration snapshot;
 - inject already-authorized control-plane, sandbox, image, timing, identity,

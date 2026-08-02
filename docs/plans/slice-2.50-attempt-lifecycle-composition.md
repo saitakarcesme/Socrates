@@ -82,13 +82,15 @@ No failed construction exposes or retries a partial graph.
 ## Delivery order
 
 1. Commit ADR-087 and this plan before production code.
-2. Add the lifecycle composition module and narrow error/result contract.
-3. Map every consumed ADR-086 field once into admitted constructors.
-4. Add adversarial construction and dependency-capture tests.
-5. Add real durable idle and measured-attempt composition integrations.
-6. Audit that platform resources, secrets, environment, process entry, and
+2. Align ADR-086 outer bounds with every already-admitted constructor so a
+   parsed configuration cannot fail later during graph composition.
+3. Add the lifecycle composition module and narrow error/result contract.
+4. Map every consumed ADR-086 field once into admitted constructors.
+5. Add adversarial construction and dependency-capture tests.
+6. Add real durable idle and measured-attempt composition integrations.
+7. Audit that platform resources, secrets, environment, process entry, and
    activation did not land.
-7. Run every local and GitHub Actions gate before admitting ADR-087.
+8. Run every local and GitHub Actions gate before admitting ADR-087.
 
 ## Exit criteria
 

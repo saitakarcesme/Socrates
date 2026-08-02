@@ -49,10 +49,11 @@ of the contract.
 
 - the control-plane URL is an HTTPS origin only;
 - roots are absolute, canonical, distinct, and pairwise non-nested;
-- heartbeat interval is shorter than lease duration;
-- revocation grace does not exceed lease duration;
+- heartbeat interval does not exceed one third of lease duration;
+- revocation grace does not exceed either lease duration or 60 seconds;
 - source file bytes do not exceed expanded bytes;
-- runtime protocol and child-output bounds do not exceed execution output;
+- runtime protocol can hold one complete admitted frame including its prefix,
+  and protocol/child-output bounds do not exceed execution output;
 - journal/spool per-item limits fit their respective total budgets;
 - all required numeric limits are safe integers with explicit positive or
   non-negative semantics.

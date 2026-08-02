@@ -4401,12 +4401,15 @@ particular source archive bytes, runtime output bytes, runner identity, engine
 executable, and lifecycle timing are not repeated in separate subtrees.
 
 Relational invariants are validated at the outer boundary. Heartbeat cadence
-must be strictly shorter than lease duration; revocation grace cannot exceed
-the lease; per-file source bytes cannot exceed expanded source bytes; archive
-bytes cannot exceed both transport and artifact admission because the shared
-field configures all three; protocol and child-output bounds cannot exceed the
-projected runtime-output policy; and spool/journal item limits must fit inside
-their total byte budgets. The exact accepted value is rebuilt into plain data
+must not exceed one third of lease duration, matching the admitted authority
+monitor; revocation grace cannot exceed either the lease or 60 seconds;
+per-file source bytes cannot exceed expanded source bytes; archive bytes
+cannot exceed both transport and artifact admission because the shared field
+configures all three; the protocol budget must hold one complete admitted
+runtime frame including its four-byte prefix, while protocol and child-output
+bounds cannot exceed the projected runtime-output policy; and spool/journal
+item limits must fit inside their total byte budgets. The exact accepted value
+is rebuilt into plain data
 and deeply frozen, including every nested object. Caller mutation cannot alter
 future resource authority.
 
@@ -4469,6 +4472,14 @@ roots configure artifact, source, journal, and spool ownership; and its
 execution, runtime, durability, lifecycle, and poll fields map once into the
 corresponding admitted owners. No duplicate fallback or default authority is
 introduced.
+
+Composition is allowed to consume only configurations that every downstream
+constructor can accept. Before the lifecycle implementation lands, ADR-086's
+outer schema must enforce the already-admitted one-third heartbeat ceiling,
+60-second revocation ceiling, and minimum complete-frame protocol budget.
+Those are compatibility constraints, not new lifecycle defaults: invalid data
+must remain `invalid_configuration` at the outer boundary and may not leak as
+a later `composition_failed` constructor error.
 
 The lifecycle exposes only `run(signal)` and the fixed stopped result. It does
 not expose constructed stores, roots, configuration, control-plane transport,
