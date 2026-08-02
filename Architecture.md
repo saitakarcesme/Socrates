@@ -5633,6 +5633,112 @@ passed. This admits ADR-098 and closes Slice 2.61. Fetch and observer policy,
 ADR-093 bootstrap, process entry, signals, shutdown, activation, and runner
 enablement remain separate decisions.
 
+### ADR-099: one origin-bound resource owns control-plane network authority
+
+ADR-093 requires an explicit fetch capability, but an ambient
+`globalThis.fetch` would inherit process-global dispatcher decisions and would
+not give the future resource graph anything to close. Slice 2.62 therefore adds
+one inert `NodeLocalRunnerControlPlaneFetchResource`. Its constructor accepts
+only an object with one unknown `origin` value, re-admits that value as the
+exact canonical HTTPS origin already required by the local-runner
+configuration contract, creates one private dispatcher, and exposes one frozen
+`fetch` capability plus one asynchronous `close()` operation. It does not
+instantiate ADR-093 or perform a request during construction.
+
+The production dispatcher is a package-pinned `undici@6.26.0` `Agent`. Undici
+6 is the supported line for the repository's Node 22 runtime. The resource
+passes that agent on every `undici.fetch` call and never calls
+`setGlobalDispatcher`, reads `getGlobalDispatcher` as configuration, replaces
+`globalThis.fetch`, or mutates another process-global network setting. The
+agent uses direct connections only: `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`,
+`NODE_USE_ENV_PROXY`, and ambient Undici dispatcher state are not read or
+interpreted. Proxy support, if ever required, needs a new admitted deployment
+contract and architecture decision rather than an environment fallback.
+
+The private agent fixes certificate verification on, fixes the minimum
+protocol to TLS 1.2, disables HTTP/2, disables dispatcher redirects, permits no
+dispatcher retry layer, uses one-request HTTP/1.1 pipelining, enables Node's
+IPv6/IPv4 family autoselection, and caps the pool at four connections for the
+single admitted origin. Request-level abort and total operation time remain
+owned by `RunnerHttpClient` and its admitted `controlPlane.timeoutMs`; response
+and source byte ceilings remain owned by that transport and source stream. The
+agent does not add a competing timer, response buffer, decompressor, cache,
+cookie jar, authentication store, retry policy, or telemetry authority.
+
+TLS trust roots remain the Node process's launch-time trust set. This includes
+Node's bundled roots and any administrator-provisioned system or
+`NODE_EXTRA_CA_CERTS` roots selected before process launch. The resource never
+accepts a CA, key, certificate, passphrase, TLS callback, lookup function,
+socket factory, or dispatcher override, and explicit
+`rejectUnauthorized: true` prevents the capability from opting out of peer
+verification. Process launch policy and a future systemd unit remain
+responsible for the allowed trust-store flags and environment; this slice does
+not enumerate or silently rewrite process environment.
+
+Every call must receive one real `URL` object whose canonical origin exactly
+equals the constructor origin, whose pathname begins `/v1/runner/`, and whose
+username, password, search, and hash are empty. The request must explicitly be
+`POST`, use `redirect: "manual"`, and supply an `AbortSignal`. Strings,
+`Request` objects, alternate origins, non-HTTPS URLs, origin-confusion forms,
+out-of-scope paths, query or fragment variants, absent or different methods,
+redirect modes, missing or invalid signals, and calls after close begins fail
+before dispatcher access. The resource overwrites the nonstandard dispatcher
+field after copying the admitted standard init, so a structural caller cannot
+replace its private agent. Headers, bearer credentials, body encoding, routes,
+timeouts, response media types, and byte bounds remain the authenticated
+transport's responsibilities.
+
+Native fetch rejection is normalized to a frozen, cause-free
+`NodeLocalRunnerControlPlaneFetchError` with code `network_failed`. Policy
+rejection is `invalid_request`, use after shutdown begins is `closed`, invalid
+construction input is `invalid_origin`, and dispatcher drain failure is
+`close_failed`. Messages and serialized surfaces contain no origin, URL, host,
+port, path, query, header, credential, body, proxy value, certificate detail,
+socket address, native code, stack annotation, or nested cause. The existing
+transport can still distinguish caller abort and its own timeout from a generic
+network outcome by inspecting the signals it owns.
+
+The resource begins open. `close()` synchronously transitions it to closing,
+prevents every later dispatch, invokes the private agent's graceful `close()`
+exactly once, and returns the same settlement to all concurrent or repeated
+callers. Requests already accepted before that transition are allowed to
+settle while the agent drains; a later bootstrap must abort the application
+first and then close this resource. A successful close leaves it closed. A
+failed close remains a single normalized failed settlement rather than
+reopening, retrying, destroying, or replacing the agent. Forced destruction,
+shutdown deadlines, signal ordering, and process exit policy remain later
+resource-graph decisions.
+
+A package-private deterministic core may inject only a dispatcher-shaped fetch
+operation and one close operation so tests can observe ordering and failure
+settlement without a socket. The public production constructor accepts neither
+operation. Tests must prove strict origin admission, silent construction,
+fixed request projection, all pre-dispatch denials, private-dispatcher
+replacement, native failure normalization, in-flight drain behavior, exact
+once close, shared close settlement, no reopen after close failure, immutable
+public surfaces, and complete redaction. Linux CI must run a real local TLS
+fixture under a test-only CA admitted at Node process launch, prove a TLS 1.2+
+success, manual redirect non-following, direct connection despite hostile proxy
+environment values, global-dispatcher identity preservation, rejection of an
+untrusted peer, and zero proxy/redirect target connections. Committed fixture
+keys are test-only identities and are never production inputs.
+
+This decision follows Node's official
+[`fetch`](https://nodejs.org/docs/latest/api/globals.html#fetch) and
+[`TLS`](https://nodejs.org/api/tls.html) contracts and Undici's official
+[`Agent`](https://github.com/nodejs/undici/blob/v6.26.0/docs/docs/api/Agent.md),
+[`Client`](https://github.com/nodejs/undici/blob/v6.26.0/docs/docs/api/Client.md),
+and [`fetch`](https://github.com/nodejs/undici/tree/v6.26.0#undicifetchinput-init-promise)
+contracts. Node documents per-request dispatchers and process-global dispatcher
+effects; Undici documents private dispatchers, inert clients until work is
+queued, direct and proxy agents as separate capabilities, graceful dispatcher
+closure, and Node TLS option forwarding.
+
+This decision does not define observer policy, compose ADR-093, load deployment
+inputs, create a process entry point or systemd unit, handle signals, set a
+shutdown deadline, own process exit, expose an activation flag, or enable the
+runner.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
