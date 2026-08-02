@@ -31,6 +31,10 @@ export type {
 } from "./backend";
 export type { SandboxAttemptIdentity, SandboxOwnership } from "./identity";
 export type { ProcessExecutor, ProcessRequest, ProcessResult } from "./process";
+export type {
+  SandboxProbeIdentity,
+  SandboxProbeIdentitySource,
+} from "./probe-identity";
 export type { SandboxTerminationReceipt } from "./termination";
 export type {
   AdmittedSandboxImage,

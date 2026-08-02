@@ -103,6 +103,39 @@ describe("nerdctl image handshake verifier", () => {
     expect(backend.calls[0]?.identity.runnerId).toBe(fixtureIdentity.runnerId);
   });
 
+  it("captures and uses the injected probe identity source", async () => {
+    const backend = new FakeBackend(
+      result(
+        framed({
+          type: "runtime.handshake",
+          abi: runtimeAbi,
+          buildDigest,
+        }),
+      ),
+    );
+    const next = () => ({
+      taskId: "40000000-0000-4000-8000-000000000004",
+      attemptId: "50000000-0000-4000-8000-000000000005",
+    });
+    const source = { next };
+    const verifier = new NerdctlImageHandshakeVerifier(backend, {
+      runnerId: fixtureIdentity.runnerId,
+      profile: fixtureProfile,
+      probeIdentitySource: source,
+    });
+    source.next = () => {
+      throw new Error("mutated source");
+    };
+
+    await verifier.verify({ image, runtime });
+    expect(backend.calls[0]?.identity).toEqual({
+      runnerId: fixtureIdentity.runnerId,
+      taskId: "40000000-0000-4000-8000-000000000004",
+      attemptId: "50000000-0000-4000-8000-000000000005",
+      fence: 1,
+    });
+  });
+
   it.each([
     [
       "extra frame",

@@ -20,6 +20,7 @@ import { sandboxTerminationReceipt } from "./termination";
 import type { ProcessExecutor, ProcessRequest, ProcessResult } from "./process";
 import type { ReadinessVerifier } from "./readiness";
 import type { MaterializedSourceSnapshot } from "../source/capability";
+import type { SandboxProbeIdentitySource } from "./probe-identity";
 
 const deploymentId = "test-deployment";
 
@@ -120,6 +121,7 @@ function deferred<T>() {
 function backend(
   processes: ProcessExecutor,
   readiness = new PassingReadiness(),
+  probeIdentitySource?: SandboxProbeIdentitySource,
 ) {
   return {
     readiness,
@@ -127,6 +129,7 @@ function backend(
       deploymentId,
       runnerId: fixtureIdentity.runnerId,
       now: () => 1_000,
+      probeIdentitySource,
     }),
   };
 }
@@ -264,6 +267,37 @@ function cancellationHarness(
 }
 
 describe("nerdctl sandbox backend", () => {
+  it("uses an injected probe identity for profile attestation", async () => {
+    const processes = new LifecycleProcesses();
+    const probeIdentity = {
+      taskId: "40000000-0000-4000-8000-000000000004",
+      attemptId: "50000000-0000-4000-8000-000000000005",
+    };
+    const { value } = backend(processes, new PassingReadiness(), {
+      next: () => probeIdentity,
+    });
+
+    await value.execute({
+      identity: fixtureIdentity,
+      image: fixtureImage,
+      profile: fixtureProfile,
+      command: { executable: "/bin/true", arguments: [] },
+    });
+
+    const creates = processes.requests.filter(
+      (request) => request.arguments[0] === "create",
+    );
+    const expectedProbe = createSandboxOwnership(deploymentId, {
+      runnerId: fixtureIdentity.runnerId,
+      ...probeIdentity,
+      fence: 1,
+    });
+    expect(creates[0]?.arguments).toContain(expectedProbe.containerName);
+    expect(creates[1]?.arguments).toContain(
+      createSandboxOwnership(deploymentId, fixtureIdentity).containerName,
+    );
+  });
+
   it("validates and freezes exact termination receipts", () => {
     const absent = sandboxTerminationReceipt({ state: "absent" });
     const terminated = sandboxTerminationReceipt({

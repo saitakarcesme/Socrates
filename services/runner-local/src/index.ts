@@ -31,3 +31,4 @@ export * from "./supervision/index";
 export * from "./execution/index";
 export * from "./session/index";
 export * from "./configuration/index";
+export * from "./platform/index";

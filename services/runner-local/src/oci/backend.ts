@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { assertAdmittedImage, assertInspectedImage } from "../image/capability";
 import {
   createSandboxOwnership,
@@ -38,6 +36,10 @@ import type {
   SandboxImageAuthority,
 } from "../image/capability";
 import type { ReadinessVerifier, SandboxReadiness } from "./readiness";
+import {
+  captureSandboxProbeIdentitySource,
+  type SandboxProbeIdentitySource,
+} from "./probe-identity";
 
 type JsonObject = Record<string, unknown>;
 
@@ -96,6 +98,7 @@ export type NerdctlSandboxBackendOptions = Readonly<{
   maximumControlOutputBytes?: number;
   maximumExecutionOutputBytes?: number;
   now?: () => number;
+  probeIdentitySource?: SandboxProbeIdentitySource;
 }>;
 
 type ActiveSandbox = {
@@ -215,6 +218,7 @@ export class NerdctlSandboxBackend {
   private readonly maximumControlOutputBytes: number;
   private readonly maximumExecutionOutputBytes: number;
   private readonly now: () => number;
+  private readonly probeIdentities: SandboxProbeIdentitySource;
   private readonly active = new Map<string, ActiveSandbox>();
   private readonly profileAttestations = new Map<string, number>();
   private readiness: { value: SandboxReadiness; expiresAt: number } | undefined;
@@ -237,6 +241,9 @@ export class NerdctlSandboxBackend {
     this.maximumExecutionOutputBytes =
       options.maximumExecutionOutputBytes ?? 256 * 1_024;
     this.now = options.now ?? Date.now;
+    this.probeIdentities = captureSandboxProbeIdentitySource(
+      options.probeIdentitySource,
+    );
   }
 
   invalidateReadiness(): void {
@@ -373,11 +380,12 @@ export class NerdctlSandboxBackend {
     if ((this.profileAttestations.get(attestationKey) ?? 0) > this.now())
       return;
 
+    const probeIdentity = this.probeIdentities.next();
     const result = await this.executePrepared({
       identity: {
         runnerId: this.options.runnerId,
-        taskId: randomUUID(),
-        attemptId: randomUUID(),
+        taskId: probeIdentity.taskId,
+        attemptId: probeIdentity.attemptId,
         fence: 1,
       },
       image,

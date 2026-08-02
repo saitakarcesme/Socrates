@@ -3,7 +3,6 @@ import {
   RuntimeMessageDecoder,
   runtimeFrameSchema,
 } from "@socrates/runtime-protocol";
-import { randomUUID } from "node:crypto";
 
 import type { InspectedSandboxImage } from "./capability";
 import type { SandboxImageHandshakeVerifier } from "./catalog";
@@ -12,6 +11,10 @@ import type {
   SandboxImageProbeExecution,
 } from "../oci/backend";
 import type { SandboxCommand, SandboxResourceProfile } from "../oci/profile";
+import {
+  captureSandboxProbeIdentitySource,
+  type SandboxProbeIdentitySource,
+} from "../oci/probe-identity";
 
 export interface InspectedImageExecutor {
   executeInspectedImage(
@@ -23,12 +26,14 @@ export type NerdctlImageHandshakeVerifierOptions = Readonly<{
   runnerId: string;
   profile: SandboxResourceProfile;
   maximumFrameBytes?: number;
+  probeIdentitySource?: SandboxProbeIdentitySource;
 }>;
 
 export class NerdctlImageHandshakeVerifier implements SandboxImageHandshakeVerifier {
   readonly #runnerId: string;
   readonly #profile: SandboxResourceProfile;
   readonly #maximumFrameBytes: number;
+  readonly #probeIdentities: SandboxProbeIdentitySource;
 
   constructor(
     readonly backend: InspectedImageExecutor,
@@ -39,6 +44,9 @@ export class NerdctlImageHandshakeVerifier implements SandboxImageHandshakeVerif
     this.#runnerId = options.runnerId;
     this.#profile = Object.freeze({ ...options.profile });
     this.#maximumFrameBytes = options.maximumFrameBytes ?? 16 * 1_024;
+    this.#probeIdentities = captureSandboxProbeIdentitySource(
+      options.probeIdentitySource,
+    );
     if (
       !Number.isSafeInteger(this.#maximumFrameBytes) ||
       this.#maximumFrameBytes < 1
@@ -51,11 +59,12 @@ export class NerdctlImageHandshakeVerifier implements SandboxImageHandshakeVerif
     image: InspectedSandboxImage;
     runtime: SandboxCommand;
   }): Promise<Readonly<{ abi: string; buildDigest: string }>> {
+    const probeIdentity = this.#probeIdentities.next();
     const result = await this.backend.executeInspectedImage({
       identity: {
         runnerId: this.#runnerId,
-        taskId: randomUUID(),
-        attemptId: randomUUID(),
+        taskId: probeIdentity.taskId,
+        attemptId: probeIdentity.attemptId,
         fence: 1,
       },
       image: input.image,
