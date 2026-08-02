@@ -1537,6 +1537,30 @@ Chromium journey, production-build, and evidence-upload gate. ADR-086 is
 admitted. Environment and credential loading, resource composition, shutdown
 ownership, and runner enablement remain deferred.
 
+### Slice 2.50 — inert attempt lifecycle composition
+
+Status: Planned on 2026-08-02.
+
+Architecture decision: ADR-087.
+
+Detailed plan: `docs/plans/slice-2.50-attempt-lifecycle-composition.md`.
+
+- admit configuration before touching any external capability;
+- compose artifact, source, resolver, request, owner, and dispatch resources
+  from the single configuration snapshot;
+- inject already-authorized control-plane, sandbox, image, timing, identity,
+  durability, and observation capabilities;
+- expose only one retained `run(signal)` lifecycle;
+- prove inert construction, exact field mapping, method capture, real durable
+  startup, and fail-stop ownership;
+- keep platform transport/OCI/image construction, secrets, environment,
+  process startup, shutdown, and enablement out of scope.
+
+Exit: real and adversarial tests prove configuration precedes dependency
+access, construction has no effects, every composed authority comes from one
+snapshot or explicit capability, and the first run owns the existing durable
+attempt lifecycle without exposing internal resources.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

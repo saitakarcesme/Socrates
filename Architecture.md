@@ -4438,6 +4438,64 @@ admits ADR-086 and closes Slice 2.49. Environment and credential loading,
 resource composition, shutdown ownership, and runner enablement remain
 separate decisions.
 
+### ADR-087: Attempt lifecycle composition is inert and capability-injected
+
+ADR-086 supplies one authoritative non-secret snapshot, but constructing a
+complete process graph would still require unresolved secret acquisition,
+authenticated transport creation, trusted image declarations, host process
+environment, and OCI readiness authority. Combining those concerns now would
+either smuggle environment/credential policy into composition or pretend that
+an unverified resource graph is production-ready. The next boundary will
+therefore compose only the admitted attempt lifecycle from capabilities whose
+platform authority has already been established elsewhere.
+
+`LocalRunnerAttemptLifecycle` will accept an unknown configuration candidate
+plus narrow external capabilities: one control-plane client that also opens
+source snapshots, one owned sandbox backend, one image-admission port, one
+lease scheduler, one monotonic time source, one dispatch observer, exact work
+journal and spool identity sources, and one directory-sync capability. It
+parses ADR-086 configuration before reading any capability method. Invalid
+configuration therefore fails before dependency getters, filesystem, network,
+process, clock, UUID, timer, recovery, image, or sandbox effects.
+
+After configuration admission, construction captures or delegates only narrow
+methods and creates the inert local objects already admitted by earlier ADRs:
+one local content-addressed artifact store, one source materializer, one
+attempt-scoped bounded resolver factory, one runtime request materializer, one
+`LocalAttemptOwner`, and one retained `LocalAttemptDispatchLoop`. The shared
+ADR-086 source archive field configures artifact download and extraction; its
+runner/deployment identity configures source and request materialization; its
+roots configure artifact, source, journal, and spool ownership; and its
+execution, runtime, durability, lifecycle, and poll fields map once into the
+corresponding admitted owners. No duplicate fallback or default authority is
+introduced.
+
+The lifecycle exposes only `run(signal)` and the fixed stopped result. It does
+not expose constructed stores, roots, configuration, control-plane transport,
+sandbox, image port, identity sources, or observer. Construction is entirely
+inert: local store and materializer constructors do not touch disk, owner and
+dispatch constructors do not recover or poll, and no external capability is
+invoked. The first explicit `run` retains the existing startup-first recovery,
+serial dispatch, authenticated attempt ownership, observation, delay, and
+fail-stop semantics. Concurrent or repeated calls share the dispatch loop's
+one operation.
+
+Configuration errors and composition/dependency errors receive separate fixed
+`LocalRunnerAttemptLifecycleError` codes and public messages with retained
+causes. Later mutation of supplied objects cannot redirect captured methods.
+No composition failure retries or leaves a runnable partial graph. A valid
+graph owns its internal resources for its lifetime and cannot be reconfigured.
+
+This layer deliberately does not construct `RunnerHttpClient`, credentials,
+`NodeProcessExecutor`, host readiness, `NerdctlSandboxBackend`, image inspector,
+handshake verifier, or trusted image catalog. It does not compare a supplied
+capability with the still-unconsumed ADR-086 control-plane and engine fields;
+the later platform-resource ADR must construct those capabilities from the
+same snapshot and prove that mapping. It also adds no environment/file loader,
+secret loader, process entry point, logging implementation, OS signal handler,
+shutdown timeout, runner feature flag, or activation. `LocalRunnerNotEnabledError`
+remains the production entry-point behavior.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
