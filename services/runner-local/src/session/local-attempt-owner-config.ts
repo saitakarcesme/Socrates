@@ -1,9 +1,15 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import {
+  sandboxAttemptIdentitySnapshot,
+  type SandboxAttemptIdentity,
+} from "../oci";
+
+import {
   ExecutionPlanProjector,
   type ExecutionImageAdmissionPort,
   type ExecutionSourceArtifactResolver,
+  type ExecutionSourceArtifactResolverFactory,
   type ExecutionSourceMaterializerPort,
   type LocalExecutionPolicy,
   type MonotonicTimeSource,
@@ -52,7 +58,7 @@ export type LocalAttemptOwnerOptions = Readonly<{
   controlPlane: RunnerControlPlaneClient;
   scheduler: LeaseAuthorityScheduler;
   time: MonotonicTimeSource;
-  artifacts: ExecutionSourceArtifactResolver;
+  artifactResolvers: ExecutionSourceArtifactResolverFactory;
   images: ExecutionImageAdmissionPort;
   requests: RuntimeRequestMaterializerPort;
   journal: LocalAttemptJournalConfiguration;
@@ -83,7 +89,7 @@ export type CapturedOptions = Readonly<{
   controlPlane: RunnerControlPlaneClient;
   scheduler: LeaseAuthorityScheduler;
   time: MonotonicTimeSource;
-  artifacts: ExecutionSourceArtifactResolver;
+  artifactResolvers: ExecutionSourceArtifactResolverFactory;
   images: ExecutionImageAdmissionPort;
   requests: RuntimeRequestMaterializerPort;
   journal: LocalAttemptJournalConfiguration;
@@ -155,10 +161,57 @@ function capturedTime(owner: MonotonicTimeSource): MonotonicTimeSource {
   return Object.freeze({ now: method(owner, "now") });
 }
 
-function capturedArtifacts(
-  owner: ExecutionSourceArtifactResolver,
-): ExecutionSourceArtifactResolver {
-  return Object.freeze({ resolve: method(owner, "resolve") });
+function sameIdentity(
+  left: SandboxAttemptIdentity,
+  right: SandboxAttemptIdentity,
+): boolean {
+  return (
+    left.runnerId === right.runnerId &&
+    left.taskId === right.taskId &&
+    left.attemptId === right.attemptId &&
+    left.fence === right.fence
+  );
+}
+
+function capturedArtifactResolvers(
+  owner: ExecutionSourceArtifactResolverFactory,
+): ExecutionSourceArtifactResolverFactory {
+  const create = method(owner, "create");
+  const issued = new WeakSet<object>();
+  return Object.freeze({
+    create(identity: SandboxAttemptIdentity): ExecutionSourceArtifactResolver {
+      let candidate: ExecutionSourceArtifactResolver;
+      try {
+        candidate = create(identity);
+        if (
+          typeof candidate !== "object" ||
+          candidate === null ||
+          issued.has(candidate) ||
+          !Object.isFrozen(candidate.identity) ||
+          typeof candidate.resolve !== "function"
+        ) {
+          throw new TypeError("Attempt resolver capability is invalid.");
+        }
+        const capturedIdentity = sandboxAttemptIdentitySnapshot(
+          candidate.identity,
+        );
+        if (!sameIdentity(capturedIdentity, identity)) {
+          throw new TypeError("Attempt resolver identity does not match.");
+        }
+        issued.add(candidate);
+        return Object.freeze({
+          identity: capturedIdentity,
+          resolve: candidate.resolve.bind(candidate),
+        });
+      } catch (cause) {
+        throw new LocalAttemptOwnerError(
+          "invalid_dependency",
+          "Local attempt artifact resolver factory returned invalid authority.",
+          { cause },
+        );
+      }
+    },
+  });
 }
 
 function capturedImages(
@@ -294,7 +347,7 @@ function snapshot(options: LocalAttemptOwnerOptions): CapturedOptions {
       controlPlane: capturedControlPlane(options.controlPlane),
       scheduler: capturedScheduler(options.scheduler),
       time: capturedTime(options.time),
-      artifacts: capturedArtifacts(options.artifacts),
+      artifactResolvers: capturedArtifactResolvers(options.artifactResolvers),
       images: capturedImages(options.images),
       requests,
       journal: Object.freeze({

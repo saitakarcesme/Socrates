@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BoundedSourceArtifactResolver,
   BoundedSourceArtifactResolverError,
+  BoundedSourceArtifactResolverFactory,
   type RunnerSourceSnapshotTransport,
   type SourceSnapshotStream,
 } from "./artifact-resolver";
@@ -357,4 +358,109 @@ describe("BoundedSourceArtifactResolver", () => {
       resolver.resolve({ snapshotId, digest: value.digest }),
     ).rejects.toMatchObject({ code: "invalid_artifact" });
   });
+});
+
+describe("BoundedSourceArtifactResolverFactory", () => {
+  it("constructs inertly and issues distinct exact-attempt capabilities", async () => {
+    const open = vi.fn(async () => undefined);
+    const put = vi.fn();
+    const factory = new BoundedSourceArtifactResolverFactory({
+      maximumArchiveBytes: 1_024,
+      transport: { open },
+      artifacts: { put },
+    });
+    const otherIdentity = Object.freeze({
+      ...identity,
+      attemptId: "50000000-0000-4000-8000-000000000005",
+      fence: identity.fence + 1,
+    });
+
+    expect(open).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+    const first = factory.create(identity);
+    const second = factory.create(otherIdentity);
+
+    expect(first).not.toBe(second);
+    expect(first.identity).toEqual(identity);
+    expect(second.identity).toEqual(otherIdentity);
+    expect(Object.isFrozen(first.identity)).toBe(true);
+    expect(Object.isFrozen(second.identity)).toBe(true);
+    expect(open).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("captures narrow dependency methods against later mutation", async () => {
+    const originalOpen = vi.fn(async () => undefined);
+    const transport = { open: originalOpen };
+    const artifacts = { put: vi.fn() };
+    const factory = new BoundedSourceArtifactResolverFactory({
+      maximumArchiveBytes: 1_024,
+      transport,
+      artifacts,
+    });
+    transport.open = vi.fn(async () => {
+      throw new Error("mutated transport");
+    });
+    artifacts.put = vi.fn(() => {
+      throw new Error("mutated store");
+    });
+
+    await expect(
+      factory.create(identity).resolve({
+        snapshotId,
+        digest: `sha256:${"a".repeat(64)}`,
+      }),
+    ).rejects.toMatchObject({ code: "source_unavailable" });
+    expect(originalOpen).toHaveBeenCalledOnce();
+    expect(transport.open).not.toHaveBeenCalled();
+    expect(artifacts.put).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid configuration before issuing authority", () => {
+    expect(
+      () =>
+        new BoundedSourceArtifactResolverFactory({
+          maximumArchiveBytes: 0,
+          transport: { open: vi.fn() },
+          artifacts: { put: vi.fn() },
+        }),
+    ).toThrow(expect.objectContaining({ code: "invalid_configuration" }));
+    expect(
+      () =>
+        new BoundedSourceArtifactResolverFactory({
+          maximumArchiveBytes: 1,
+          transport: {} as RunnerSourceSnapshotTransport,
+          artifacts: { put: vi.fn() },
+        }),
+    ).toThrow(expect.objectContaining({ code: "invalid_configuration" }));
+  });
+
+  it.each(["transport", "artifacts"] as const)(
+    "normalizes a throwing %s method getter",
+    (dependency) => {
+      const throwing = Object.defineProperty(
+        {},
+        dependency === "transport" ? "open" : "put",
+        {
+          get: () => {
+            throw new Error("private dependency failure");
+          },
+        },
+      );
+      expect(
+        () =>
+          new BoundedSourceArtifactResolverFactory({
+            maximumArchiveBytes: 1,
+            transport:
+              dependency === "transport"
+                ? (throwing as RunnerSourceSnapshotTransport)
+                : { open: vi.fn() },
+            artifacts:
+              dependency === "artifacts"
+                ? (throwing as Pick<ArtifactStore, "put">)
+                : { put: vi.fn() },
+          }),
+      ).toThrow(expect.objectContaining({ code: "invalid_configuration" }));
+    },
+  );
 });

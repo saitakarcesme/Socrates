@@ -2,6 +2,7 @@ export { NerdctlSandboxBackend, SandboxBackendError } from "./backend";
 export {
   createSandboxOwnership,
   runnerOwnershipLabels,
+  sandboxAttemptIdentitySnapshot,
   sandboxAttemptKey,
 } from "./identity";
 export {

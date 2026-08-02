@@ -28,6 +28,7 @@ import {
   LocalAttemptOwnerError,
   type LocalAttemptOwnerOptions,
 } from "./local-attempt-owner";
+import { captureLocalAttemptOwnerOptions } from "./local-attempt-owner-config";
 import { LocalAttemptDispatchLoop } from "./local-attempt-dispatch-loop";
 import taskFixture from "../../../../packages/contracts/fixtures/runner/task-v2.json";
 import { issueVerifiedArtifact } from "../../../../packages/artifact-store/src/verification";
@@ -229,6 +230,12 @@ function harness(
     executeRuntime: vi.fn(async () => runtimeOutcome()),
   };
   const artifact = issueVerifiedArtifact(execution.task.source.digest, 128);
+  const createArtifactResolver = vi.fn((identity) =>
+    Object.freeze({
+      identity: Object.freeze({ ...identity }),
+      resolve: async () => artifact,
+    }),
+  );
   const image = issueAdmittedSandboxImage({
     reference: execution.task.environment.imageDigest,
     localName: "trusted@digest",
@@ -280,7 +287,7 @@ function harness(
         return value;
       },
     },
-    artifacts: { resolve: async () => artifact },
+    artifactResolvers: { create: createArtifactResolver },
     images: { admit: async () => image },
     requests,
     journal: {
@@ -335,6 +342,7 @@ function harness(
     acquireTaskDelivery,
     claimTaskDelivery,
     controlPlane,
+    createArtifactResolver,
     heartbeat,
     options,
     order,
@@ -440,6 +448,82 @@ describe("LocalAttemptOwner", () => {
     expect(originalSandboxRecovery).toHaveBeenCalledOnce();
     expect(originalSourceRecovery).toHaveBeenCalledOnce();
     expect(originalAcquire).toHaveBeenCalledOnce();
+  });
+
+  it("captures resolver creation and rejects cross-attempt capability reuse", async () => {
+    const parent = await root();
+    const value = harness(parent);
+    const shared = Object.freeze({
+      identity: Object.freeze({
+        runnerId: execution.lease.runnerId,
+        taskId: execution.lease.taskId,
+        attemptId: execution.lease.attemptId,
+        fence: execution.lease.fence,
+      }),
+      resolve: vi.fn(async () => undefined),
+    });
+    const create = vi.fn(() => shared);
+    const artifactResolvers = { create };
+    const captured = captureLocalAttemptOwnerOptions({
+      ...value.options,
+      artifactResolvers,
+    });
+    artifactResolvers.create = vi.fn(() => {
+      throw new Error("mutated factory");
+    });
+
+    expect(captured.artifactResolvers.create(shared.identity)).toMatchObject({
+      identity: shared.identity,
+    });
+    expect(() => captured.artifactResolvers.create(shared.identity)).toThrow(
+      expect.objectContaining({
+        name: "LocalAttemptOwnerError",
+        code: "invalid_dependency",
+      }),
+    );
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(artifactResolvers.create).not.toHaveBeenCalled();
+  });
+
+  it("issues distinct exact capabilities for sequential attempt identities", async () => {
+    const parent = await root();
+    const value = harness(parent);
+    const issued: object[] = [];
+    const artifactResolvers = {
+      create: vi.fn((identity) => {
+        const resolver = Object.freeze({
+          identity: Object.freeze({ ...identity }),
+          resolve: vi.fn(async () => undefined),
+        });
+        issued.push(resolver);
+        return resolver;
+      }),
+    };
+    const captured = captureLocalAttemptOwnerOptions({
+      ...value.options,
+      artifactResolvers,
+    });
+    const firstIdentity = Object.freeze({
+      runnerId: execution.lease.runnerId,
+      taskId: execution.lease.taskId,
+      attemptId: execution.lease.attemptId,
+      fence: execution.lease.fence,
+    });
+    const secondIdentity = Object.freeze({
+      ...firstIdentity,
+      attemptId: "90000000-0000-4000-8000-000000000009",
+      fence: firstIdentity.fence + 1,
+    });
+
+    const first = captured.artifactResolvers.create(firstIdentity);
+    const second = captured.artifactResolvers.create(secondIdentity);
+
+    expect(first).not.toBe(second);
+    expect(issued[0]).not.toBe(issued[1]);
+    expect(first.identity).toEqual(firstIdentity);
+    expect(second.identity).toEqual(secondIdentity);
+    expect(Object.isFrozen(first.identity)).toBe(true);
+    expect(Object.isFrozen(second.identity)).toBe(true);
   });
 
   it.each([

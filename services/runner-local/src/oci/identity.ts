@@ -13,6 +13,35 @@ export type SandboxOwnership = Readonly<{
   labels: Readonly<Record<string, string>>;
 }>;
 
+export function sandboxAttemptIdentitySnapshot(
+  candidate: unknown,
+): SandboxAttemptIdentity {
+  if (
+    typeof candidate !== "object" ||
+    candidate === null ||
+    Array.isArray(candidate)
+  ) {
+    throw new TypeError("Sandbox attempt identity must be an object.");
+  }
+  const value = candidate as Record<string, unknown>;
+  const keys = Object.keys(value).sort();
+  const expected = ["attemptId", "fence", "runnerId", "taskId"];
+  if (
+    keys.length !== expected.length ||
+    !keys.every((key, index) => key === expected[index])
+  ) {
+    throw new TypeError("Sandbox attempt identity shape is invalid.");
+  }
+  const identity = {
+    runnerId: value["runnerId"],
+    taskId: value["taskId"],
+    attemptId: value["attemptId"],
+    fence: value["fence"],
+  } as SandboxAttemptIdentity;
+  sandboxAttemptKey(identity);
+  return Object.freeze({ ...identity });
+}
+
 const identifierPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

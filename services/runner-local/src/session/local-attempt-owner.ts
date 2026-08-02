@@ -81,7 +81,7 @@ export class LocalAttemptOwner {
           scheduler: this.#options.scheduler,
           sandbox: this.#options.sandbox,
           journal,
-          artifacts: this.#options.artifacts,
+          artifactResolvers: this.#options.artifactResolvers,
           images: this.#options.images,
           sources: this.#options.sources,
           requests: this.#options.requests,

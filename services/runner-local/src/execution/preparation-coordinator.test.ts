@@ -13,6 +13,7 @@ import {
   AttemptPreparationError,
   type ExecutionImageAdmissionPort,
   type ExecutionSourceArtifactResolver,
+  type ExecutionSourceArtifactResolverFactory,
   type ExecutionSourceMaterializerPort,
   type PreparedExecutionAttempt,
 } from "./preparation-coordinator";
@@ -78,11 +79,21 @@ async function harness(content = "owned source artifact") {
     profileProbe: { executable: "/probe", arguments: [] },
   });
   const order: string[] = [];
+  const identity = Object.freeze({
+    runnerId: execution.lease.runnerId,
+    taskId: execution.lease.taskId,
+    attemptId: execution.lease.attemptId,
+    fence: execution.lease.fence,
+  });
   const artifacts: ExecutionSourceArtifactResolver = {
+    identity,
     resolve: vi.fn(async () => {
       order.push("artifact");
       return artifact;
     }),
+  };
+  const artifactResolvers: ExecutionSourceArtifactResolverFactory = {
+    create: vi.fn(() => artifacts),
   };
   const images: ExecutionImageAdmissionPort = {
     admit: vi.fn(async () => {
@@ -108,12 +119,13 @@ async function harness(content = "owned source artifact") {
   const coordinator = new AttemptPreparationCoordinator({
     execution,
     projector: new ExecutionPlanProjector(policy),
-    artifacts,
+    artifactResolvers,
     images,
     sources,
   });
   return {
     artifact,
+    artifactResolvers,
     artifacts,
     coordinator,
     execution,
@@ -132,6 +144,10 @@ describe("AttemptPreparationCoordinator", () => {
     const prepared = await value.coordinator.prepare(controller.signal);
 
     expect(value.order).toEqual(["artifact", "image", "source"]);
+    expect(value.artifactResolvers.create).toHaveBeenCalledOnce();
+    expect(value.artifactResolvers.create).toHaveBeenCalledWith(
+      prepared.identity,
+    );
     expect(value.artifacts.resolve).toHaveBeenCalledWith({
       snapshotId: value.execution.task.source.snapshotId,
       digest: value.execution.task.source.digest,
@@ -160,7 +176,7 @@ describe("AttemptPreparationCoordinator", () => {
         ...policy,
         maximumWallTimeMs: value.execution.task.budget.wallTimeMs - 1,
       }),
-      artifacts: value.artifacts,
+      artifactResolvers: value.artifactResolvers,
       images: value.images,
       sources: value.sources,
     });
@@ -169,6 +185,7 @@ describe("AttemptPreparationCoordinator", () => {
       code: "policy_exceeded",
     });
     expect(value.order).toEqual([]);
+    expect(value.artifactResolvers.create).not.toHaveBeenCalled();
   });
 
   it("rejects pre-aborted preparation before any I/O", async () => {
@@ -180,6 +197,129 @@ describe("AttemptPreparationCoordinator", () => {
       expect.objectContaining({ code: "cancelled" }),
     );
     expect(value.order).toEqual([]);
+    expect(value.artifactResolvers.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "factory failure",
+      () => {
+        throw new Error("private factory failure");
+      },
+    ],
+    ["missing capability", () => undefined],
+    [
+      "mutable identity",
+      (value: Awaited<ReturnType<typeof harness>>) => ({
+        identity: { ...value.artifacts.identity },
+        resolve: value.artifacts.resolve,
+      }),
+    ],
+    [
+      "identity drift",
+      (value: Awaited<ReturnType<typeof harness>>) => ({
+        identity: Object.freeze({
+          ...value.artifacts.identity,
+          fence: value.artifacts.identity.fence + 1,
+        }),
+        resolve: value.artifacts.resolve,
+      }),
+    ],
+    [
+      "extra identity authority",
+      (value: Awaited<ReturnType<typeof harness>>) => ({
+        identity: Object.freeze({
+          ...value.artifacts.identity,
+          scope: "foreign",
+        }),
+        resolve: value.artifacts.resolve,
+      }),
+    ],
+    [
+      "missing resolve method",
+      (value: Awaited<ReturnType<typeof harness>>) => ({
+        identity: value.artifacts.identity,
+      }),
+    ],
+  ])("fails closed for %s resolver authority", async (_name, issue) => {
+    const value = await harness();
+    vi.mocked(value.artifactResolvers.create).mockImplementationOnce(
+      () => issue(value) as ExecutionSourceArtifactResolver,
+    );
+
+    await expect(value.coordinator.prepare()).rejects.toMatchObject({
+      code: "invalid_artifact_resolver",
+    });
+    expect(value.artifacts.resolve).not.toHaveBeenCalled();
+    expect(value.images.admit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["runnerId", "90000000-0000-4000-8000-000000000009"],
+    ["taskId", "90000000-0000-4000-8000-000000000009"],
+    ["attemptId", "90000000-0000-4000-8000-000000000009"],
+    ["fence", 99],
+  ] as const)("rejects resolver %s identity drift", async (field, drift) => {
+    const value = await harness();
+    vi.mocked(value.artifactResolvers.create).mockReturnValueOnce({
+      identity: Object.freeze({
+        ...value.artifacts.identity,
+        [field]: drift,
+      }),
+      resolve: value.artifacts.resolve,
+    });
+
+    await expect(value.coordinator.prepare()).rejects.toMatchObject({
+      code: "invalid_artifact_resolver",
+    });
+    expect(value.artifacts.resolve).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing", {}],
+    [
+      "throwing getter",
+      Object.defineProperty({}, "create", {
+        get: () => {
+          throw new Error("private getter failure");
+        },
+      }),
+    ],
+  ])(
+    "rejects a %s factory method at inert construction",
+    async (_name, factory) => {
+      const value = await harness();
+      expect(
+        () =>
+          new AttemptPreparationCoordinator({
+            execution: value.execution,
+            projector: new ExecutionPlanProjector(policy),
+            artifactResolvers:
+              factory as ExecutionSourceArtifactResolverFactory,
+            images: value.images,
+            sources: value.sources,
+          }),
+      ).toThrow(expect.objectContaining({ code: "invalid_artifact_resolver" }));
+      expect(value.order).toEqual([]);
+    },
+  );
+
+  it("captures the factory method and creates exactly one authority", async () => {
+    const value = await harness();
+    const original = value.artifactResolvers.create;
+    value.artifactResolvers.create = vi.fn(() => {
+      throw new Error("mutated factory");
+    });
+
+    const first = value.coordinator.prepare();
+    const second = value.coordinator.prepare();
+
+    expect(second).toBe(first);
+    await expect(first).resolves.toMatchObject({
+      identity: value.artifacts.identity,
+    });
+    expect(original).toHaveBeenCalledOnce();
+    expect(value.artifactResolvers.create).not.toHaveBeenCalled();
   });
 
   it("fails closed for unavailable and forged artifacts", async () => {
@@ -385,6 +525,7 @@ describe("AttemptPreparationCoordinator", () => {
     expect(right).toBe(left);
     await expect(left).resolves.toBe(await right);
     expect(value.artifacts.resolve).toHaveBeenCalledOnce();
+    expect(value.artifactResolvers.create).toHaveBeenCalledOnce();
     expect(value.images.admit).toHaveBeenCalledOnce();
     expect(value.sources.materialize).toHaveBeenCalledOnce();
   });
@@ -441,7 +582,7 @@ describe("AttemptPreparationCoordinator", () => {
     const coordinator = new AttemptPreparationCoordinator({
       execution: mutable,
       projector: new ExecutionPlanProjector(policy),
-      artifacts: value.artifacts,
+      artifactResolvers: value.artifactResolvers,
       images: value.images,
       sources: value.sources,
     });

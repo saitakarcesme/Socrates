@@ -15,6 +15,7 @@ export {
   AttemptPreparationError,
   type ExecutionImageAdmissionPort,
   type ExecutionSourceArtifactResolver,
+  type ExecutionSourceArtifactResolverFactory,
   type ExecutionSourceMaterializerPort,
   type PreparedExecutionAttempt,
 } from "./preparation-coordinator";

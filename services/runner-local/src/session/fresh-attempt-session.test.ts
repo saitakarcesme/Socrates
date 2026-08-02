@@ -290,6 +290,12 @@ function harness(
     order.push("artifact");
     return artifact;
   });
+  const createArtifactResolver = vi.fn((identity) =>
+    Object.freeze({
+      identity: Object.freeze({ ...identity }),
+      resolve,
+    }),
+  );
   const admit = vi.fn(async () => {
     order.push("image");
     return image;
@@ -350,7 +356,7 @@ function harness(
     scheduler,
     sandbox: { cancel, executeRuntime },
     journal: { commitExecutionStart, inspect, claimedExecution },
-    artifacts: { resolve },
+    artifactResolvers: { create: createArtifactResolver },
     images: { admit },
     sources: { materialize: materializeSource, release: releaseSource },
     requests: { materialize: materializeRequest, release: releaseRequest },
@@ -379,6 +385,7 @@ function harness(
   return {
     append,
     cancel,
+    createArtifactResolver,
     claimedExecution,
     commitExecutionStart,
     executeRuntime,

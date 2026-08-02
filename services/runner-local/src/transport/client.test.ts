@@ -7,7 +7,7 @@ import { LocalContentAddressedArtifactStore } from "@socrates/artifact-store/loc
 import type { RunnerEventV2 } from "@socrates/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import { BoundedSourceArtifactResolver } from "../source/artifact-resolver";
+import { BoundedSourceArtifactResolverFactory } from "../source/artifact-resolver";
 import { RunnerHttpClient, RunnerTransportError } from "./client";
 
 const credential = `srt1.${randomUUID()}.${"a".repeat(43)}`;
@@ -417,28 +417,61 @@ describe("runner HTTP client", () => {
     });
   });
 
-  it("feeds the bounded resolver through the authenticated HTTP boundary", async () => {
+  it("resolves two exact attempt authorities through HTTP into one local store", async () => {
     const root = await mkdtemp(join(tmpdir(), "socrates-http-source-"));
     try {
       const bytes = new TextEncoder().encode("resolver source");
       const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
-      const identity = {
+      const firstIdentity = {
         runnerId: randomUUID(),
         taskId: randomUUID(),
         attemptId: randomUUID(),
         fence: 8,
       };
-      const transport = client(async () => sourceResponse(bytes));
-      const resolver = new BoundedSourceArtifactResolver({
-        identity,
+      const secondIdentity = {
+        runnerId: firstIdentity.runnerId,
+        taskId: randomUUID(),
+        attemptId: randomUUID(),
+        fence: 9,
+      };
+      const requests: Array<{ url: string; body: unknown }> = [];
+      const transport = client(async (input, init) => {
+        requests.push({
+          url: String(input),
+          body: JSON.parse(String(init?.body)),
+        });
+        return sourceResponse(bytes);
+      });
+      const factory = new BoundedSourceArtifactResolverFactory({
         maximumArchiveBytes: 1_024,
         transport,
         artifacts: new LocalContentAddressedArtifactStore(root),
       });
+      const first = factory.create(firstIdentity);
+      const second = factory.create(secondIdentity);
 
       await expect(
-        resolver.resolve({ snapshotId: randomUUID(), digest }),
+        first.resolve({ snapshotId: randomUUID(), digest }),
       ).resolves.toMatchObject({ digest, sizeBytes: bytes.byteLength });
+      await expect(
+        second.resolve({ snapshotId: randomUUID(), digest }),
+      ).resolves.toMatchObject({ digest, sizeBytes: bytes.byteLength });
+      expect(requests).toHaveLength(2);
+      expect(requests[0]).toMatchObject({
+        url: expect.stringContaining(
+          `/tasks/${firstIdentity.taskId}/attempts/${firstIdentity.attemptId}/`,
+        ),
+        body: { fence: firstIdentity.fence },
+      });
+      expect(requests[1]).toMatchObject({
+        url: expect.stringContaining(
+          `/tasks/${secondIdentity.taskId}/attempts/${secondIdentity.attemptId}/`,
+        ),
+        body: { fence: secondIdentity.fence },
+      });
+      expect(first.identity).toEqual(firstIdentity);
+      expect(second.identity).toEqual(secondIdentity);
+      expect(first).not.toBe(second);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

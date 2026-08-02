@@ -5,7 +5,7 @@ import {
 } from "@socrates/artifact-store";
 
 import {
-  sandboxAttemptKey,
+  sandboxAttemptIdentitySnapshot,
   type SandboxAttemptIdentity,
 } from "../oci/identity";
 import { sourceSnapshotMediaType } from "./materializer";
@@ -23,6 +23,12 @@ export interface RunnerSourceSnapshotTransport {
     digest: string;
     signal?: AbortSignal;
   }): Promise<SourceSnapshotStream | undefined>;
+}
+
+export interface BoundedSourceArtifactResolverFactoryOptions {
+  maximumArchiveBytes: number;
+  transport: RunnerSourceSnapshotTransport;
+  artifacts: Pick<ArtifactStore, "put">;
 }
 
 export type ResolveSourceArtifactInput = Readonly<{
@@ -74,10 +80,10 @@ function validReference(input: ResolveSourceArtifactInput): void {
 }
 
 export class BoundedSourceArtifactResolver {
-  readonly #identity: SandboxAttemptIdentity;
+  readonly identity: SandboxAttemptIdentity;
   readonly #maximumArchiveBytes: number;
   readonly #transport: RunnerSourceSnapshotTransport;
-  readonly #artifacts: ArtifactStore;
+  readonly #artifacts: Pick<ArtifactStore, "put">;
   #authority: ResolveSourceArtifactInput | undefined;
   #resolution: Promise<VerifiedArtifact> | undefined;
 
@@ -85,10 +91,10 @@ export class BoundedSourceArtifactResolver {
     identity: SandboxAttemptIdentity;
     maximumArchiveBytes: number;
     transport: RunnerSourceSnapshotTransport;
-    artifacts: ArtifactStore;
+    artifacts: Pick<ArtifactStore, "put">;
   }) {
     try {
-      sandboxAttemptKey(options.identity);
+      this.identity = sandboxAttemptIdentitySnapshot(options.identity);
     } catch (cause) {
       throw new BoundedSourceArtifactResolverError(
         "invalid_configuration",
@@ -105,10 +111,13 @@ export class BoundedSourceArtifactResolver {
         "Source resolver maximum must be a positive safe integer.",
       );
     }
-    this.#identity = Object.freeze({ ...options.identity });
     this.#maximumArchiveBytes = options.maximumArchiveBytes;
-    this.#transport = options.transport;
-    this.#artifacts = options.artifacts;
+    this.#transport = Object.freeze({
+      open: captureMethod(options.transport, "open"),
+    });
+    this.#artifacts = Object.freeze({
+      put: captureMethod(options.artifacts, "put"),
+    });
   }
 
   resolve(input: ResolveSourceArtifactInput): Promise<VerifiedArtifact> {
@@ -140,7 +149,7 @@ export class BoundedSourceArtifactResolver {
     let descriptor: SourceSnapshotStream | undefined;
     try {
       descriptor = await this.#transport.open({
-        identity: this.#identity,
+        identity: this.identity,
         snapshotId: input.snapshotId,
         digest: input.digest,
         signal: input.signal,
@@ -204,5 +213,56 @@ export class BoundedSourceArtifactResolver {
       );
     }
     return artifact;
+  }
+}
+
+function captureMethod<T extends object, K extends keyof T>(
+  owner: T,
+  name: K,
+): T[K] {
+  try {
+    const candidate = owner[name];
+    if (typeof candidate !== "function") throw new TypeError("Not a function.");
+    return candidate.bind(owner) as T[K];
+  } catch (cause) {
+    throw new BoundedSourceArtifactResolverError(
+      "invalid_configuration",
+      "Source resolver dependency is invalid.",
+      { cause },
+    );
+  }
+}
+
+export class BoundedSourceArtifactResolverFactory {
+  readonly #maximumArchiveBytes: number;
+  readonly #transport: RunnerSourceSnapshotTransport;
+  readonly #artifacts: Pick<ArtifactStore, "put">;
+
+  constructor(options: BoundedSourceArtifactResolverFactoryOptions) {
+    if (
+      !Number.isSafeInteger(options.maximumArchiveBytes) ||
+      options.maximumArchiveBytes < 1
+    ) {
+      throw new BoundedSourceArtifactResolverError(
+        "invalid_configuration",
+        "Source resolver maximum must be a positive safe integer.",
+      );
+    }
+    this.#maximumArchiveBytes = options.maximumArchiveBytes;
+    this.#transport = Object.freeze({
+      open: captureMethod(options.transport, "open"),
+    });
+    this.#artifacts = Object.freeze({
+      put: captureMethod(options.artifacts, "put"),
+    });
+  }
+
+  create(identity: SandboxAttemptIdentity): BoundedSourceArtifactResolver {
+    return new BoundedSourceArtifactResolver({
+      identity: sandboxAttemptIdentitySnapshot(identity),
+      maximumArchiveBytes: this.#maximumArchiveBytes,
+      transport: this.#transport,
+      artifacts: this.#artifacts,
+    });
   }
 }

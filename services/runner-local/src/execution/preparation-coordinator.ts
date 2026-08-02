@@ -12,6 +12,7 @@ import {
   type AdmittedSandboxImage,
 } from "../image/capability";
 import {
+  sandboxAttemptIdentitySnapshot,
   sandboxAttemptKey,
   type SandboxAttemptIdentity,
 } from "../oci/identity";
@@ -25,11 +26,28 @@ import {
 } from "./projector";
 
 export interface ExecutionSourceArtifactResolver {
+  readonly identity: SandboxAttemptIdentity;
   resolve(input: {
     snapshotId: string;
     digest: string;
     signal?: AbortSignal;
   }): Promise<VerifiedArtifact | undefined>;
+}
+
+export interface ExecutionSourceArtifactResolverFactory {
+  create(identity: SandboxAttemptIdentity): ExecutionSourceArtifactResolver;
+}
+
+function sameAttemptIdentity(
+  left: SandboxAttemptIdentity,
+  right: SandboxAttemptIdentity,
+): boolean {
+  return (
+    left.runnerId === right.runnerId &&
+    left.taskId === right.taskId &&
+    left.attemptId === right.attemptId &&
+    left.fence === right.fence
+  );
 }
 
 export interface ExecutionImageAdmissionPort {
@@ -61,6 +79,7 @@ export class AttemptPreparationError extends Error {
       | "cancelled"
       | "cleanup_failed"
       | "invalid_artifact"
+      | "invalid_artifact_resolver"
       | "invalid_image"
       | "invalid_prepared_attempt"
       | "invalid_source"
@@ -109,7 +128,9 @@ export class AttemptPreparationCoordinator {
   readonly #execution: RunnerExecutionV1;
   readonly #identity: SandboxAttemptIdentity;
   readonly #projector: ExecutionPlanProjector;
-  readonly #artifacts: ExecutionSourceArtifactResolver;
+  readonly #createArtifactResolver: (
+    identity: SandboxAttemptIdentity,
+  ) => ExecutionSourceArtifactResolver;
   readonly #images: ExecutionImageAdmissionPort;
   readonly #sources: ExecutionSourceMaterializerPort;
   #preparation: Promise<PreparedExecutionAttempt> | undefined;
@@ -119,7 +140,7 @@ export class AttemptPreparationCoordinator {
   constructor(options: {
     execution: RunnerExecutionV1;
     projector: ExecutionPlanProjector;
-    artifacts: ExecutionSourceArtifactResolver;
+    artifactResolvers: ExecutionSourceArtifactResolverFactory;
     images: ExecutionImageAdmissionPort;
     sources: ExecutionSourceMaterializerPort;
   }) {
@@ -128,7 +149,19 @@ export class AttemptPreparationCoordinator {
     );
     this.#identity = identityFor(this.#execution);
     this.#projector = options.projector;
-    this.#artifacts = options.artifacts;
+    try {
+      const create = options.artifactResolvers.create;
+      if (typeof create !== "function") {
+        throw new TypeError("Resolver factory method is invalid.");
+      }
+      this.#createArtifactResolver = create.bind(options.artifactResolvers);
+    } catch (cause) {
+      throw new AttemptPreparationError(
+        "invalid_artifact_resolver",
+        "Attempt source artifact resolver is invalid.",
+        { cause },
+      );
+    }
     this.#images = options.images;
     this.#sources = options.sources;
   }
@@ -163,9 +196,39 @@ export class AttemptPreparationCoordinator {
     const plan = this.#projector.project(this.#execution);
     cancellation(signal);
 
+    let artifacts: ExecutionSourceArtifactResolver;
+    try {
+      const candidate = this.#createArtifactResolver(this.#identity);
+      if (
+        typeof candidate !== "object" ||
+        candidate === null ||
+        !Object.isFrozen(candidate.identity)
+      ) {
+        throw new TypeError("Resolver capability is invalid.");
+      }
+      const identity = sandboxAttemptIdentitySnapshot(candidate.identity);
+      if (!sameAttemptIdentity(identity, this.#identity)) {
+        throw new TypeError("Resolver identity does not match execution.");
+      }
+      if (typeof candidate.resolve !== "function") {
+        throw new TypeError("Resolver method is invalid.");
+      }
+      artifacts = Object.freeze({
+        identity,
+        resolve: candidate.resolve.bind(candidate),
+      });
+    } catch (cause) {
+      throw new AttemptPreparationError(
+        "invalid_artifact_resolver",
+        "Attempt source artifact resolver is invalid.",
+        { cause },
+      );
+    }
+    cancellation(signal);
+
     let artifact: VerifiedArtifact | undefined;
     try {
-      artifact = await this.#artifacts.resolve({
+      artifact = await artifacts.resolve({
         snapshotId: this.#execution.task.source.snapshotId,
         digest: this.#execution.task.source.digest,
         signal,

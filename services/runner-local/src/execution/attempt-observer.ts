@@ -116,6 +116,7 @@ function preparationFailure(
     case "source_unavailable":
       return failure("source_unavailable");
     case "invalid_prepared_attempt":
+    case "invalid_artifact_resolver":
       return failure("unexpected_runner_failure");
   }
 }

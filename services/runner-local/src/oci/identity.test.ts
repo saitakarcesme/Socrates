@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createSandboxOwnership,
   ownershipFilterArguments,
+  sandboxAttemptIdentitySnapshot,
   sandboxAttemptKey,
 } from "./identity";
 import { fixtureIdentity } from "./test-fixtures";
@@ -44,5 +45,34 @@ describe("sandbox ownership", () => {
     expect(() => sandboxAttemptKey({ ...fixtureIdentity, fence: 0 })).toThrow(
       "fence must be a positive",
     );
+  });
+
+  it("captures an exact deeply immutable attempt identity", () => {
+    const mutable = { ...fixtureIdentity };
+    const captured = sandboxAttemptIdentitySnapshot(mutable);
+    mutable.fence += 1;
+
+    expect(captured).toEqual(fixtureIdentity);
+    expect(Object.isFrozen(captured)).toBe(true);
+  });
+
+  it("rejects missing, additional, and malformed identity authority", () => {
+    expect(() =>
+      sandboxAttemptIdentitySnapshot({
+        ...fixtureIdentity,
+        scope: "foreign",
+      }),
+    ).toThrow("shape is invalid");
+    const missing = {
+      runnerId: fixtureIdentity.runnerId,
+      taskId: fixtureIdentity.taskId,
+      attemptId: fixtureIdentity.attemptId,
+    };
+    expect(() => sandboxAttemptIdentitySnapshot(missing)).toThrow(
+      "shape is invalid",
+    );
+    expect(() =>
+      sandboxAttemptIdentitySnapshot({ ...fixtureIdentity, fence: 0 }),
+    ).toThrow("fence must be a positive");
   });
 });

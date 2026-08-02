@@ -6,7 +6,7 @@ import {
   DurableExecutionTimingBarrier,
   ExecutionPlanProjector,
   type ExecutionImageAdmissionPort,
-  type ExecutionSourceArtifactResolver,
+  type ExecutionSourceArtifactResolverFactory,
   type ExecutionSourceMaterializerPort,
   type LocalExecutionPolicy,
   type MonotonicTimeSource,
@@ -222,7 +222,7 @@ export class FreshAttemptSession {
     scheduler: LeaseAuthorityScheduler;
     sandbox: FreshAttemptSandboxBackend;
     journal: FreshAttemptJournal;
-    artifacts: ExecutionSourceArtifactResolver;
+    artifactResolvers: ExecutionSourceArtifactResolverFactory;
     images: ExecutionImageAdmissionPort;
     sources: ExecutionSourceMaterializerPort;
     requests: RuntimeRequestMaterializerPort;
@@ -267,7 +267,7 @@ export class FreshAttemptSession {
     const preparation = new AttemptPreparationCoordinator({
       execution: admission.execution,
       projector: new ExecutionPlanProjector(options.executionPolicy),
-      artifacts: options.artifacts,
+      artifactResolvers: options.artifactResolvers,
       images: options.images,
       sources: options.sources,
     });
