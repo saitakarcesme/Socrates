@@ -5294,6 +5294,92 @@ systemd credential integration, environment policy, refresh, bootstrap,
 process entry, signals, activation, and runner enablement remain separate
 decisions.
 
+### ADR-096: public deployment inputs are admitted from one descriptor-anchored root
+
+ADR-095 protects the final file component but deliberately accepts any
+canonical absolute path and makes no claim about its ancestors. A production
+loader must not validate `/etc`, then reopen an absolute descendant after a
+rename or symlink substitution. Slice 2.59 therefore selects one immutable,
+non-secret host layout and adds one Linux-only
+`NodeLocalRunnerPublicDeploymentLoader`. The loader has no constructor input
+or override. Its only operation reads and semantically admits the public
+configuration and trusted-image catalog; it neither discovers nor reads a
+credential.
+
+The architecture-owned root is exactly `/etc/socrates/runner-local`. Its two
+files are exactly `configuration.v1.json` and `trusted-images.v1.json`. The
+root filesystem directory, `etc`, `socrates`, and `runner-local` are opened and
+retained one component at a time. Every directory must be a real directory,
+owned by UID 0, and use exact mode `0o755`. Public files must be regular,
+single-link, UID-0-owned files with exact mode `0o444`. This intentionally
+makes the already non-secret ADR-086 and ADR-089 documents readable but not
+writable by the unprivileged runner. Provisioning owns creation and atomic
+replacement; the runner never creates, repairs, chmods, chowns, renames, or
+writes this tree.
+
+Node does not expose `openat2(2)` or a general promise-based `openat(2)` API.
+The loader opens `/` first, then resolves each fixed child through the retained
+parent descriptor using the kernel-provided
+`/proc/self/fd/<parent-fd>/<fixed-component>` anchor. Each child open uses
+`O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NONBLOCK | O_NOCTTY`; every parent
+handle stays open until both files have settled. The final files are read by
+ADR-095 through paths rooted at the retained `runner-local` descriptor, so a
+rename of an earlier pathname cannot redirect the read. The numeric descriptor
+and fixed basenames are constructed internally and never accepted from input.
+
+This deliberate proc descriptor anchor is not treated as arbitrary path
+resolution. Before opening the deployment tree, the loader requires
+`/proc/self/fd` to report Linux `PROC_SUPER_MAGIC`; absent, masked, substituted,
+or unsupported procfs fails closed before deployment access. The retained
+descriptor is the authority, and the only followed magic link is the
+internally constructed reference to that already-open descriptor. Every
+untrusted tree component remains subject to a separate final-component
+`O_NOFOLLOW` open and descriptor metadata check. This follows the directory-FD
+race rationale documented by Linux `openat(2)` while acknowledging that native
+`openat2(2)` with `RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS |
+RESOLVE_NO_MAGICLINKS` would be the preferred future replacement if Node gains
+a supported binding.
+
+The loader reads `configuration.v1.json` first with ADR-094's 1,048,576-byte
+ceiling and immediately performs its fatal UTF-8, JSON, semantic, and canonical
+admission before opening the trusted-image file. Only an admitted
+configuration permits `trusted-images.v1.json` to be read with the
+16,777,216-byte ceiling and admitted through the same staged ADR-094 logic.
+The loader returns one frozen owner containing only the detached, deeply
+frozen `configuration` and `trustedImages` values. ADR-094's existing
+`parseLocalRunnerDeploymentBytes` remains source-compatible and is refactored
+to share these staged public-input functions before its credential step. No
+input view, descriptor, path, metadata, or raw text is retained or returned.
+
+All opened directory handles close exactly once in reverse order. A primary
+procfs, open, metadata, configuration, or trusted-image failure remains
+primary if later cleanup also fails; cleanup failure after otherwise successful
+admission becomes one fixed `close_failed` result. Public failures use a
+frozen, cause-free taxonomy limited to `unsupported_host`, `invalid_host`,
+`open_failed`, `invalid_metadata`, `configuration_failed`,
+`trusted_images_failed`, and `close_failed`. Messages reveal no descriptor,
+path, metadata, bytes, JSON, schema details, syscall code, or underlying cause.
+
+Tests must prove fixed layout and modes, zero constructor effects, Linux/procfs
+gating before deployment access, one descriptor-anchored open per directory,
+retention until settlement, strict ordering, exact file policy and byte bounds,
+configuration rejection before any image-file open, detached immutable
+semantic results, reverse single-close ownership, and primary-failure
+precedence. Deterministic package-private cores may model handles and procfs;
+production construction accepts no filesystem adapter. Linux-native tests must
+exercise real missing, symlinked, substituted, wrong-owner where permitted,
+wrong-mode, directory, hard-link, oversized, non-canonical, and valid trees
+under a CI-provisioned root that mirrors the fixed component protocol without
+granting a configurable production root.
+
+This decision is grounded in the official Linux
+[`open(2)` directory-FD rationale](https://man7.org/linux/man-pages/man2/open.2.html)
+and [`openat2(2)` resolution model](https://man7.org/linux/man-pages/man2/openat2.2.html).
+It does not select or inspect the credential directory, read environment or
+CLI state, integrate `LoadCredential=`, refresh inputs, construct fetch or
+observer policy, compose ADR-093, create a process entry point, handle signals,
+own shutdown, expose an activation flag, or enable the runner.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
