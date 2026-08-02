@@ -1477,6 +1477,27 @@ durability, Chromium journey, production-build, and evidence-upload gate.
 ADR-084 is admitted. Process configuration, concrete observation, shutdown
 ownership, resource composition, and runner enablement remain deferred.
 
+### Slice 2.48 — attempt-scoped source resolver factory
+
+Status: Planned on 2026-08-02.
+
+Architecture decision: ADR-085.
+
+Detailed plan: `docs/plans/slice-2.48-attempt-scoped-source-resolver.md`.
+
+- replace the process-shared resolver instance with one captured factory;
+- derive resolver identity only from the coordinator's parsed execution;
+- create and validate one exact resolver after preparation begins;
+- expose and snapshot exact resolver identity before source transport;
+- fail closed on malformed, identity-drifted, throwing, or reused resolvers;
+- add a concrete factory that captures transport/store methods and creates a
+  distinct ADR-058 resolver for every attempt;
+- keep process/resource configuration and runner enablement out of scope.
+
+Exit: adversarial and real resolver tests prove sequential attempts cannot
+share source authority, identity cannot be substituted, constructor inertness
+is preserved, and dependency mutation cannot redirect source bytes.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

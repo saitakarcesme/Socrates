@@ -4298,6 +4298,63 @@ ADR-084 and closes Slice 2.47. Process configuration, concrete observation,
 shutdown ownership, resource composition, and runner enablement remain
 separate decisions.
 
+### ADR-085: Source resolution authority is created per exact attempt
+
+ADR-058 deliberately makes `BoundedSourceArtifactResolver` one-shot and bound
+to one exact lease identity. ADR-082 currently accepts one
+`ExecutionSourceArtifactResolver` in `LocalAttemptOwnerOptions` and shares that
+instance across every future fresh session. Deterministic tests use a stateless
+resolver fake, so they do not expose the mismatch. A concrete ADR-058 resolver
+would retain the first attempt's snapshot, digest, and signal authority;
+reusing it for a second attempt would either reject with an authority conflict
+or retain the wrong lease identity. Production composition cannot proceed
+through that boundary.
+
+`ExecutionSourceArtifactResolver` will therefore become an explicit
+attempt-scoped capability carrying its deeply frozen
+`SandboxAttemptIdentity` alongside `resolve()`. A new
+`ExecutionSourceArtifactResolverFactory` exposes only
+`create(identity)`. `AttemptPreparationCoordinator` derives the identity from
+its strictly parsed `RunnerExecutionV1`; callers cannot supply a separate
+identity. Construction captures the factory method but invokes no factory,
+transport, store, filesystem, image, or sandbox effect.
+
+On the first explicit `prepare(signal?)`, after projection and the existing
+pre-cancellation check, the coordinator calls `create()` exactly once with its
+derived identity. It validates that the returned resolver is an object, owns
+the byte-exact runner/task/attempt/fence identity, and exposes a callable
+`resolve`. It snapshots the identity and captures the method before source
+transport can begin. Missing, malformed, identity-drifted, or throwing factory
+output becomes one fixed `AttemptPreparationError` with code
+`invalid_artifact_resolver`; no source, image, materialization, or sandbox
+effect follows. The created resolver and its failure remain owned by that one
+preparation operation.
+
+`LocalAttemptOwner` will accept and capture the factory rather than a resolver
+instance. Its captured facade validates every produced resolver again and
+tracks object identity for the owner lifetime. Returning the same resolver
+object from two factory calls fails closed before its second `resolve`, even
+when both calls concern the same attempt identity. This prevents a custom
+factory from smuggling one-shot authority across sessions. Dependency method
+mutation after owner construction cannot redirect creation or resolution.
+
+One concrete `BoundedSourceArtifactResolverFactory` will bind the positive
+archive-byte maximum, source transport, and artifact-store write capability.
+Construction validates and captures only the narrow `open` and `put` methods
+without I/O. Each `create(identity)` validates and snapshots the identity and
+returns a distinct ADR-058 resolver. `BoundedSourceArtifactResolver` itself
+exposes that frozen identity and uses the captured transport/store facades, so
+later dependency mutation cannot redirect an already-created authority.
+Resolvers created for different attempts retain fully independent one-shot
+operations, signals, results, and failures.
+
+This correction does not change task or HTTP contracts, source byte policy,
+artifact storage, extraction, image admission, runtime execution, dispatch
+cadence, environment loading, process startup, shutdown ownership, or runner
+enablement. `LocalRunnerNotEnabledError` remains the production entry-point
+behavior. Concrete resource composition and configuration remain later
+decisions after the per-attempt authority graph is sound.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
