@@ -4865,6 +4865,112 @@ admits ADR-091 and closes Slice 2.54. Concrete system adapters, input and secret
 loaders, refresh, lifecycle bootstrap, process entry, signal/shutdown
 ownership, feature flags, and runner activation remain separate decisions.
 
+### ADR-092: every nerdctl operation has one explicit invocation authority
+
+ADR-091 composes one application graph, but ADR-086's engine policy identifies
+only a nerdctl executable and process bounds. The readiness verifier, image
+inspector, and sandbox backend therefore execute the same binary without
+proving that they address the same containerd socket, namespace, snapshotter,
+or nerdctl state root. This is not a harmless deployment default. nerdctl
+v2.3.1 loads rootless configuration from
+`~/.config/nerdctl/nerdctl.toml`, permits `NERDCTL_TOML` to redirect that file,
+and applies CLI, environment, TOML, then built-in precedence. Its rootless
+client also derives state from `HOME`, XDG directories, and RootlessKit and
+looks up `nsenter` through `PATH`. An inherited operator environment could thus
+redirect otherwise identical typed command arrays to different engine or
+filesystem authority.
+
+Slice 2.55 will replace the executable-only policy with one immutable
+`NerdctlInvocation` shared by all three consumers. ADR-086's strict V1 engine
+configuration gains an absolute canonical nerdctl executable, one exact
+`unix://` containerd socket address, a selected rootless snapshotter, one
+canonical private nerdctl data root, one provisioned nerdctl TOML path, and an
+exact host-process environment. The namespace is not a second deployment
+input: it is derived as `socrates-<deploymentId>` from the already admitted
+identity. The cgroup manager is fixed by architecture to `systemd`, because
+the selected rootless cgroup-v2 resource enforcement depends on systemd.
+
+The socket admits only `unix://` followed by one canonical absolute POSIX path.
+TCP, HTTP, HTTPS, credentials, query, fragment, percent encoding, dot segments,
+control characters, trailing slash, and the filesystem root are rejected. The
+snapshotter is the closed deployment choice `overlayfs`, `fuse-overlayfs`, or
+`native`; no empty, environment-selected, plugin-arbitrary, or automatic value
+is admitted. Executable, data-root, TOML, home, XDG, Docker-config, and runtime
+paths are canonical absolute POSIX paths. The executable must not be resolved
+through `PATH`. Private writable roots are pairwise non-overlapping and may not
+contain or equal the provisioned TOML path.
+
+The admitted host environment is rebuilt as a null-prototype frozen record
+containing exactly `HOME`, `PATH`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`,
+`XDG_RUNTIME_DIR`, `DOCKER_CONFIG`, and `NERDCTL_TOML`. `NERDCTL_TOML` is
+derived from the admitted TOML path rather than accepted twice. `PATH` is a
+bounded colon-separated list of canonical absolute POSIX directories with no
+empty, duplicate, relative, dot, or control-bearing entry. No value is copied
+from `process.env`; in particular containerd selectors, registry credentials,
+proxy variables, cloud credentials, CI tokens, Node options, preload hooks,
+locale overrides, and caller-added keys cannot reach nerdctl. The environment
+exists only for the host nerdctl process and is never merged with a trusted
+image's in-container environment.
+
+The provisioned TOML file is intentionally empty policy, represented by one
+fixed architecture-owned UTF-8 byte sequence and SHA-256 digest. It must be a
+regular file owned by root, not group/other writable, reached without symlink
+components, and match the fixed bytes and digest. Host readiness reports this
+attestation together with the effective unprivileged UID and RootlessKit state
+directory. It also proves that `XDG_RUNTIME_DIR` is the canonical
+`/run/user/<uid>` directory, that the RootlessKit state directory is its
+`containerd-rootless` child, and that the configured Unix socket is the
+selected rootless containerd endpoint as observed inside that namespace.
+Absence, replacement, ownership/mode drift, symlink traversal, byte drift, UID
+mismatch, or engine-address mismatch is a readiness failure before image or
+task work. Trusted provisioning, not the runner process, installs this file;
+the runner never creates, repairs, or rewrites host engine configuration.
+
+`NerdctlInvocation` owns the executable and one frozen global argument prefix:
+exact address, derived namespace, selected snapshotter, data root,
+`--cgroup-manager=systemd`, `--insecure-registry=false`,
+`--experimental=false`, and the remaining security-relevant global defaults
+that v2.3.1 exposes. It rejects a command that is empty, contains a NUL, or
+attempts to introduce a global engine selector. Its only operation constructs
+a fresh frozen process request by prefixing command arguments and attaching the
+exact frozen host environment and caller-provided timeout, output, input, and
+abort bounds. Global flags precede the subcommand on every version, info,
+help, inspect, create, start, wait, kill, remove, and recovery operation.
+
+`ProcessRequest` therefore carries an exact environment rather than relying on
+executor construction state. `NodeProcessExecutor` requires that environment,
+copies it without getters or prototypes, and passes exactly it to `spawn`; its
+zero-option fallback to `process.env` is removed. Missing or malformed process
+environment fails before spawn. The generic executor still owns shell-free
+argument-array execution, byte limits, cancellation, and timeouts; it does not
+know nerdctl policy. Native validation must now supply the same explicit
+environment and invocation contract as production composition.
+
+`LocalRunnerOciPlatform` constructs exactly one invocation from its detached
+ADR-086 snapshot and gives that same frozen object to one readiness verifier,
+one backend, and one image inspector. Those components no longer accept an
+independent executable or global prefix. Their existing command-specific
+arguments and bounds remain typed and unchanged. Tests must prove exact argv
+and environment equality across all three paths, single reads of every input,
+mutation isolation, derived namespace continuity, no ambient environment keys,
+no alternate engine selector after the subcommand, and fail-stop behavior when
+config or host attestation differs.
+
+Construction remains inert: parsing and invocation composition perform no
+environment read, file read, host inspection, process spawn, path resolution,
+clock read, or container operation. This slice adds no general configuration
+loader, credential loader or refresh, logging adapter, process entry, OS signal
+handling, shutdown deadline, feature flag, or activation. A later bootstrap
+ADR must load unknown deployment inputs, admit them through ADR-086/089, obtain
+the bearer credential, construct concrete host adapters, and run this graph
+only after disabled-by-default activation. `LocalRunnerNotEnabledError` remains
+the production entry-point behavior.
+
+The design is grounded in nerdctl's official
+[configuration contract](https://github.com/containerd/nerdctl/blob/v2.3.1/docs/config.md),
+[global command flags](https://github.com/containerd/nerdctl/blob/v2.3.1/docs/command-reference.md),
+and [rootless operating model](https://github.com/containerd/nerdctl/blob/v2.3.1/docs/rootless.md).
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
