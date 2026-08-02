@@ -1676,7 +1676,7 @@ deferred.
 
 ### Slice 2.54 — inert application-platform composition
 
-Status: Planned on 2026-08-02.
+Status: Admitted on 2026-08-02.
 
 Architecture decision: ADR-091.
 
@@ -1700,6 +1700,20 @@ Detailed plan: `docs/plans/slice-2.54-application-platform-composition.md`.
 Exit: adversarial and behavioral composition tests prove ordered admission,
 one OCI/control-plane resource graph, exact sandbox/image aliasing, captured
 capabilities, zero construction effects, private secrets, and no activation.
+
+Admission: architecture commits `0e501fd` and `7ff8106` preceded implementation
+commit `5e713ff`. Twenty-five application-platform tests prove ordered input
+admission, cause-free redaction, exact once-only owner/method capture, inert
+construction, mutation isolation, one idle lifecycle, fail-stop behavior, and
+one measured delivery across authenticated source/control-plane, shared image
+admission, and OCI sandbox execution. All 1,193 runner-local tests and every
+local repository gate passed against fresh migrated and seeded PostgreSQL
+database `socrates_ci_adr091_full`; the isolated Chromium journey and
+production build also passed. Main CI run `30732301456` passed every required
+Linux, PostgreSQL, API, runner, native durability, Chromium journey,
+production-build, and evidence-upload gate. ADR-091 is admitted. Concrete
+adapters, loaders, refresh, process entry, shutdown ownership, feature flags,
+and activation remain deferred.
 
 ## Acceptance gates
 

@@ -4841,6 +4841,30 @@ create a process entry point; handle OS signals; own shutdown; expose a feature
 flag; or activate the runner. A later bootstrap ADR must define those concrete
 authorities and the disabled-by-default activation protocol.
 
+Architecture commits `0e501fd` and `7ff8106` preceded production code; the
+second explicitly removed public construction causes so secret-bearing input
+or dependency failures cannot escape the outer boundary. Implementation commit
+`5e713ff` adds the frozen application platform, a shared internal capability-
+capture primitive, and one exact OCI-to-authenticated-lifecycle composition.
+Twenty-five application-platform tests prove ordered admission, cause-free
+redaction, inert opacity, single reads of all 14 input/dependency owners and 12
+dependency methods, post-construction mutation isolation, one retained run,
+cooperative idle shutdown, fail-stop transport behavior, and a measured
+delivery traversing source resolution, image inspection, profile attestation,
+runtime handshake, OCI execution, five durable events, and terminal
+publication. The single-read test exposed and prevented split journal/spool
+identity owners before implementation was admitted.
+
+All 1,193 runner-local tests and every local repository gate passed against
+fresh migrated and seeded PostgreSQL database `socrates_ci_adr091_full`,
+including both architecture audits, production build, and the isolated
+Chromium measured project-to-learning journey. Main CI run `30732301456`
+passed every formatting, type, lint, PostgreSQL, API, runner, Linux native
+durability, Chromium journey, production-build, and evidence-upload gate. This
+admits ADR-091 and closes Slice 2.54. Concrete system adapters, input and secret
+loaders, refresh, lifecycle bootstrap, process entry, signal/shutdown
+ownership, feature flags, and runner activation remain separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

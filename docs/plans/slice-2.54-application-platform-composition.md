@@ -1,6 +1,6 @@
 # Slice 2.54 inert application-platform composition
 
-Status: Planned
+Status: Admitted
 
 Date: 2026-08-02
 
@@ -124,3 +124,30 @@ by this layer.
    behavior survive the full composition boundary.
 6. No concrete system adapter, loader, refresh, process entry, shutdown owner,
    feature flag, or runner activation lands.
+
+## Admission evidence
+
+Architecture commits `0e501fd` and `7ff8106` preceded production code. The
+second hardened every public construction failure to be cause-free before
+implementation commit `5e713ff` added the opaque application platform and
+shared internal capability-capture primitive.
+
+Twenty-five application-platform tests cover the full adversarial matrix,
+including deterministic config/image/credential admission, fixed cause-free
+errors, exact single reads of all 14 input/dependency owners and 12 dependency
+methods, post-construction mutation isolation, inert opacity, cooperative idle
+shutdown, fail-stop transport behavior, and a measured delivery. That measured
+flow traverses the one authenticated client, source snapshot materialization,
+two trusted-image inspections, runtime handshake, two profile attestations,
+the shared OCI backend, runtime frame parsing, five durable events, and
+terminal publication. The exact-read test found and eliminated a possible
+split journal/spool identity owner before admission.
+
+All 1,193 runner-local tests and every local format, type, lint, architecture-
+audit, workspace-test, production-build, and isolated Chromium journey gate
+passed against fresh migrated and seeded PostgreSQL database
+`socrates_ci_adr091_full`. Main CI run `30732301456` passed every required
+Linux, PostgreSQL, API, runner, native durability, Chromium journey,
+production-build, and evidence-upload gate. No concrete adapter, loader,
+credential refresh, process entry, signal/shutdown owner, feature flag, or
+runner activation landed.
