@@ -5504,6 +5504,41 @@ credential, read public deployment documents, compose ADR-093, define fetch or
 observation policy, bootstrap resources, create a process entry, handle
 signals, own shutdown, expose an activation flag, or enable the runner.
 
+Architecture commit `3a772ec` preceded production code. Implementation commit
+`67be84d` extracts credential-only ADR-094 admission, adds the frozen public
+contract, one descriptor-chain core, the concrete no-override Node loader, a
+canonical non-secret test token, and exact Linux fixture provisioning and
+cleanup. The package barrel exposes only the production loader, result type,
+and closed error contract; environment, identity, filesystem, reader, parser,
+and handle seams remain package-private.
+
+Thirty-two deterministic core tests prove environment-before-identity-before-
+procfs ordering, non-root UID admission, both root-plus-ACL and service-owned
+systemd models, exact retained `/` to `run` to `credentials` to unit descriptor
+resolution, one fixed credential request, malformed directory and descriptor
+metadata rejection, partial-open cleanup, reverse single-close ownership,
+redaction, and primary-failure precedence. Four production-surface tests prove
+inert frozen construction, zero input authority, unsupported-host ordering,
+one real fixed-path success, and closed adversarial failures. Existing ADR-094
+and ADR-095 suites continue to prove exact token bytes and final-file races.
+
+All 1,388 locally runnable runner-local tests passed with twelve Linux/database-
+dependent cases deferred. Local formatting, all 14-package type and lint gates,
+both architecture audits, the database-free workspace suite, production build,
+and HTTP 200 web/API health checks passed. Main CI run `30739476744` passed
+1,396 runner-local tests with four intentionally inapplicable branches skipped
+across all 69 files. It admitted the exact service-owned fixed tree, then
+separately proved twelve alternate-environment, missing-file, final-symlink,
+hard-link, file-mode, file-owner, directory-substitution, short, long,
+malformed-token, unit-mode, and unit-symlink variants before exact cleanup.
+PostgreSQL migrations and seeds, database and API integrations, the preserved
+public-deployment adversarial matrix, native spool and journal durability, the
+isolated Chromium measured journey, production build, and both evidence uploads
+also passed. This admits ADR-097 and closes Slice 2.60. Systemd unit
+provisioning, public-plus-secret deployment composition, fetch and observation
+policy, bootstrap, process entry, signals, shutdown, activation, and runner
+enablement remain separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

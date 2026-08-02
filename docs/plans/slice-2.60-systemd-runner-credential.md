@@ -1,6 +1,6 @@
 # Slice 2.60 systemd runner credential admission
 
-Status: Planned
+Status: Admitted
 
 Date: 2026-08-02
 
@@ -112,3 +112,41 @@ admission detail, syscall code, cause, or nested error.
    models, metadata, size, admission, and cleanup.
 6. Bootstrap, process entry, signals, activation, and runner enablement remain
    absent.
+
+## Admission evidence
+
+Architecture commit `3a772ec` preceded implementation commit `67be84d`.
+Implementation adds credential-only reuse of ADR-094, one closed public error
+contract, a deterministic descriptor-chain core, the concrete no-override Node
+loader, public exports, a canonical test token, and exact Linux CI provisioning,
+mutation, restoration, and cleanup.
+
+Thirty-two deterministic core tests cover strict environment, identity, procfs,
+directory, file-request, admission, cleanup, and redaction behavior. They admit
+both systemd owner models and reject alternate environment values, root or
+malformed identity, unavailable procfs, partial opens, invalid descriptors,
+wrong public/unit directory metadata, credential read/admission failures, and
+cleanup failures. Four production-surface tests cover inert construction,
+zero-argument authority, unsupported hosts, the real fixed tree, and closed
+adversarial failures. The preserved sixteen ADR-094 byte tests and fifty-two
+ADR-095 descriptor-reader tests continue to prove exact 85-byte token admission
+and final-file kind, link, owner, mode, size, content, and race constraints.
+
+All 1,388 locally runnable runner-local tests passed; twelve Linux/database-
+dependent cases were deferred. Formatting, all 14-package type and lint gates,
+both architecture audits, the database-free workspace suite, production build,
+and local web/API HTTP 200 health checks passed.
+
+Main CI run `30739476744` passed all 1,396 applicable runner-local tests across
+69 files with four intentionally inapplicable branches skipped. The normal run
+admitted a service-owned `0500` unit directory and same-owner `0400` exact-byte
+credential beneath the fixed `CREDENTIALS_DIRECTORY`. Twelve focused runs then
+proved alternate environment, missing file, final symlink, hard link, wrong
+mode, mismatched owner, directory substitution, 84-byte, 86-byte, malformed
+85-byte, writable unit-directory, and unit-symlink cases fail with the expected
+closed code. Exact restoration and cleanup passed. The same run passed
+PostgreSQL migrations and seeds, database and API integrations, the existing
+public-deployment adversarial matrix, native spool and journal durability, the
+isolated Chromium journey, production build, and both native evidence uploads.
+Systemd unit provisioning, deployment composition, bootstrap, process entry,
+signals, activation, and runner enablement remain absent.
