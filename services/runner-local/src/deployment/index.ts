@@ -9,3 +9,11 @@ export {
   type LocalRunnerDeploymentInputName,
   type LocalRunnerDeploymentInputs,
 } from "./bytes";
+export {
+  maximumNodeBoundedRegularFileBytes,
+  maximumNodeBoundedRegularFilePathBytes,
+  NodeBoundedRegularFileReadError,
+  type NodeBoundedRegularFileReadErrorCode,
+  type NodeBoundedRegularFileReadRequest,
+} from "./bounded-regular-file-contracts";
+export { NodeBoundedRegularFileReader } from "./bounded-regular-file-reader";
