@@ -5216,18 +5216,21 @@ and detached before any filesystem effect. Paths are NFC, no more than 4,096
 UTF-8 bytes, normalized without control characters, NUL, comma, duplicate
 separator, dot segment, trailing slash, or root. Unknown keys, inherited
 owners, access failure, invalid numeric policy, Windows, and absent
-`O_NOFOLLOW` fail before open.
+required open flags fail before open.
 
-The reader opens the final path exactly once with `O_RDONLY | O_NOFOLLOW` and
-uses only that retained handle thereafter. An initial bigint descriptor stat
-must prove one regular file, exactly one hard link, the exact owner UID and
-mode, and a non-empty size no larger than the request ceiling. The reader then
-consumes bounded chunks through explicit EOF, never observing more than the
-ceiling plus one byte. Early EOF, an extra byte beyond the initial size, or a
-different byte count fails closed. A final bigint descriptor stat must match
-the initial device, inode, kind, link count, UID, GID, mode, size, ctime
-nanoseconds, and mtime nanoseconds. Atime is excluded because the read itself
-may update it.
+The reader opens the final path exactly once with
+`O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_NOCTTY` and uses only that retained
+handle thereafter. Nonblocking and no-controlling-terminal flags are inert for
+regular files and prevent a FIFO or terminal device from blocking or acquiring
+process authority before descriptor metadata rejects it. An initial bigint
+descriptor stat must prove one regular file, exactly one hard link, the exact
+owner UID and mode, and a non-empty size no larger than the request ceiling.
+The reader then consumes bounded chunks through explicit EOF, never observing
+more than the ceiling plus one byte. Early EOF, an extra byte beyond the
+initial size, or a different byte count fails closed. A final bigint descriptor
+stat must match the initial device, inode, kind, link count, UID, GID, mode,
+size, ctime nanoseconds, and mtime nanoseconds. Atime is excluded because the
+read itself may update it.
 
 The handle is closed exactly once on every successful open. A close failure
 after otherwise successful verification becomes a fixed `close_failed` error;

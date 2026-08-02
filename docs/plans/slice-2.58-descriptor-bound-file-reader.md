@@ -45,12 +45,16 @@ It reads each owner property once in that order, detaches and freezes the
 admitted request, and rejects control characters, NUL, comma, non-NFC text,
 root, trailing slash, non-normalized paths, and paths beyond 4,096 UTF-8 bytes.
 Construction is inert. `read` fails before filesystem access on Windows,
-missing `O_NOFOLLOW`, or an invalid owner/mode policy. Production deployment
-composition will require an unprivileged runner separately.
+missing required open flags, or an invalid owner/mode policy. Production
+deployment composition will require an unprivileged runner separately.
 
 ## Descriptor protocol
 
-1. Open the exact final path once with `O_RDONLY | O_NOFOLLOW`.
+1. Open the exact final path once with
+   `O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_NOCTTY`. Nonblocking and no-
+   controlling-terminal flags are inert for regular files and prevent a FIFO
+   or terminal device from blocking or acquiring process authority before
+   descriptor metadata rejects it.
 2. Obtain a bigint descriptor `stat` immediately.
 3. Require one regular file, `nlink === 1`, the exact owner UID and mode, and a
    size from one through `maximumBytes`.
@@ -95,7 +99,7 @@ read becomes `close_failed`.
 - relative, root, traversal, duplicate separator, dot-segment, trailing slash,
   comma, control-character, non-NFC, and overlong paths;
 - zero, fractional, unsafe, negative, and overbroad numeric policies;
-- Windows and absent-flag rejection before open;
+- Windows and absent-required-flag rejection before open;
 - missing path, final symlink, directory, FIFO, socket, device where available,
   hard link, wrong UID, wrong GID policy where relevant, and wrong mode;
 - empty, exact-limit, one-byte-over, sparse, growing, truncating, and replaced
