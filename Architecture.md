@@ -5012,6 +5012,69 @@ closes Slice 2.55. Configuration and credential loading, refresh, lifecycle
 bootstrap, process entry, signal/shutdown ownership, feature flags, and runner
 activation remain separate decisions.
 
+### ADR-093: one inert Node platform owns the concrete local-runner adapters
+
+ADR-091 deliberately accepts every infrastructure capability, while ADR-092
+closes the command authority used by the OCI adapter. A production bootstrap
+must not be allowed to assemble a different process executor, host-readiness
+inspector, timer, identity source, or directory-sync implementation each time
+it starts. Slice 2.56 therefore adds one `LocalRunnerNodeApplicationPlatform`
+between unknown deployment values and `LocalRunnerApplicationPlatform`. It is
+the only production composition allowed to bind the local runner to Node.js
+system adapters, but it remains inert and does not activate work.
+
+The Node platform accepts exactly five caller-owned values: unknown runner
+configuration, unknown trusted-image configuration, unknown bearer
+credential, one fetch capability, and one attempt observer. It reads each
+owner once, admits the runner configuration first through ADR-086, and retains
+the detached frozen result. Invalid configuration fails before fetch or
+observer capture and before any adapter construction. The platform then owns
+one `NodeProcessExecutor`, one `NodeHostReadinessInspector` parameterized only
+from the admitted nerdctl configuration and working-directory paths, one
+`NodeLeaseAuthorityScheduler`, `nodeMonotonicTimeSource`, one
+`NodeDirectorySync`, the system work-journal and spool identity sources, and
+one captured system sandbox-probe identity source. Its wall-clock capability
+is a frozen adapter over `Date.now`; construction captures the function but
+does not read time.
+
+Fetch and attempt observation remain explicit inputs. Fetch is not read from
+`globalThis` inside the platform, because connection policy, proxy/TLS
+authority, and test substitution belong to the later bootstrap. The observer
+is not replaced by an implicit console or no-op implementation, because
+operational evidence loss and log routing also require an explicit deployment
+decision. `LocalRunnerNodeApplicationPlatform` passes those two captured
+capabilities and its owned Node adapters into exactly one
+`LocalRunnerApplicationPlatform`, then exposes only the retained `run(signal)`
+operation. It does not expose the inner graph or accept adapter overrides.
+
+Construction performs no environment, file, directory, socket, process,
+network, clock, random-identity, timer, journal, spool, or readiness effect.
+The constructors selected above are required to remain inert. The first
+filesystem inspection and process spawn occur through ADR-092 readiness after
+`run`; the first clock, random identity, timer, fetch, observer, journal, or
+spool use likewise occurs only through the existing application lifecycle.
+The outer platform normalizes configuration, input-capability, adapter-
+composition, and inner-composition failures into a closed cause-free error
+taxonomy. Secret-bearing or attacker-controlled causes never escape it.
+
+Tests must prove configuration-first failure ordering, one read of all five
+input owners and both external capability methods, post-construction mutation
+isolation, exact propagation of ADR-092 host paths, no ambient global-fetch
+capture, and zero construction effects. A measured integration test must run
+the Node platform with explicit fake fetch and observer capabilities while
+using its real system time, scheduler, identities, directory sync, process,
+and host-inspection objects behind controlled boundaries. Existing application
+and OCI tests remain the authority for the downstream graph; this slice must
+not duplicate that graph or introduce a second lifecycle.
+
+This decision does not load JSON, configuration, image catalogs, credentials,
+environment variables, command-line arguments, stdin, or secret files. It does
+not refresh credentials, define proxy/TLS policy, install a logging adapter,
+create a process entry point, handle signals, own a shutdown deadline, expose
+an activation flag, daemonize, or enable the runner. Those remain later
+architecture decisions, and `LocalRunnerNotEnabledError` remains the public
+production entry-point behavior after Slice 2.56.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
