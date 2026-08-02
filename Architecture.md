@@ -5061,11 +5061,13 @@ Tests must prove configuration-first failure ordering, one read of all five
 input owners and both external capability methods, post-construction mutation
 isolation, exact propagation of ADR-092 host paths, no ambient global-fetch
 capture, and zero construction effects. A measured integration test must run
-the Node platform with explicit fake fetch and observer capabilities while
-using its real system time, scheduler, identities, directory sync, process,
-and host-inspection objects behind controlled boundaries. Existing application
-and OCI tests remain the authority for the downstream graph; this slice must
-not duplicate that graph or introduce a second lifecycle.
+the existing application platform through the complete downstream graph. A
+separate Node-platform integration test uses explicit fake fetch and observer
+capabilities, retains the real system time, scheduler, identities, directory
+sync, process, and host-inspection objects behind controlled process/host
+boundaries, and proves one idle ownership handoff. Together they prove the
+join without duplicating the measured graph or introducing a second
+lifecycle.
 
 This decision does not load JSON, configuration, image catalogs, credentials,
 environment variables, command-line arguments, stdin, or secret files. It does
