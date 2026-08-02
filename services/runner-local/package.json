@@ -10,6 +10,7 @@
     "test:native-runtime": "tsx src/runtime/native-validation.ts",
     "test:native-spool": "tsx src/spool/native-validation.ts",
     "test:native-journal": "tsx src/work-journal/native-validation.ts",
+    "test:native-network": "tsx src/network/native-validation.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -19,6 +20,7 @@
     "@socrates/evidence-policy": "workspace:*",
     "@socrates/runtime-protocol": "workspace:*",
     "tar-stream": "3.2.0",
+    "undici": "6.26.0",
     "zod": "^4.0.10"
   },
   "devDependencies": {

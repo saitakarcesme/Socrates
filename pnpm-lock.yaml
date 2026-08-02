@@ -252,6 +252,9 @@ importers:
       tar-stream:
         specifier: 3.2.0
         version: 3.2.0
+      undici:
+        specifier: 6.26.0
+        version: 6.26.0
       zod:
         specifier: ^4.0.10
         version: 4.4.3
@@ -4824,6 +4827,13 @@ packages:
         integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==,
       }
 
+  undici@6.26.0:
+    resolution:
+      {
+        integrity: sha512-4yqz8a3n5HmGTlsbADNtr/dJlhkh/55Rq798G6ibiULcXbDtaLpTl1pvdqcbFfeoj3iSi52lePFM7h9H21cw/A==,
+      }
+    engines: { node: ">=18.17" }
+
   unrs-resolver@1.12.2:
     resolution:
       {
@@ -7703,6 +7713,8 @@ snapshots:
       which-boxed-primitive: 1.1.1
 
   undici-types@7.18.2: {}
+
+  undici@6.26.0: {}
 
   unrs-resolver@1.12.2:
     dependencies:
