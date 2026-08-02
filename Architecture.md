@@ -4688,6 +4688,74 @@ Slice 2.52. Catalog loading, OCI/platform resource composition, process entry,
 shutdown ownership, feature flags, and runner enablement remain separate
 decisions.
 
+### ADR-090: OCI platform composition captures capabilities without owning adapters
+
+ADR-086 and ADR-089 now admit the complete non-secret configuration needed by
+the existing OCI backend and trusted-image catalog, but those resources are
+still assembled only in native validation. Constructing `NodeProcessExecutor`
+inside the next graph would read ambient `process.env`; constructing
+`NodeHostReadinessInspector` would later read host files and process identity;
+and the existing backend and handshake verifier obtain probe identities from
+ambient `randomUUID()`. Those adapter and identity authorities must not become
+implicit merely because the resource graph is ready to be composed.
+
+Slice 2.53 will add one inert `LocalRunnerOciPlatform`. Construction accepts an
+unknown ADR-086 local-runner configuration candidate, an unknown ADR-089
+trusted-image catalog candidate, and separately injected process-execution,
+host-readiness, epoch-clock, and ephemeral-attempt-identity capabilities. It
+parses and detaches both configuration candidates, in that order, before
+reading any dependency property. Invalid local-runner configuration therefore
+wins before trusted-image data and every capability getter; invalid image
+configuration wins before every capability getter and external effect.
+
+The platform captures exactly one callable process executor, one host inspector,
+one epoch-millisecond clock, and one ephemeral identity source. Dependency
+objects and their methods cannot be replaced after construction. The clock is
+adapted into both backend cache time and readiness timestamps so those
+resources cannot observe different wall-clock authorities. Ephemeral identity
+pairs are validated UUID task/attempt identifiers and are used by both runtime
+handshake probes and backend profile-attestation probes; neither resource may
+fall back to ambient randomness in this graph.
+
+The admitted `engine` policy maps without defaults to one
+`NerdctlReadinessVerifier`, one `NerdctlSandboxBackend`, and one
+`NerdctlImageInspector`: executable, readiness TTL, control timeout, execution
+timeout, control-output ceiling, and runtime-output ceiling retain their exact
+ADR-086 values. Deployment and runner ownership come only from the admitted
+identity. One `NerdctlImageHandshakeVerifier` shares that backend and runner
+identity and uses the protocol frame ceiling already admitted by ADR-086.
+
+Handshake and profile-attestation probes use one deterministic resource profile
+derived from ADR-086 rather than a new policy: maximum memory and PID bounds,
+minimum admitted CPU quota divided by its quota period, exact temporary and
+shared-memory reservations, and the remaining positive writable capacity as
+workspace. The derivation is a pure frozen snapshot and is validated by the
+same sandbox-profile contract used for task execution.
+
+One `SandboxImageCatalog` consumes only the detached ADR-089 declarations and
+the composed inspector and handshake verifier. The platform exposes only the
+frozen image-admission and sandbox-owner operations needed by the existing
+attempt lifecycle: admit, recover owned sandboxes, cancel, and execute runtime.
+It does not expose constructors, configuration snapshots, clocks, identity
+sources, process capabilities, readiness controls, or mutable component
+instances.
+
+Construction performs no host inspection, file read, environment read, process
+spawn, timer, UUID generation, image inspection, handshake, readiness check,
+sandbox recovery, or container operation. Operational failures retain the
+existing bounded backend/catalog errors; construction adds only fixed redacted
+invalid-configuration, invalid-images, invalid-dependency, and composition
+failures. No fallback executable, timeout, output limit, identity, clock, host,
+or process authority is introduced.
+
+This slice does not construct `NodeProcessExecutor` or
+`NodeHostReadinessInspector`, load environment/file/stdin configuration or
+credentials, compose authenticated control-plane or attempt lifecycle
+resources, add process entry or OS signals, own shutdown, expose a feature
+flag, or activate the runner. A later bootstrap ADR must supply the concrete
+system adapters and compose this platform with ADR-088 before any process can
+start. `LocalRunnerNotEnabledError` remains production behavior.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

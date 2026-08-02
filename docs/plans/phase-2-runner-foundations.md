@@ -1637,6 +1637,32 @@ evidence-upload gate. ADR-089 is admitted. Catalog loading, OCI/platform
 bootstrap, process startup, shutdown ownership, feature flags, and enablement
 remain deferred.
 
+### Slice 2.53 — OCI platform composition
+
+Status: Planned on 2026-08-02.
+
+Architecture decision: ADR-090.
+
+Detailed plan: `docs/plans/slice-2.53-oci-platform-composition.md`.
+
+- parse ADR-086 and ADR-089 before reading an external capability;
+- capture one injected process executor, host inspector, epoch clock, and
+  ephemeral probe-identity source without constructing system adapters;
+- map every engine, ownership, output, protocol, and derived probe-profile
+  bound exactly into one readiness/backend/inspector/handshake/catalog graph;
+- expose only the frozen image-admission and sandbox-owner operations required
+  by the existing attempt lifecycle;
+- prove inert construction, dependency capture, one shared authority graph,
+  fixed redacted failures, and no ambient fallback;
+- keep environment/credential loading, concrete system adapters, lifecycle
+  composition, process entry, shutdown, feature flags, and activation out of
+  scope.
+
+Exit: adversarial and behavioral composition tests prove configuration-first
+ordering, exact policy derivation, one process/host/clock/identity authority,
+catalog/backend sharing, immutable ports, zero construction effects, and no
+runner activation.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
