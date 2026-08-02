@@ -5602,6 +5602,37 @@ proxy, TLS, or observer policy, instantiate ADR-093, bootstrap resources,
 create a process entry, handle signals, own shutdown, expose an activation
 flag, or enable the runner.
 
+Architecture commit `db3e16d` preceded production code. Implementation commit
+`4fd741d` adds the closed join error contract, one package-private deterministic
+composition core, the concrete zero-authority production loader, public
+exports, and deterministic plus real-Linux tests. The production class contains
+no child-loader field or factory and defers construction of the systemd loader
+inside the second capability, after public fulfillment.
+
+Nine deterministic core tests prove one public-before-credential sequence,
+credential silence after synchronous and asynchronous public failure, fixed
+normalization of both credential failure forms, public projection only after
+secret admission, exact single property reads, cause-free projection failure,
+immutable exact-result identity, and isolated repeated calls. Three public-
+surface tests prove inert frozen construction, zero input authority,
+unsupported-host normalization through the public stage, and one real join of
+the two fixed production boundaries.
+
+All 1,399 locally runnable runner-local tests passed with thirteen Linux/
+database-dependent cases deferred. Local formatting, every 14-package type and
+lint gate, both architecture audits, the database-free workspace suite,
+production build, and web/API HTTP 200 checks passed. Main CI run
+`30740209107` passed 1,407 runner-local tests with five intentionally
+inapplicable branches skipped across all 71 files. It admitted one exact public
+configuration/catalog snapshot, then the fixed systemd credential, and returned
+their composite result. The preserved public-deployment and credential
+adversarial matrices, exact fixture cleanup, PostgreSQL migrations and seeds,
+database and API integrations, native spool and journal durability, isolated
+Chromium measured journey, production build, and both evidence uploads also
+passed. This admits ADR-098 and closes Slice 2.61. Fetch and observer policy,
+ADR-093 bootstrap, process entry, signals, shutdown, activation, and runner
+enablement remain separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

@@ -1,6 +1,6 @@
 # Slice 2.61 deployment input composition
 
-Status: Planned
+Status: Admitted
 
 Date: 2026-08-02
 
@@ -94,3 +94,34 @@ nested error.
    the two already-hardened production loaders join successfully.
 6. Platform composition, bootstrap, process entry, signals, activation, and
    runner enablement remain absent.
+
+## Admission evidence
+
+Architecture commit `db3e16d` preceded implementation commit `4fd741d`.
+Implementation adds the closed join contract, package-private deterministic
+core, concrete no-override production loader, public exports, and focused tests.
+The credential child is constructed only inside its deferred second capability,
+after complete public admission.
+
+Nine deterministic tests prove exact public-before-secret ordering, one call per
+stage, synchronous and asynchronous failure normalization, credential silence
+after public failure, fixed projection order, immutable exact results, cause and
+secret redaction, and repeated-call isolation. Three production-surface tests
+prove inert frozen construction, a zero-argument API, unsupported-host
+normalization at the public stage, and the real fixed Linux join.
+
+All 1,399 locally runnable runner-local tests passed with thirteen Linux/
+database-dependent branches deferred. Formatting, all 14-package type and lint
+gates, both architecture audits, the database-free workspace suite, production
+build, and local web/API HTTP 200 checks passed.
+
+Main CI run `30740209107` passed 1,407 applicable runner-local tests across all
+71 files with five intentionally inapplicable branches skipped. The new public
+test joined the exact root-owned canonical public deployment tree with the exact
+service-owned systemd credential fixture and returned one frozen admitted
+snapshot. Existing focused public-deployment and credential adversarial runs,
+fixture restoration and cleanup, PostgreSQL migrations and seeds, database and
+API integrations, native spool and journal durability, the isolated Chromium
+journey, production build, and both native evidence uploads also passed. Fetch,
+observer, platform bootstrap, process entry, signals, activation, and runner
+enablement remain absent.
