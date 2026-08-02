@@ -1448,7 +1448,7 @@ enablement remain deferred.
 
 ### Slice 2.47 — observed fail-stop local dispatch lifecycle
 
-Status: Planned on 2026-08-02.
+Status: Completed on 2026-08-02.
 
 Architecture decision: ADR-084.
 
@@ -1468,6 +1468,14 @@ Exit: adversarial lifecycle tests prove no attempt overlap or busy idle loop,
 every result is observed before advancement, indeterminate work is never
 retired from local time, shutdown waits for owned settlement, and uncertainty
 cannot retry or detach work.
+
+Admission: implementation commit `c7b1ec6`; 43 focused lifecycle and
+real-owner integration tests and all 922 runner-local tests passed against
+fresh migrated PostgreSQL database `socrates_ci_adr084`. Main CI run
+`30724666887` passed every required Linux, PostgreSQL, API, runner, native
+durability, Chromium journey, production-build, and evidence-upload gate.
+ADR-084 is admitted. Process configuration, concrete observation, shutdown
+ownership, resource composition, and runner enablement remain deferred.
 
 ## Acceptance gates
 

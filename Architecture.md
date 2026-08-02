@@ -4285,6 +4285,19 @@ configuration source, and shutdown authority explicitly. Until that separate
 decision is admitted, `LocalRunnerNotEnabledError` remains the production
 entry-point behavior.
 
+Evidence: architecture commit `b85d656` preceded production code.
+Implementation commit `c7b1ec6` added the retained observed lifecycle, strict
+closed-result snapshot boundary, and 43 focused ordering, identity, shutdown,
+delay, mutation, fault, real-owner, and real-scheduler tests. All 922
+runner-local tests and every local repository gate passed against fresh
+migrated PostgreSQL database `socrates_ci_adr084`, including the Chromium
+measured-research journey and production build. Main CI run `30724666887`
+passed all PostgreSQL, API, runner, Linux native durability, Chromium
+product-journey, production-build, and evidence-upload gates. This admits
+ADR-084 and closes Slice 2.47. Process configuration, concrete observation,
+shutdown ownership, resource composition, and runner enablement remain
+separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

@@ -1,6 +1,6 @@
 # Slice 2.47 local attempt dispatch loop
 
-Status: Planned
+Status: Completed
 
 Date: 2026-08-02
 
@@ -97,3 +97,19 @@ reconciliation can make that transition.
 7. No environment loader, process entry point, OS signal handler, shutdown
    timeout, adaptive backoff, concurrency scheduler, or runner enablement
    lands.
+
+## Admission evidence
+
+- Architecture commit: `b85d656`.
+- Implementation commit: `c7b1ec6`.
+- Focused lifecycle tests: 43, covering inert construction, strict dependency
+  capture, bounded configuration, immutable closed-result validation, delivery
+  identity, all outcome transitions, observer ordering, exact shutdown
+  identity, session/observer/delay shutdown races, fail-stop faults, real Node
+  delay, and real `LocalAttemptOwner` idle integration.
+- Runner-local suite: all 922 tests passed against fresh migrated PostgreSQL
+  database `socrates_ci_adr084`.
+- Local gates: Phase 2 boundary audit, formatting, typecheck, lint, full
+  workspace tests, Chromium measured-research E2E, and production build.
+- GitHub Actions: run `30724666887` passed all required Linux, PostgreSQL, API,
+  runner, native durability, browser, build, and evidence-upload gates.
