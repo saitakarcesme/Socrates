@@ -4778,6 +4778,68 @@ adapters, environment and credential loading, lifecycle bootstrap, process
 entry, shutdown ownership, feature flags, and runner activation remain
 separate decisions.
 
+### ADR-091: the application platform joins control-plane and OCI ownership without bootstrap
+
+ADR-088 owns one authenticated control-plane and attempt lifecycle, while
+ADR-090 owns one trusted-image and OCI sandbox graph. Both are inert and
+individually complete, but production still has no composition root proving
+that the attempt lifecycle uses the exact OCI graph admitted from the same
+configuration. Leaving that join to a future entry point would make the most
+security-sensitive ownership mapping an unreviewed bootstrap detail.
+
+Slice 2.54 will add one inert `LocalRunnerApplicationPlatform`. Construction
+accepts unknown ADR-086 configuration, ADR-089 trusted-image, and bearer-token
+candidates plus the explicitly injected capabilities already required by
+ADR-088 and ADR-090. It admits configuration first, trusted images second, and
+the credential third before reading a dependency property. The admitted
+snapshots, rather than the original candidates, are then supplied to both
+child graphs. Invalid input precedence is therefore deterministic and no child
+may observe caller mutation or a second getter result.
+
+The application platform captures exactly one fetch function, process
+executor, host inspector, epoch clock, probe-identity source, lease scheduler,
+monotonic time source, dispatch observer, journal identity source, spool
+identity source, and directory-sync capability. It does not synthesize a
+default or consult an ambient authority. Method capture happens once before a
+child graph is constructed; later owner mutation cannot redirect control-plane,
+filesystem, time, identity, host, or process operations.
+
+One `LocalRunnerOciPlatform` is constructed from the admitted configuration,
+trusted-image catalog, and captured OCI capabilities. That exact frozen object
+is supplied as both `LocalAttemptSandboxOwner` and
+`ExecutionImageAdmissionPort` to one
+`LocalRunnerAuthenticatedAttemptLifecycle`. Thus startup recovery, image
+admission, runtime execution, and cancellation share one backend/catalog
+ownership graph and one runner/deployment identity. No parallel backend,
+catalog, readiness verifier, image inspector, handshake verifier, or HTTP
+client may be created.
+
+The application platform retains only the authenticated lifecycle's
+`run(signal)` operation and freezes itself. It exposes no credential,
+configuration, child platform, adapter, clock, identity source, root path,
+fetch function, or operational escape hatch. Construction remains inert: it
+performs no fetch, file operation, directory creation, process spawn, host
+inspection, clock read, timer, UUID generation, recovery, image admission, or
+sandbox action. First execution remains the existing fail-stop, serial,
+startup-recovery-first lifecycle.
+
+Public construction errors distinguish `invalid_configuration`,
+`invalid_images`, `invalid_credential`, `invalid_dependency`, and
+`composition_failed` with fixed redacted messages. The raw credential and
+untrusted candidates remain private even through serialization and nested
+causes. Child operational failures retain their existing bounded contracts;
+the application platform adds no retry, fallback, or error translation after
+successful construction.
+
+This slice still does not instantiate `NodeProcessExecutor`,
+`NodeHostReadinessInspector`, `NodeLeaseAuthorityScheduler`,
+`NodeMonotonicTimeSource`, `NodeDirectorySync`, system identity sources, or
+global fetch. It does not load configuration, trusted images, or credentials
+from environment, files, stdin, or a secret store; add credential refresh;
+create a process entry point; handle OS signals; own shutdown; expose a feature
+flag; or activate the runner. A later bootstrap ADR must define those concrete
+authorities and the disabled-by-default activation protocol.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

@@ -1674,6 +1674,33 @@ ADR-090 is admitted. Concrete system adapters, loaders, lifecycle bootstrap,
 process entry, shutdown ownership, feature flags, and activation remain
 deferred.
 
+### Slice 2.54 — inert application-platform composition
+
+Status: Planned on 2026-08-02.
+
+Architecture decision: ADR-091.
+
+Detailed plan: `docs/plans/slice-2.54-application-platform-composition.md`.
+
+- admit configuration, trusted images, and credential in deterministic order
+  before reading any external capability;
+- detach inputs and capture one explicit fetch, process, host, epoch-clock,
+  probe-identity, scheduler, monotonic-time, observer, journal-identity,
+  spool-identity, and directory-sync authority;
+- construct exactly one ADR-090 OCI platform and provide that same frozen
+  object as both sandbox and image authority to one ADR-088 authenticated
+  lifecycle;
+- expose only one frozen `run(signal)` operation and preserve the existing
+  startup-recovery-first, serial, fail-stop lifecycle;
+- prove inert construction, exact cross-graph identity and capability sharing,
+  mutation isolation, redaction, and no ambient fallback;
+- keep concrete system adapters, loaders, credential refresh, process entry,
+  shutdown, feature flags, and runner activation out of scope.
+
+Exit: adversarial and behavioral composition tests prove ordered admission,
+one OCI/control-plane resource graph, exact sandbox/image aliasing, captured
+capabilities, zero construction effects, private secrets, and no activation.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
