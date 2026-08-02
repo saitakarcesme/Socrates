@@ -5195,6 +5195,69 @@ loading, systemd credential integration, fetch connection policy, logging,
 refresh, bootstrap, process entry, signals, activation, and runner enablement
 remain separate decisions.
 
+### ADR-095: bounded host bytes are read through one retained descriptor
+
+ADR-094 closes byte admission but deliberately owns no filesystem authority.
+A later deployment loader must not use path-based `readFile`, preflight `stat`,
+or an unbounded stream and then claim that the admitted bytes came from the
+attested file. Slice 2.58 adds one `NodeBoundedRegularFileReader` primitive. It
+is Linux-only, inert at construction, owns the concrete Node filesystem calls,
+and exposes one `read(input)` operation that returns detached bytes only after
+the open descriptor has been closed.
+
+The request is one exact plain owner containing a canonical absolute POSIX
+path, positive safe-integer byte ceiling, expected owner UID, and exact low
+`0o777` permission mode. Owner UID is a safe integer from zero through
+4,294,967,294. The mode must contain at least one `0o444` read bit and no write,
+execute, or higher bit. Properties are read once in that order and detached
+before any filesystem effect. Paths are NFC, no more than 4,096 UTF-8 bytes,
+normalized without control characters, NUL, comma, duplicate separator, dot
+segment, trailing slash, or root. Unknown keys, inherited owners, access
+failure, invalid numeric policy, Windows, and absent `O_NOFOLLOW` fail before
+open.
+
+The reader opens the final path exactly once with `O_RDONLY | O_NOFOLLOW` and
+uses only that retained handle thereafter. An initial bigint descriptor stat
+must prove one regular file, exactly one hard link, the exact owner UID and
+mode, and a non-empty size no larger than the request ceiling. The reader then
+consumes bounded chunks through explicit EOF, never observing more than the
+ceiling plus one byte. Early EOF, an extra byte beyond the initial size, or a
+different byte count fails closed. A final bigint descriptor stat must match
+the initial device, inode, kind, link count, UID, GID, mode, size, ctime
+nanoseconds, and mtime nanoseconds. Atime is excluded because the read itself
+may update it.
+
+The handle is closed exactly once on every successful open. A close failure
+after otherwise successful verification becomes a fixed `close_failed` error;
+a close failure while handling an earlier failure cannot replace or annotate
+the primary failure. The frozen public error taxonomy is limited to invalid
+input, unsupported host, open failure, invalid metadata, size limit, read
+failure, changed content, and close failure. It exposes no cause, syscall code,
+path, descriptor, metadata, or bytes.
+
+`O_NOFOLLOW` protects only the final component. This primitive therefore does
+not claim ancestor-symlink safety, choose a deployment root, or defend against
+a privileged deployment authority that can mutate and restore an inode between
+observable snapshots. A later loader must bind fixed canonical files beneath
+trusted, non-runner-writable, symlink-free ancestors and define separate root-
+owned public-file and service-owned credential policies. Network filesystems
+and stronger `openat2` resolution remain future host-hardening decisions.
+
+Tests must prove exact single property reads, mutation isolation, strict path
+and numeric admission, unsupported-host silence, final-symlink and special-file
+rejection, one-link/owner/mode enforcement, lower and upper size boundaries,
+explicit EOF, growth/truncation and metadata-drift detection, one descriptor
+and one close, detached output, and cause-free path/content redaction. A
+package-private deterministic handle core may prove otherwise uninducible read,
+metadata-race, and close precedence without exposing an override through the
+production reader. Linux-native cases run in CI; Windows proves admission and
+unsupported-host ordering.
+
+This decision does not select configuration, trusted-image, or credential file
+names; inspect ancestor directories; compose ADR-094; read environment or CLI
+state; integrate systemd credentials; refresh files; log; bootstrap; handle
+signals; create a process entry; activate work; or enable the runner.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
