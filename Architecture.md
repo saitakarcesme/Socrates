@@ -5539,6 +5539,69 @@ provisioning, public-plus-secret deployment composition, fetch and observation
 policy, bootstrap, process entry, signals, shutdown, activation, and runner
 enablement remain separate decisions.
 
+### ADR-098: deployment inputs join only after public admission succeeds
+
+ADR-096 and ADR-097 deliberately own different host authorities. Callers must
+not be required to know their paths, order them independently, merge partial
+results, or accidentally start secret access while public configuration is
+invalid. Slice 2.61 therefore adds one inert Linux-only
+`NodeLocalRunnerDeploymentLoader`. It has no constructor input or override and
+exposes one asynchronous `load()` operation returning the existing frozen
+`LocalRunnerDeploymentInputs` contract.
+
+Each call creates and invokes exactly one
+`NodeLocalRunnerPublicDeploymentLoader` first. Only after that promise fulfills
+with its fully admitted configuration and trusted-image catalog may the call
+construct and invoke one `NodeLocalRunnerSystemdCredentialLoader`. Public input
+failure therefore prevents credential-loader construction and every
+`CREDENTIALS_DIRECTORY`, effective-identity, credential-procfs, credential-tree,
+and secret-byte effect. The two loads are never parallelized. Neither child is
+retried, replaced, cached, refreshed, or given fallback authority.
+
+After both child capabilities fulfill, the join reads the two public result
+properties in fixed `configuration`, then `trustedImages` order and constructs
+one new frozen owner containing those exact already-detached, deeply frozen
+semantic values plus the admitted immutable credential string. It does not
+re-encode or reparse JSON, reconstruct a credential, retain either child
+loader, expose a partial result, or hold raw bytes, paths, descriptors,
+environment values, identities, or child errors. ADR-093 will re-admit these
+semantic values when a later bootstrap supplies them to the Node platform;
+this slice does not perform that composition.
+
+The public frozen error taxonomy is limited to `public_inputs_failed`,
+`credential_failed`, and `composition_failed`. A rejected or throwing public
+loader becomes the first code and prevents the credential operation. A
+rejected or throwing credential loader becomes the second. An unexpected
+failure while projecting already admitted results becomes the third. No code,
+message, cause, stack annotation, serialization, or inspection representation
+contains a child error code, host path, environment value, identity, metadata,
+configuration detail, catalog detail, byte, or credential.
+
+A package-private deterministic join accepts only two zero-argument loading
+capabilities so tests can prove ordering and otherwise inaccessible failures.
+The production class supplies the concrete no-override child loaders itself;
+no filesystem, environment, identity, parser, path, child-loader, factory, or
+clock seam is public. Construction is frozen and performs no environment,
+procfs, filesystem, process, network, clock, random, timer, identity, logging,
+or lifecycle effect. Repeated explicit `load()` calls are independent complete
+snapshots, not refresh or rotation APIs; a later bootstrap owns exactly one
+call per resource graph as required by ADR-088 and ADR-097.
+
+Tests must prove inert zero-authority construction, exact public-before-secret
+events, credential silence after every public rejection, one call per child,
+fixed public projection order, immutable output, child result non-retention,
+unexpected projection normalization, repeated-call isolation, and complete
+cause/path/content/secret redaction. Linux CI must exercise one real successful
+join over the exact ADR-096 and ADR-097 fixtures. Existing child suites and
+their focused host matrices remain the authoritative filesystem, environment,
+identity, metadata, size, canonicality, and race evidence; this slice must not
+duplicate or weaken them.
+
+This decision does not configure systemd, source credentials, define fetch,
+proxy, TLS, or observer policy, instantiate ADR-093, bootstrap resources,
+create a process entry, handle signals, own shutdown, expose an activation
+flag, or enable the runner.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
