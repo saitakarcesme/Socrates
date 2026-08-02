@@ -1,6 +1,6 @@
 # Slice 2.49 strict local runner configuration snapshot
 
-Status: Planned
+Status: Admitted
 
 Date: 2026-08-02
 
@@ -91,3 +91,23 @@ of the contract.
 5. No credential or process environment is accepted or retained.
 6. No resource construction, entry point, shutdown owner, or runner enablement
    lands.
+
+## Admission evidence
+
+- Architecture commit: `a8900ba`.
+- Implementation commit: `0f3270e`.
+- Focused suite: 75 adversarial and property-based parser tests covering plain
+  data admission, missing and unknown keys at every level, secret/process
+  authority rejection, identity and string bounds, exact HTTPS origins,
+  canonical disjoint roots, every numeric authority, relational one-unit
+  boundaries, caller detachment, deep freezing, deterministic parsing, fixed
+  public errors, and retained diagnostics without secret-value echo.
+- Runner-local suite: all 1019 tests passed against fresh migrated PostgreSQL
+  database `socrates_ci_adr086`.
+- Local gates: Phase 1 and Phase 2 boundary audits, formatting, typecheck,
+  lint, full workspace tests, database and API integrations, Chromium
+  measured-research E2E, and production build. Native durability validations
+  are Linux-only and passed in CI.
+- GitHub Actions: run `30726331992` passed all required Linux, PostgreSQL, API,
+  runner, native durability, Chromium journey, production-build, and
+  evidence-upload gates.

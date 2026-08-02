@@ -4425,6 +4425,19 @@ decision adds no local runner activation, environment loader, credential
 loader, resource graph, logging implementation, shutdown owner, retry policy,
 adaptive cadence, concurrency, or daemon process.
 
+Evidence: architecture commit `a8900ba` preceded production code.
+Implementation commit `0f3270e` added the strict V1 non-secret contract,
+plain-data admission boundary, detached deep-freeze result, fixed redacted
+errors, and 75 focused adversarial and property-based tests. All 1019
+runner-local tests and every platform-independent local repository gate passed
+against fresh migrated PostgreSQL database `socrates_ci_adr086`, including the
+Chromium measured-research journey and production build. Main CI run
+`30726331992` passed all PostgreSQL, API, runner, Linux native durability,
+Chromium product-journey, production-build, and evidence-upload gates. This
+admits ADR-086 and closes Slice 2.49. Environment and credential loading,
+resource composition, shutdown ownership, and runner enablement remain
+separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

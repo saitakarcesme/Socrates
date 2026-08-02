@@ -1508,7 +1508,7 @@ enablement remain deferred.
 
 ### Slice 2.49 — strict local runner configuration snapshot
 
-Status: Planned on 2026-08-02.
+Status: Admitted on 2026-08-02.
 
 Architecture decision: ADR-086.
 
@@ -1528,6 +1528,14 @@ Exit: adversarial parser tests prove malformed or conflicting configuration
 fails before effects, accepted configuration is exact and immutable, shared
 resource values cannot drift, and no secret or process authority enters the
 snapshot.
+
+Admission: implementation commit `0f3270e`; 75 focused adversarial and
+property-based parser tests and all 1019 runner-local tests passed against fresh
+migrated PostgreSQL database `socrates_ci_adr086`. Main CI run `30726331992`
+passed every required Linux, PostgreSQL, API, runner, native durability,
+Chromium journey, production-build, and evidence-upload gate. ADR-086 is
+admitted. Environment and credential loading, resource composition, shutdown
+ownership, and runner enablement remain deferred.
 
 ## Acceptance gates
 
