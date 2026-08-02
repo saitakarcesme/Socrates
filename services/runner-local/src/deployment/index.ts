@@ -23,3 +23,9 @@ export {
   type LocalRunnerPublicDeploymentInputs,
 } from "./public-deployment-contracts";
 export { NodeLocalRunnerPublicDeploymentLoader } from "./public-deployment-loader";
+export {
+  LocalRunnerSystemdCredentialLoadError,
+  type LocalRunnerSystemdCredential,
+  type LocalRunnerSystemdCredentialLoadErrorCode,
+} from "./systemd-credential-contracts";
+export { NodeLocalRunnerSystemdCredentialLoader } from "./systemd-credential-loader";

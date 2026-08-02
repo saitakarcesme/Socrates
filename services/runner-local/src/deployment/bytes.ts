@@ -216,7 +216,9 @@ export function admitLocalRunnerTrustedImageBytes(
   );
 }
 
-function admitCredential(bytes: unknown): RunnerBearerToken {
+export function admitLocalRunnerCredentialBytes(
+  bytes: unknown,
+): RunnerBearerToken {
   const copy = snapshot(
     bytes,
     "credential",
@@ -256,7 +258,7 @@ export function parseLocalRunnerDeploymentBytes(
   } catch {
     return fail("credential", "invalid_owner");
   }
-  const credential = admitCredential(credentialBytes);
+  const credential = admitLocalRunnerCredentialBytes(credentialBytes);
 
   return Object.freeze({ configuration, trustedImages, credential });
 }

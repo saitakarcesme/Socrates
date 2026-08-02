@@ -22,8 +22,10 @@ jobs:
     env:
       DATABASE_URL: postgresql://socrates:socrates@localhost:5432/socrates_ci
       MANUAL_RESEARCH_ENABLED: "true"
+      CREDENTIALS_DIRECTORY: /run/credentials/socrates-runner-local.service
       SOCRATES_TEST_FIFO: /tmp/socrates-ci-bounded-reader/input.fifo
       SOCRATES_TEST_PUBLIC_DEPLOYMENT: "1"
+      SOCRATES_TEST_SYSTEMD_CREDENTIAL: "1"
 
     services:
       postgres:
@@ -93,6 +95,15 @@ jobs:
           sudo install -o root -g root -m 0444 .github/fixtures/local-runner/trusted-images.v1.canonical /etc/socrates/runner-local/trusted-images.v1.json
           sudo truncate -s -1 /etc/socrates/runner-local/configuration.v1.json
           sudo truncate -s -1 /etc/socrates/runner-local/trusted-images.v1.json
+
+      - name: Provision systemd credential fixture
+        run: |
+          runner_uid="$(id -u)"
+          runner_gid="$(id -g)"
+          sudo install -d -o root -g root -m 0755 /run/credentials
+          sudo install -d -o "$runner_uid" -g "$runner_gid" -m 0500 /run/credentials/socrates-runner-local.service
+          sudo install -o "$runner_uid" -g "$runner_gid" -m 0400 .github/fixtures/local-runner/runner-bearer-token /run/credentials/socrates-runner-local.service/runner-bearer-token
+          sudo truncate -s -1 /run/credentials/socrates-runner-local.service/runner-bearer-token
 
       - name: Test workspace units
         run: DATABASE_URL= pnpm test
@@ -165,6 +176,66 @@ jobs:
           sudo rm -f /etc/socrates/runner-local
           sudo mv /etc/socrates/runner-local.real /etc/socrates/runner-local
 
+      - name: Validate adversarial systemd credential trees
+        run: |
+          run_credential_failure() {
+            SOCRATES_TEST_SYSTEMD_CREDENTIAL_FAILURE="$1" pnpm --filter @socrates/runner-local exec vitest run src/deployment/systemd-credential-loader.test.ts
+          }
+
+          CREDENTIALS_DIRECTORY=/run/credentials/other.service SOCRATES_TEST_SYSTEMD_CREDENTIAL_FAILURE=invalid_environment pnpm --filter @socrates/runner-local exec vitest run src/deployment/systemd-credential-loader.test.ts
+
+          sudo mv /run/credentials/socrates-runner-local.service/runner-bearer-token /run/credentials/socrates-runner-local.service/runner-bearer-token.real
+          run_credential_failure credential_failed
+          sudo mv /run/credentials/socrates-runner-local.service/runner-bearer-token.real /run/credentials/socrates-runner-local.service/runner-bearer-token
+
+          sudo mv /run/credentials/socrates-runner-local.service/runner-bearer-token /run/credentials/socrates-runner-local.service/runner-bearer-token.real
+          sudo ln -s runner-bearer-token.real /run/credentials/socrates-runner-local.service/runner-bearer-token
+          run_credential_failure credential_failed
+          sudo rm -f /run/credentials/socrates-runner-local.service/runner-bearer-token
+          sudo mv /run/credentials/socrates-runner-local.service/runner-bearer-token.real /run/credentials/socrates-runner-local.service/runner-bearer-token
+
+          sudo ln /run/credentials/socrates-runner-local.service/runner-bearer-token /run/credentials/socrates-runner-local.service/runner-bearer-token.alias
+          run_credential_failure credential_failed
+          sudo rm -f /run/credentials/socrates-runner-local.service/runner-bearer-token.alias
+
+          sudo chmod 0440 /run/credentials/socrates-runner-local.service/runner-bearer-token
+          run_credential_failure credential_failed
+          sudo chmod 0400 /run/credentials/socrates-runner-local.service/runner-bearer-token
+
+          sudo chown 0:0 /run/credentials/socrates-runner-local.service/runner-bearer-token
+          run_credential_failure credential_failed
+          sudo chown "$(id -u):$(id -g)" /run/credentials/socrates-runner-local.service/runner-bearer-token
+
+          sudo mv /run/credentials/socrates-runner-local.service/runner-bearer-token /run/credentials/socrates-runner-local.service/runner-bearer-token.real
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 0500 /run/credentials/socrates-runner-local.service/runner-bearer-token
+          run_credential_failure credential_failed
+          sudo rmdir /run/credentials/socrates-runner-local.service/runner-bearer-token
+          sudo mv /run/credentials/socrates-runner-local.service/runner-bearer-token.real /run/credentials/socrates-runner-local.service/runner-bearer-token
+
+          sudo truncate -s 84 /run/credentials/socrates-runner-local.service/runner-bearer-token
+          run_credential_failure credential_failed
+          sudo install -o "$(id -u)" -g "$(id -g)" -m 0400 .github/fixtures/local-runner/runner-bearer-token /run/credentials/socrates-runner-local.service/runner-bearer-token
+          sudo truncate -s -1 /run/credentials/socrates-runner-local.service/runner-bearer-token
+
+          printf 'x' | sudo tee -a /run/credentials/socrates-runner-local.service/runner-bearer-token >/dev/null
+          run_credential_failure credential_failed
+          sudo truncate -s -1 /run/credentials/socrates-runner-local.service/runner-bearer-token
+
+          printf 'x' | sudo dd of=/run/credentials/socrates-runner-local.service/runner-bearer-token bs=1 seek=0 conv=notrunc status=none
+          run_credential_failure credential_failed
+          sudo install -o "$(id -u)" -g "$(id -g)" -m 0400 .github/fixtures/local-runner/runner-bearer-token /run/credentials/socrates-runner-local.service/runner-bearer-token
+          sudo truncate -s -1 /run/credentials/socrates-runner-local.service/runner-bearer-token
+
+          sudo chmod 0700 /run/credentials/socrates-runner-local.service
+          run_credential_failure invalid_metadata
+          sudo chmod 0500 /run/credentials/socrates-runner-local.service
+
+          sudo mv /run/credentials/socrates-runner-local.service /run/credentials/socrates-runner-local.service.real
+          sudo ln -s socrates-runner-local.service.real /run/credentials/socrates-runner-local.service
+          run_credential_failure open_failed
+          sudo rm -f /run/credentials/socrates-runner-local.service
+          sudo mv /run/credentials/socrates-runner-local.service.real /run/credentials/socrates-runner-local.service
+
       - name: Remove bounded-reader FIFO fixture
         if: ${{ always() }}
         run: rm -f "$SOCRATES_TEST_FIFO"
@@ -185,6 +256,23 @@ jobs:
             sudo rmdir "$directory" 2>/dev/null || true
           done
           sudo rmdir /etc/socrates 2>/dev/null || true
+
+      - name: Remove systemd credential fixture
+        if: ${{ always() }}
+        run: |
+          if [ -L /run/credentials/socrates-runner-local.service ]; then
+            sudo rm -f /run/credentials/socrates-runner-local.service
+          fi
+          for directory in /run/credentials/socrates-runner-local.service /run/credentials/socrates-runner-local.service.real; do
+            if [ -d "$directory/runner-bearer-token" ] && [ ! -L "$directory/runner-bearer-token" ]; then
+              sudo rmdir "$directory/runner-bearer-token"
+            else
+              sudo rm -f "$directory/runner-bearer-token"
+            fi
+            sudo rm -f "$directory/runner-bearer-token.real" "$directory/runner-bearer-token.alias"
+            sudo rmdir "$directory" 2>/dev/null || true
+          done
+          sudo rmdir /run/credentials 2>/dev/null || true
 
       - name: Validate native runner spool durability
         run: pnpm --filter @socrates/runner-local test:native-spool
