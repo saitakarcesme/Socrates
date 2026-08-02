@@ -5206,15 +5206,17 @@ and exposes one `read(input)` operation that returns detached bytes only after
 the open descriptor has been closed.
 
 The request is one exact plain owner containing a canonical absolute POSIX
-path, positive safe-integer byte ceiling, expected owner UID, and exact low
-`0o777` permission mode. Owner UID is a safe integer from zero through
-4,294,967,294. The mode must contain at least one `0o444` read bit and no write,
-execute, or higher bit. Properties are read once in that order and detached
-before any filesystem effect. Paths are NFC, no more than 4,096 UTF-8 bytes,
-normalized without control characters, NUL, comma, duplicate separator, dot
-segment, trailing slash, or root. Unknown keys, inherited owners, access
-failure, invalid numeric policy, Windows, and absent `O_NOFOLLOW` fail before
-open.
+path, byte ceiling, expected owner UID, and exact low `0o777` permission mode.
+The byte ceiling is an integer from one through the architecture-owned absolute
+maximum of 16,777,216 bytes, matching ADR-094's largest admitted input rather
+than granting arbitrary allocation authority. Owner UID is a safe integer from
+zero through 4,294,967,294. The mode must contain at least one `0o444` read bit
+and no write, execute, or higher bit. Properties are read once in that order
+and detached before any filesystem effect. Paths are NFC, no more than 4,096
+UTF-8 bytes, normalized without control characters, NUL, comma, duplicate
+separator, dot segment, trailing slash, or root. Unknown keys, inherited
+owners, access failure, invalid numeric policy, Windows, and absent
+`O_NOFOLLOW` fail before open.
 
 The reader opens the final path exactly once with `O_RDONLY | O_NOFOLLOW` and
 uses only that retained handle thereafter. An initial bigint descriptor stat

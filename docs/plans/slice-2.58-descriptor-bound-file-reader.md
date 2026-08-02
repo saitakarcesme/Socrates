@@ -33,7 +33,8 @@ device files, pipes, sockets, and files with multiple hard links are rejected.
 `NodeBoundedRegularFileReader.read(input)` accepts one exact plain owner with:
 
 - one canonical absolute POSIX `path`;
-- one positive safe-integer `maximumBytes`;
+- one integer `maximumBytes` from one through the architecture-owned absolute
+  ceiling of 16,777,216 bytes;
 - one safe-integer `expectedOwnerUid` from zero through 4,294,967,294; and
 - one exact read-only permission `mode` containing at least one of the `0o444`
   read bits and no write, execute, or higher bits.
