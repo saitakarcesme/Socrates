@@ -5739,6 +5739,48 @@ inputs, create a process entry point or systemd unit, handle signals, set a
 shutdown deadline, own process exit, expose an activation flag, or enable the
 runner.
 
+Architecture commit `082daaf` preceded dependency and production changes.
+Implementation commit `769bcf5` pins the Node-22-compatible `undici@6.26.0`
+line with its registry integrity, adds the closed origin and error contracts,
+one package-private resource core, the no-override private-Agent production
+resource, public exports, test-only TLS identities, and a Linux native
+validation step. The resource copies every admitted URL before dispatch,
+projects only the owned dispatcher, retains one graceful close settlement, and
+never touches the global dispatcher or ambient fetch.
+
+Twenty-two deterministic core tests prove exact URL snapshotting, owned-
+dispatcher replacement, origin and runner-path confinement, POST/manual/signal
+requirements, proxy input denial, synchronous and asynchronous native failure
+redaction, exact-once shared close settlement, permanent closure after drain
+failure, and accepted-request settlement during graceful drain. Fourteen
+production-surface tests prove exact plain-data origin admission, proxy and
+accessor denial without accessor execution, inert frozen construction, the
+minimal public surface, and process-global dispatcher preservation.
+
+All 1,435 locally runnable runner-local tests passed with thirteen Linux/
+database-dependent cases deferred across 73 files. Frozen-lockfile install,
+local formatting, every 14-package type and lint gate, both architecture
+audits, the database-free workspace suite, production build, real native TLS
+validation, and web/API HTTP 200 checks passed. The native run negotiated two
+TLS 1.3 direct connections, made zero proxy and redirect-target connections,
+rejected the untrusted peer even under a hostile process-level TLS bypass
+variable, and preserved the global dispatcher.
+
+Main CI run `30741285188` passed 1,443 runner-local tests with five
+intentionally inapplicable branches skipped across all 73 files. Its dedicated
+Linux native step started under `NODE_USE_ENV_PROXY=1`, unreachable launch-time
+HTTP/HTTPS proxies, an empty bypass list, and
+`NODE_TLS_REJECT_UNAUTHORIZED=0`; the private resource still produced the same
+two direct TLS 1.3 connections, zero proxy and redirect-target connections,
+untrusted-peer rejection, and global-dispatcher preservation. PostgreSQL
+migrations and seeds, database/API/runner integrations, both preserved
+adversarial deployment matrices, native spool and journal durability, the
+isolated Chromium measured journey, production build, and both durability
+evidence uploads also passed. This admits ADR-099 and closes Slice 2.62.
+Observer policy, ADR-093 bootstrap, process entry, systemd unit, signals,
+shutdown deadlines, activation, and runner enablement remain separate
+decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
