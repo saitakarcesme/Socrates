@@ -5889,6 +5889,42 @@ remote telemetry transport, compose ADR-093, load deployment inputs, create a
 process entry point or systemd unit, handle signals, set a shutdown deadline,
 own process exit, expose an activation flag, or enable the runner.
 
+Architecture commit `613036d` preceded every production change.
+Implementation commit `b677794` adds the closed observation contracts, the
+package-private projection and byte-sink core, the zero-input Node stderr
+observer, public exports, and a dedicated Linux native validation step. The
+child-process evidence driver lives outside the production `src` tree and is
+linted explicitly; both architecture boundary audits therefore continue to
+reserve process creation for admitted runtime authorities only.
+
+Twenty-eight deterministic core tests prove exact canonical projections for
+all six top-level dispatch states, both settlement paths and outcomes, every
+admitted authority matrix, identity consistency, byte and LF bounds, sink
+settlement, and denial of mutable, proxy, accessor, malformed, inconsistent,
+oversized, and payload-bearing inputs before write. Five production-surface
+tests prove silent frozen construction, the minimal public API, byte-exact
+stderr projection, callback settlement, captured-stream isolation, and
+cause-free callback failure normalization.
+
+All 1,468 locally runnable runner-local tests passed with thirteen
+Linux/database-dependent branches deferred across 75 files. Formatting,
+every 14-package type and lint gate, both architecture audits, all nineteen
+workspace test tasks, all thirteen production build tasks, the native child
+validation, and live web/API HTTP 200 checks passed. The native child emitted
+one exact 74-byte JSONL record to stderr, emitted zero stdout bytes, and exited
+successfully.
+
+Main CI run `30742463559` passed 1,476 runner-local tests with five
+intentionally inapplicable branches skipped across all 75 files. Its native
+observation step independently produced the same single 74-byte stderr record,
+zero stdout bytes, and successful child exit on Linux. PostgreSQL migrations
+and seeds, database/API/runner integrations, both adversarial deployment
+matrices, native spool and journal durability, the isolated Chromium measured
+journey, production build, and durability evidence uploads also passed. This
+admits ADR-100 and closes Slice 2.63. Bootstrap composition, process entry,
+systemd unit, signals, shutdown deadlines, activation, and runner enablement
+remain separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
