@@ -12,6 +12,7 @@ export {
 } from "./native-spec";
 export { NodeProcessExecutor, ProcessExecutionError } from "./process";
 export { NerdctlInvocation } from "./invocation";
+export { captureSandboxProbeIdentitySource } from "./probe-identity";
 export { sandboxTerminationReceipt } from "./termination";
 export {
   buildCreateArguments,

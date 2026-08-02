@@ -9,3 +9,8 @@ export {
   type LocalRunnerOciPlatformClock,
   type LocalRunnerOciPlatformOptions,
 } from "./local-runner-oci-platform";
+export {
+  LocalRunnerNodeApplicationPlatform,
+  LocalRunnerNodeApplicationPlatformError,
+  type LocalRunnerNodeApplicationPlatformOptions,
+} from "./local-runner-node-application-platform";
