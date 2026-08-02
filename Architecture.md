@@ -4368,6 +4368,63 @@ admits ADR-085 and closes Slice 2.48. Environment loading, process resource
 composition, shutdown ownership, and runner enablement remain separate
 decisions.
 
+### ADR-086: Local runner configuration is one strict non-secret snapshot
+
+The admitted local-runner components now expose enough independent constructor
+options to build a real resource graph, but those options duplicate authority
+across transport, source, runtime, durability, sandbox, and lifecycle
+boundaries. Wiring them directly from environment variables would permit one
+archive limit, runner identity, root path, or cadence to drift between
+components. It would also mix untrusted textual input, secret acquisition, and
+resource construction in one irreversible process boundary.
+
+Before any resource composition or entry-point enablement, the runner will
+therefore own one versioned `LocalRunnerConfigurationV1` data contract and one
+`parseLocalRunnerConfiguration(candidate)` boundary. The contract is a strict
+closed object containing only non-secret values: deployment and runner
+identity; control-plane origin and bounded transport sizes/timing; private
+artifact, source, journal, and spool roots; engine executable and bounded
+control/execution settings; source extraction, runtime request, runtime
+protocol, execution policy, durability, lease, recovery, and poll limits.
+Credentials, bearer tokens, environment maps, image catalog contents,
+functions, clocks, schedulers, observers, signals, and constructed resources
+are not configuration fields.
+
+The parser accepts an unknown candidate, rejects unknown keys at every level,
+validates all integers as positive or explicitly bounded non-negative safe
+integers, validates the runner UUID and a constrained deployment identifier,
+and admits only an HTTPS origin with no user info, path, query, or fragment.
+Private roots are absolute canonical POSIX paths and must be pairwise distinct
+and non-nested. The engine executable is non-empty and NUL-free. One field is
+the sole authority for each value consumed by multiple future resources: in
+particular source archive bytes, runtime output bytes, runner identity, engine
+executable, and lifecycle timing are not repeated in separate subtrees.
+
+Relational invariants are validated at the outer boundary. Heartbeat cadence
+must be strictly shorter than lease duration; revocation grace cannot exceed
+the lease; per-file source bytes cannot exceed expanded source bytes; archive
+bytes cannot exceed both transport and artifact admission because the shared
+field configures all three; protocol and child-output bounds cannot exceed the
+projected runtime-output policy; and spool/journal item limits must fit inside
+their total byte budgets. The exact accepted value is rebuilt into plain data
+and deeply frozen, including every nested object. Caller mutation cannot alter
+future resource authority.
+
+Parsing is deterministic and effect-free. It does not read `process.env`, a
+file, stdin, a secret store, the network, the clock, or host readiness. It does
+not normalize a credential, create a directory, instantiate a transport or
+sandbox, start recovery, install a signal handler, or expose a process entry
+point. A later environment adapter may translate explicitly named variables
+into this candidate; a later credential capability may supply secret material;
+and a later resource-composition ADR may consume the admitted snapshot. Those
+boundaries remain separate so configuration errors precede every external
+effect and never echo secret input.
+
+`LocalRunnerNotEnabledError` remains the production entry-point behavior. This
+decision adds no local runner activation, environment loader, credential
+loader, resource graph, logging implementation, shutdown owner, retry policy,
+adaptive cadence, concurrency, or daemon process.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

@@ -1506,6 +1506,29 @@ production-build, and evidence-upload gate. ADR-085 is admitted. Environment
 loading, process resource composition, shutdown ownership, and runner
 enablement remain deferred.
 
+### Slice 2.49 — strict local runner configuration snapshot
+
+Status: Planned on 2026-08-02.
+
+Architecture decision: ADR-086.
+
+Detailed plan: `docs/plans/slice-2.49-local-runner-configuration.md`.
+
+- define one strict versioned non-secret configuration contract;
+- make shared identities, roots, byte bounds, and cadence single-authority;
+- validate origin, canonical private roots, integer bounds, and cross-field
+  relationships before any resource effect;
+- rebuild and deeply freeze the exact accepted data graph;
+- reject secrets, environment maps, functions, unknown keys, aliases, and
+  duplicated authority;
+- keep environment/credential loading, resources, shutdown, and runner
+  enablement out of scope.
+
+Exit: adversarial parser tests prove malformed or conflicting configuration
+fails before effects, accepted configuration is exact and immutable, shared
+resource values cannot drift, and no secret or process authority enters the
+snapshot.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
