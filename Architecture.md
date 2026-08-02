@@ -5101,6 +5101,77 @@ loaders, fetch connection policy, operational logging, refresh, lifecycle
 bootstrap, process entry, signals, shutdown deadlines, activation flags, and
 runner activation remain separate decisions.
 
+### ADR-094: deployment bytes are bounded and canonical before loader ownership
+
+ADR-093 accepts already materialized unknown values, but a later production
+bootstrap must not pass arbitrary file contents directly into that platform.
+Slice 2.57 introduces one pure `parseLocalRunnerDeploymentBytes` boundary
+between an eventual deployment loader and the existing semantic parsers. It
+accepts exactly three caller-owned byte views named `configuration`,
+`trustedImages`, and `credential`; reads those properties once in that order;
+and returns one frozen `LocalRunnerDeploymentInputs` value containing the
+detached admitted runner configuration, trusted-image catalog, and bearer
+credential. It performs no filesystem, environment, process, network, clock,
+random, logging, or lifecycle effect.
+
+The boundary admits only `Uint8Array` views backed by fixed, non-shared
+`ArrayBuffer` storage. It rejects `SharedArrayBuffer`, resizable buffers,
+detached storage, exotic proxies, and all other candidates, then copies each
+accepted view before decoding it. The copy prevents later owner mutation from
+changing the admitted value. Runner-configuration input is limited to
+1,048,576 bytes and trusted-image input to 16,777,216 bytes; both must be
+non-empty. The latter ceiling exceeds the existing worst-case 32-image schema
+capacity, including each image's bounded environment and two bounded commands,
+so this transport boundary does not silently narrow ADR-084. Size and storage
+checks occur before decoding or JSON parsing.
+
+Both JSON copies are decoded by a fatal UTF-8 decoder. A leading byte-order
+mark, invalid UTF-8, NUL, and all decode failures are rejected. The decoded
+text is parsed as JSON and admitted through the existing
+`parseLocalRunnerConfiguration` or
+`parseLocalRunnerTrustedImageCatalogConfiguration` boundary before canonical
+comparison. The exact source text must then equal `canonicalJson` of that
+admitted frozen value: no leading or trailing whitespace, newline, duplicate
+member, alternate escape, alternate number representation, or non-canonical
+member order is accepted. Canonicalization therefore sees only strict schema-
+owned ASCII member names rather than attacker-selected keys; array order
+remains significant. Provisioning must write these exact canonical bytes.
+
+The credential view must contain exactly 85 bytes, decode as fatal UTF-8 with
+no byte-order mark, and equal an ASCII `srt1` bearer token admitted by
+`runnerBearerTokenSchema`. Newlines, surrounding whitespace, NUL, or any
+alternate encoding fail closed. No thrown error, message, code, cause, or
+inspection representation may contain credential bytes or decoded credential
+text. The result retains the immutable string only after admission and never
+retains any input view or backing storage.
+
+Failures use one closed, cause-free error taxonomy that identifies only the
+failed input and phase: invalid owner, storage, size, UTF-8, JSON, semantic
+configuration, canonical form, or credential. Errors from JSON, Zod, existing
+configuration parsers, typed-array operations, and decoding are normalized;
+their causes do not escape. Configuration fails before trusted images are
+read, and trusted images fail before credential is read, preserving a stable
+non-secret failure order.
+
+Tests must prove exact lower and upper byte boundaries, over-limit rejection
+before decode/parse, fatal UTF-8 and BOM rejection, duplicate JSON members,
+whitespace and trailing newline rejection, member-order and escape/number
+canonicality, strict semantic rejection, single property reads, post-call
+mutation isolation, subarray copying, `Buffer` compatibility, shared and
+resizable storage rejection where the runtime supports them, fixed failure
+ordering, frozen detached results, and credential redaction across every
+failure path. A round-trip test must encode the real maximum-shape fixtures
+with `canonicalJson` and prove that transport admission preserves exactly the
+existing semantic result.
+
+This decision does not choose file names, directory roots, ownership or mode
+requirements, symlink policy, `open` flags, read strategy, atomic replacement,
+environment or CLI precedence, systemd credential integration, secret refresh,
+fetch connection policy, logging, activation, or a process entry point. A
+later loader must own those host concerns and pass only bounded byte views into
+this boundary. ADR-093 remains inert, and `LocalRunnerNotEnabledError` remains
+the public production entry-point behavior after Slice 2.57.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
