@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "lint": "eslint src",
+    "lint": "eslint src evidence",
     "test:native": "tsx src/oci/native-validation.ts",
     "test:native-runtime": "tsx src/runtime/native-validation.ts",
     "test:native-spool": "tsx src/spool/native-validation.ts",
     "test:native-journal": "tsx src/work-journal/native-validation.ts",
     "test:native-network": "tsx src/network/native-validation.ts",
+    "test:native-observation": "tsx evidence/native-observation-validation.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

@@ -25,6 +25,7 @@ export * from "./source/index";
 export * from "./request/index";
 export * from "./lifecycle/index";
 export * from "./network/index";
+export * from "./observation/index";
 export * from "./spool/index";
 export * from "./transport/index";
 export * from "./work-journal/index";

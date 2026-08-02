@@ -291,6 +291,9 @@ jobs:
           SOCRATES_TEST_NETWORK_NATIVE: "1"
         run: pnpm --filter @socrates/runner-local test:native-network
 
+      - name: Validate native runner dispatch observation
+        run: pnpm --filter @socrates/runner-local test:native-observation
+
       - name: Install Chromium
         run: pnpm --filter @socrates/web exec playwright install --with-deps chromium
 
