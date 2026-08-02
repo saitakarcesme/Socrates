@@ -28,6 +28,7 @@ import {
 } from "../oci";
 import { validateSandboxProfile } from "../oci/profile";
 import { captureSandboxProbeIdentitySource } from "../oci/probe-identity";
+import { captureCapabilityMethod } from "./capability-capture";
 
 export interface LocalRunnerOciPlatformClock {
   now(): number;
@@ -84,32 +85,18 @@ function trustedImages(options: LocalRunnerOciPlatformOptions) {
   }
 }
 
-function capturedMethod<Arguments extends unknown[], Result>(
-  owner: unknown,
-  name: PropertyKey,
-): (...arguments_: Arguments) => Result {
-  if ((typeof owner !== "object" && typeof owner !== "function") || !owner) {
-    throw new TypeError("Dependency owner is invalid.");
-  }
-  const candidate = Reflect.get(owner, name) as unknown;
-  if (typeof candidate !== "function") {
-    throw new TypeError("Dependency method is not callable.");
-  }
-  return candidate.bind(owner) as (...arguments_: Arguments) => Result;
-}
-
 function dependencies(options: LocalRunnerOciPlatformOptions) {
   try {
-    const run = capturedMethod<[ProcessRequest], Promise<ProcessResult>>(
-      options.processes,
-      "run",
-    );
-    const inspect = capturedMethod<
+    const run = captureCapabilityMethod<
+      [ProcessRequest],
+      Promise<ProcessResult>
+    >(options.processes, "run");
+    const inspect = captureCapabilityMethod<
       [],
       ReturnType<HostReadinessInspector["inspect"]>
     >(options.host, "inspect");
-    const rawNow = capturedMethod<[], number>(options.clock, "now");
-    const rawNext = capturedMethod<[], SandboxProbeIdentity>(
+    const rawNow = captureCapabilityMethod<[], number>(options.clock, "now");
+    const rawNext = captureCapabilityMethod<[], SandboxProbeIdentity>(
       options.probeIdentities,
       "next",
     );
