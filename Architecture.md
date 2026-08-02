@@ -4988,6 +4988,30 @@ The design is grounded in nerdctl's official
 [global command flags](https://github.com/containerd/nerdctl/blob/v2.3.1/docs/command-reference.md),
 and [rootless operating model](https://github.com/containerd/nerdctl/blob/v2.3.1/docs/rootless.md).
 
+Architecture commits `419086c`, `8c1807a`, and `0088e06` preceded production
+code and closed the engine-selection, inherited-policy, and rootless working-
+directory authorities. Implementation commit `60fbb94` adds the strict engine
+configuration contract, one frozen `NerdctlInvocation`, exact process
+environment and working-directory execution, root-owned TOML and host-path
+attestation, shared platform composition, and the reference-host provisioning
+contract. Focused tests prove exact global argv and environment equality,
+derived namespace continuity, single-read and mutation isolation, ambient-key
+exclusion, selector rejection, fixed stdin ownership, symlink and byte drift
+failure, and the same invocation across readiness, image inspection, recovery,
+and sandbox execution.
+
+All 1,257 locally runnable runner-local tests passed; the four Linux/database-
+dependent tests were then exercised by CI. Every local repository gate passed
+against separate fresh migrated and seeded PostgreSQL databases, including 59
+database integrations, 78 API tests, both architecture audits, production
+build, and the isolated Chromium measured project-to-learning journey. Main CI
+run `30734162748` passed all 1,261 runner-local tests on Linux plus formatting,
+types, lint, PostgreSQL, API, native spool and work-journal durability,
+Chromium, build, and both native-evidence uploads. This admits ADR-092 and
+closes Slice 2.55. Configuration and credential loading, refresh, lifecycle
+bootstrap, process entry, signal/shutdown ownership, feature flags, and runner
+activation remain separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
