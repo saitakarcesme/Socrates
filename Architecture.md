@@ -4507,6 +4507,26 @@ secret loader, process entry point, logging implementation, OS signal handler,
 shutdown timeout, runner feature flag, or activation. `LocalRunnerNotEnabledError`
 remains the production entry-point behavior.
 
+Implementation commit `898e67f` adds the opaque frozen lifecycle, captures
+every injected method after configuration admission, aligns ADR-086 with all
+downstream constructor bounds, and retains one serial dispatch operation.
+Thirty-six focused lifecycle tests cover inert construction, every capability
+getter, missing/non-callable/proxy dependencies, post-construction mutation,
+exact boundary composition, invalid and pre-aborted signals, real idle startup,
+startup/dispatch/observation/delay fail-stop behavior, and one measured tar
+snapshot through artifact, source, request, runtime, journal, spool,
+publication, and cleanup boundaries. Seventy-seven parser tests preserve the
+strict configuration boundary.
+
+All 1,057 runner-local tests and every locally applicable repository gate
+passed against fresh migrated PostgreSQL database
+`socrates_ci_adr087_retry`, including the Chromium measured-research journey
+and production build. Main CI run `30727600459` passed every PostgreSQL, API,
+runner, Linux native durability, Chromium product-journey, production-build,
+and evidence-upload gate. This admits ADR-087 and closes Slice 2.50. Platform
+resource construction, credentials, environment loading, process startup,
+shutdown ownership, and runner enablement remain separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

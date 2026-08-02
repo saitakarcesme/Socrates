@@ -1539,7 +1539,7 @@ ownership, and runner enablement remain deferred.
 
 ### Slice 2.50 — inert attempt lifecycle composition
 
-Status: Planned on 2026-08-02.
+Status: Admitted on 2026-08-02.
 
 Architecture decision: ADR-087.
 
@@ -1562,6 +1562,14 @@ Exit: real and adversarial tests prove configuration precedes dependency
 access, construction has no effects, every composed authority comes from one
 snapshot or explicit capability, and the first run owns the existing durable
 attempt lifecycle without exposing internal resources.
+
+Admission: implementation commit `898e67f`; 36 focused lifecycle tests, 77
+strict parser tests, and all 1,057 runner-local tests passed against fresh
+migrated PostgreSQL database `socrates_ci_adr087_retry`. Main CI run
+`30727600459` passed every required Linux, PostgreSQL, API, runner, native
+durability, Chromium journey, production-build, and evidence-upload gate.
+ADR-087 is admitted. Platform resource composition, credentials, environment
+loading, process startup, shutdown ownership, and enablement remain deferred.
 
 ## Acceptance gates
 

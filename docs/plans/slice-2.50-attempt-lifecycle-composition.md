@@ -1,6 +1,6 @@
 # Slice 2.50 inert attempt lifecycle composition
 
-Status: Planned
+Status: Admitted
 
 Date: 2026-08-02
 
@@ -102,3 +102,18 @@ No failed construction exposes or retries a partial graph.
 5. Internal resources and sensitive dependency objects are not exposed.
 6. No credential/platform builder, environment loader, process entry point,
    shutdown owner, feature flag, or runner enablement lands.
+
+## Admission evidence
+
+Implementation commit `898e67f` adds the frozen opaque lifecycle and the
+ADR-086 constructor-compatibility bounds. Thirty-six focused lifecycle tests
+cover the complete adversarial matrix and real idle/measured durable flows;
+seventy-seven parser tests cover the strict outer boundary. All 1,057
+runner-local tests and every local format, type, lint, dependency-audit,
+workspace-test, Chromium journey, and production-build gate passed against
+fresh migrated PostgreSQL database `socrates_ci_adr087_retry`.
+
+Main CI run `30727600459` passed every PostgreSQL, API, runner, Linux native
+durability, Chromium product-journey, production-build, and evidence-upload
+gate. Platform resources, secrets, environment loading, process entry,
+shutdown ownership, feature flags, and runner activation did not land.
