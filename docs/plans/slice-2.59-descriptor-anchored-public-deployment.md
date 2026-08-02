@@ -1,6 +1,6 @@
 # Slice 2.59 descriptor-anchored public deployment admission
 
-Status: Planned
+Status: Admitted
 
 Date: 2026-08-02
 
@@ -138,3 +138,42 @@ configurable.
    metadata, size, canonicality, and valid admission.
 6. Credentials, environment, refresh, bootstrap, process entry, signals,
    activation, and runner enablement remain absent.
+
+## Admission evidence
+
+Architecture commit `4d215be` preceded implementation commit `e934b33`.
+Implementation adds shared staged ADR-094 public-document admission, the closed
+loader contract, one deterministic descriptor-chain core, one concrete
+no-override Node loader, canonical CI fixtures, and public exports. Test
+hardening commit `61c0ab1` added real host mutations before this slice was
+admitted.
+
+Nineteen deterministic core tests prove procfs-first failure, exact retained
+directory paths, UID/mode/descriptor metadata, early and partial-open cleanup,
+configuration-before-image admission, exact file bounds, redaction, reverse
+single-close order, and primary-failure precedence. Four public tests cover
+inert frozen construction, the zero-authority method surface, Windows rejection,
+the fixed Linux tree, and closed adversarial failures. The preserved sixteen
+ADR-094 byte tests and fifty-two ADR-095 core/public tests continue to cover
+canonical semantics and final-component file races.
+
+All 1,354 locally runnable runner-local tests passed; ten Linux/database-
+dependent branches were deferred. Formatting, all 14-package type and lint
+gates, both architecture audits, the database-free workspace suite, and the
+production build passed locally. The local web and API returned HTTP 200 after
+the build, and Chromium rendered the Dashboard with no application console
+error or framework overlay.
+
+Main CI run `30738469196` passed 1,362 runner-local tests across 67 files on
+Linux with two intentionally inapplicable branches skipped. A root-owned
+`/etc/socrates/runner-local` fixture proved valid production admission. Eleven
+additional focused invocations then proved missing configuration, final
+symlink, hard link, wrong mode, wrong owner, directory substitution, one-byte-
+over-limit content, non-canonical configuration, non-canonical trusted images,
+writable ancestor, and symlink ancestor all fail closed with the expected
+public code. Fixture restoration and cleanup passed. The same run passed
+formatting, type, lint, both audits, PostgreSQL migrations and seeds, database
+and API integrations, native spool and journal durability, the isolated
+Chromium journey, production build, and both evidence uploads. Credential,
+environment, refresh, bootstrap, process entry, signals, activation, and
+runner enablement remain absent.

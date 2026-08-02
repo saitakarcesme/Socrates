@@ -5380,6 +5380,40 @@ CLI state, integrate `LoadCredential=`, refresh inputs, construct fetch or
 observer policy, compose ADR-093, create a process entry point, handle signals,
 own shutdown, expose an activation flag, or enable the runner.
 
+Architecture commit `4d215be` preceded production code. Implementation commit
+`e934b33` adds staged reuse of ADR-094 admission, the fixed public-deployment
+contract, one descriptor-chain core, the concrete no-override Node loader,
+closed errors, canonical CI fixtures, and deterministic and native tests. Test
+hardening commit `61c0ab1` then expanded real Linux evidence before admission
+instead of treating one valid fixture as proof of the adversarial host
+contract.
+
+Nineteen deterministic core tests prove exact procfs-first ordering, the
+retained `/` to `etc` to `socrates` to `runner-local` descriptor chain, exact
+file requests and byte ceilings, semantic admission before advancement,
+malformed descriptor and directory metadata rejection, partial-open cleanup,
+reverse single-close ownership, redaction, and primary-failure precedence.
+Four production-surface tests prove inert frozen construction, no input or
+override authority, unsupported-host ordering, one real fixed-root success,
+and closed failures. Existing ADR-094 and ADR-095 suites continue to prove
+canonical byte admission and descriptor-bound final-file behavior.
+
+All 1,354 locally runnable runner-local tests passed with ten Linux/database-
+dependent cases deferred. Local formatting, all 14-package type and lint gates,
+both architecture audits, the complete database-free workspace suite, and the
+production build passed. Main CI run `30738469196` passed 1,362 runner-local
+tests across all 67 files on Linux, with only two intentionally inapplicable
+branches skipped. It admitted the real root-owned fixed tree, then separately
+proved eleven missing, final-symlink, hard-link, mode, owner, directory,
+oversize, configuration-canonicality, image-canonicality, ancestor-mode, and
+ancestor-symlink variants before restoring and removing the fixture. PostgreSQL
+migrations and seeds, database and API integrations, native spool and journal
+durability, the isolated Chromium measured journey, production build, cleanup,
+and both evidence uploads also passed. This admits ADR-096 and closes Slice
+2.59. Credential-directory and systemd integration, environment policy,
+refresh, fetch and observation policy, bootstrap, process entry, signals,
+shutdown, activation, and runner enablement remain separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
