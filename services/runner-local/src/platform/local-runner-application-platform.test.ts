@@ -19,7 +19,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { runnerOwnershipLabels } from "../oci";
 import type { ProcessRequest, ProcessResult } from "../oci";
-import { successfulResult } from "../oci/test-fixtures";
+import {
+  fixtureHostReadinessProbe,
+  fixtureNerdctlCommand,
+  successfulResult,
+} from "../oci/test-fixtures";
 import { sourceSnapshotMediaType } from "../source";
 import {
   LocalRunnerApplicationPlatform,
@@ -80,7 +84,20 @@ function configuration(parent = "/var/lib/socrates") {
       spool: `${privateRoot}/spool`,
     },
     engine: {
-      executable: "configured-nerdctl",
+      executable: "/usr/local/bin/nerdctl",
+      address: "unix:///run/containerd/containerd.sock",
+      snapshotter: "overlayfs",
+      dataRoot: "/home/socrates/.local/share/socrates/nerdctl",
+      configurationPath: "/etc/socrates/runner-local/nerdctl.toml",
+      workingDirectory: "/home/socrates/.local/state/socrates/runner",
+      environment: {
+        home: "/home/socrates",
+        path: "/usr/local/bin:/usr/bin:/bin",
+        xdgConfigHome: "/home/socrates/.config/socrates",
+        xdgDataHome: "/home/socrates/.local/share/socrates",
+        xdgRuntimeDirectory: "/run/user/1001",
+        dockerConfigDirectory: "/home/socrates/.config/socrates/docker",
+      },
       readinessTtlMs: 30_000,
       controlTimeoutMs: 12_345,
       executionTimeoutMs: 300_000,
@@ -480,7 +497,7 @@ async function measuredHarness(parent: string, controller: AbortController) {
   let starts = 0;
   const run = vi.fn(async (request: ProcessRequest) => {
     processRequests.push(request);
-    const command = request.arguments[0];
+    const command = fixtureNerdctlCommand(request);
     if (command === "ps") return successfulResult();
     if (command === "image") {
       return request.arguments.includes("dockercompat")
@@ -554,10 +571,7 @@ async function measuredHarness(parent: string, controller: AbortController) {
     processes: { run },
     host: {
       inspect: vi.fn(async () => ({
-        platform: "linux" as const,
-        uid: 1_000,
-        cgroupControllers: ["cpu", "memory", "pids"],
-        appArmorEnabled: true,
+        ...fixtureHostReadinessProbe,
       })),
     },
     clock: { now: vi.fn(() => epoch++) },
@@ -626,10 +640,7 @@ function harness(parent = "/var/lib/socrates") {
     return successfulResult();
   });
   const inspect = vi.fn(async () => ({
-    platform: "linux" as const,
-    uid: 1_000,
-    cgroupControllers: ["cpu", "memory", "pids"],
-    appArmorEnabled: true,
+    ...fixtureHostReadinessProbe,
   }));
   const epochNow = vi.fn(() => 1_785_620_000_000);
   let probe = 4;
@@ -988,7 +999,7 @@ describe("local runner application platform composition", () => {
     expect(original.observe).toHaveBeenCalledWith({ state: "idle" });
     expect(admittedWait).toHaveBeenCalledWith(25, controller.signal);
     expect(value.requests[0]).toMatchObject({
-      executable: "configured-nerdctl",
+      executable: "/usr/local/bin/nerdctl",
       timeoutMs: 12_345,
       maximumOutputBytes: 234_567,
     });
@@ -1080,17 +1091,17 @@ describe("local runner application platform composition", () => {
     expect(value.starts()).toBe(4);
     expect(
       value.processRequests.filter(
-        (request) => request.arguments[0] === "image",
+        (request) => fixtureNerdctlCommand(request) === "image",
       ),
     ).toHaveLength(2);
     expect(
       value.processRequests.filter(
-        (request) => request.arguments[0] === "create",
+        (request) => fixtureNerdctlCommand(request) === "create",
       ),
     ).toHaveLength(4);
     expect(
       value.processRequests.filter(
-        (request) => request.arguments[0] === "start",
+        (request) => fixtureNerdctlCommand(request) === "start",
       ),
     ).toHaveLength(4);
   }, 15_000);

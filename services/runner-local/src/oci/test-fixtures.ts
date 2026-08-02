@@ -1,10 +1,11 @@
 import { createSandboxOwnership } from "./identity";
+import { NerdctlInvocation } from "./invocation";
 import { createAdmittedImageForTesting } from "../image/testing";
 
 import type { SandboxAttemptIdentity } from "./identity";
-import type { ProcessResult } from "./process";
+import type { ProcessRequest, ProcessResult } from "./process";
 import type { AdmittedSandboxImage, SandboxResourceProfile } from "./profile";
-import type { SandboxReadiness } from "./readiness";
+import type { HostReadinessProbe, SandboxReadiness } from "./readiness";
 
 export const fixtureIdentity: SandboxAttemptIdentity = {
   runnerId: "10000000-0000-4000-8000-000000000001",
@@ -36,6 +37,75 @@ export const fixtureReadiness: SandboxReadiness = {
   cgroupVersion: "2",
   securityOptions: ["name=seccomp", "name=rootless"],
 };
+
+export const fixtureHostReadinessProbe: HostReadinessProbe = {
+  platform: "linux",
+  uid: 1_001,
+  cgroupControllers: ["cpu", "memory", "pids"],
+  appArmorEnabled: true,
+  engineConfiguration: {
+    path: "/etc/socrates/runner-local/nerdctl.toml",
+    kind: "file",
+    ownerUid: 0,
+    mode: 0o444,
+    symlinkFree: true,
+    sha256: "455193711f3d711e4499f8875cdd65ed6f4c50cb3a7812bad3d181a280ad58cd",
+    exactBytes: true,
+  },
+  xdgRuntimeDirectory: {
+    path: "/run/user/1001",
+    kind: "directory",
+    ownerUid: 1_001,
+    mode: 0o700,
+    symlinkFree: true,
+  },
+  rootlessKitStateDirectory: {
+    path: "/run/user/1001/containerd-rootless",
+    kind: "directory",
+    ownerUid: 1_001,
+    mode: 0o700,
+    symlinkFree: true,
+  },
+  workingDirectory: {
+    path: "/home/socrates/.local/state/socrates/runner",
+    kind: "directory",
+    ownerUid: 1_001,
+    mode: 0o700,
+    symlinkFree: true,
+  },
+};
+
+export function fixtureNerdctlInvocation(
+  namespace = "socrates-test",
+): NerdctlInvocation {
+  return new NerdctlInvocation({
+    executable: "/usr/local/bin/nerdctl",
+    address: "unix:///run/containerd/containerd.sock",
+    namespace,
+    snapshotter: "overlayfs",
+    dataRoot: "/home/socrates/.local/share/socrates/nerdctl",
+    configurationPath: "/etc/socrates/runner-local/nerdctl.toml",
+    workingDirectory: "/home/socrates/.local/state/socrates/runner",
+    environment: {
+      home: "/home/socrates",
+      path: "/usr/local/bin:/usr/bin:/bin",
+      xdgConfigHome: "/home/socrates/.config/socrates",
+      xdgDataHome: "/home/socrates/.local/share/socrates",
+      xdgRuntimeDirectory: "/run/user/1001",
+      dockerConfigDirectory: "/home/socrates/.config/socrates/docker",
+    },
+  });
+}
+
+export function fixtureNerdctlCommand(request: ProcessRequest): string {
+  return request.arguments[12] ?? "";
+}
+
+export function fixtureNerdctlCommandArguments(
+  request: ProcessRequest,
+): readonly string[] {
+  return request.arguments.slice(12);
+}
 
 export function successfulResult(
   stdout = "",

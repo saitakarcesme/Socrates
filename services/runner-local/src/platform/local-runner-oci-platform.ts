@@ -14,6 +14,7 @@ import {
 import {
   NerdctlReadinessVerifier,
   NerdctlSandboxBackend,
+  NerdctlInvocation,
   type HostReadinessInspector,
   type ProcessExecutor,
   type ProcessRequest,
@@ -167,7 +168,16 @@ export function deriveLocalRunnerOciPlatformPolicy(
   return Object.freeze({
     deploymentId: admitted.identity.deploymentId,
     runnerId: admitted.identity.runnerId,
-    executable: admitted.engine.executable,
+    invocation: Object.freeze({
+      executable: admitted.engine.executable,
+      address: admitted.engine.address,
+      namespace: `socrates-${admitted.identity.deploymentId}`,
+      snapshotter: admitted.engine.snapshotter,
+      dataRoot: admitted.engine.dataRoot,
+      configurationPath: admitted.engine.configurationPath,
+      workingDirectory: admitted.engine.workingDirectory,
+      environment: admitted.engine.environment,
+    }),
     readinessTtlMs: admitted.engine.readinessTtlMs,
     controlTimeoutMs: admitted.engine.controlTimeoutMs,
     executionTimeoutMs: admitted.engine.executionTimeoutMs,
@@ -198,23 +208,28 @@ export class LocalRunnerOciPlatform {
     const admittedDependencies = dependencies(options);
     try {
       const policy = deriveLocalRunnerOciPlatformPolicy(admittedConfiguration);
+      const invocation = new NerdctlInvocation(policy.invocation);
       const readiness = new NerdctlReadinessVerifier(
         admittedDependencies.processes,
         admittedDependencies.host,
+        invocation,
         {
-          executable: policy.executable,
           timeoutMs: policy.controlTimeoutMs,
           maximumOutputBytes: policy.maximumControlOutputBytes,
           now: () => new Date(admittedDependencies.clock.now()),
+          configurationPath: policy.invocation.configurationPath,
+          xdgRuntimeDirectory:
+            policy.invocation.environment.xdgRuntimeDirectory,
+          workingDirectory: policy.invocation.workingDirectory,
         },
       );
       const backend = new NerdctlSandboxBackend(
         admittedDependencies.processes,
         readiness,
+        invocation,
         {
           deploymentId: policy.deploymentId,
           runnerId: policy.runnerId,
-          executable: policy.executable,
           readinessTtlMs: policy.readinessTtlMs,
           controlTimeoutMs: policy.controlTimeoutMs,
           executionTimeoutMs: policy.executionTimeoutMs,
@@ -226,8 +241,8 @@ export class LocalRunnerOciPlatform {
       );
       const inspector = new NerdctlImageInspector(
         admittedDependencies.processes,
+        invocation,
         {
-          executable: policy.executable,
           timeoutMs: policy.controlTimeoutMs,
           maximumOutputBytes: policy.maximumControlOutputBytes,
         },

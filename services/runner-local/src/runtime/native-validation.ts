@@ -26,6 +26,7 @@ import { NerdctlImageInspector } from "../image/inspection";
 import { sandboxProfileProbe } from "../image/profile-probe";
 import { NerdctlSandboxBackend } from "../oci/backend";
 import { NodeProcessExecutor } from "../oci/process";
+import { nativeReferenceNerdctlInvocation } from "../oci/native-invocation";
 import {
   NerdctlReadinessVerifier,
   NodeHostReadinessInspector,
@@ -191,6 +192,16 @@ if (
 }
 
 const runnerId = randomUUID();
+const deploymentId = "native-reference-host";
+const engineHome = argument("--engine-home");
+const engineRuntimeDirectory = argument("--engine-runtime-directory");
+const engineConfigurationPath = "/etc/socrates/runner-local/nerdctl.toml";
+const engineWorkingDirectory = `${engineHome}/.local/state/socrates/runner`;
+const invocation = nativeReferenceNerdctlInvocation({
+  deploymentId,
+  home: engineHome,
+  runtimeDirectory: engineRuntimeDirectory,
+});
 const profile: SandboxResourceProfile = {
   memoryBytes: 128 * 1_024 * 1_024,
   cpuCount: 0.5,
@@ -202,16 +213,30 @@ const profile: SandboxResourceProfile = {
 const processes = new NodeProcessExecutor();
 const backend = new NerdctlSandboxBackend(
   processes,
-  new NerdctlReadinessVerifier(processes, new NodeHostReadinessInspector()),
+  new NerdctlReadinessVerifier(
+    processes,
+    new NodeHostReadinessInspector({
+      configurationPath: engineConfigurationPath,
+      xdgRuntimeDirectory: engineRuntimeDirectory,
+      workingDirectory: engineWorkingDirectory,
+    }),
+    invocation,
+    {
+      configurationPath: engineConfigurationPath,
+      xdgRuntimeDirectory: engineRuntimeDirectory,
+      workingDirectory: engineWorkingDirectory,
+    },
+  ),
+  invocation,
   {
-    deploymentId: "native-task-runtime",
+    deploymentId,
     runnerId,
     executionTimeoutMs: 20_000,
     maximumControlOutputBytes: 1 * 1_024 * 1_024,
     maximumExecutionOutputBytes: 1 * 1_024 * 1_024,
   },
 );
-const inspector = new NerdctlImageInspector(processes);
+const inspector = new NerdctlImageInspector(processes, invocation);
 const architectureName = architecture();
 const pipelineInspection = await inspector.inspect({
   reference: imageReference,
@@ -248,7 +273,7 @@ try {
   );
   const materializer = new SourceSnapshotMaterializer(artifactStore, {
     root: join(sourceStateRoot, "materialized"),
-    deploymentId: "native-task-runtime",
+    deploymentId,
     runnerId,
     limits: {
       maximumArchiveBytes: 1 * 1_024 * 1_024,
@@ -261,7 +286,7 @@ try {
     },
   });
   const requestMaterializer = new RuntimeRequestMaterializer({
-    deploymentId: "native-task-runtime",
+    deploymentId,
     runnerId,
     maximumBytes: runtimeProtocolLimits.maximumRequestBytes + 4,
   });

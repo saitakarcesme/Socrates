@@ -26,7 +26,20 @@ function configuration() {
       spool: "/var/lib/socrates/spool",
     },
     engine: {
-      executable: "nerdctl",
+      executable: "/usr/local/bin/nerdctl",
+      address: "unix:///run/containerd/containerd.sock",
+      snapshotter: "overlayfs",
+      dataRoot: "/home/socrates/.local/share/socrates/nerdctl",
+      configurationPath: "/etc/socrates/runner-local/nerdctl.toml",
+      workingDirectory: "/home/socrates/.local/state/socrates/runner",
+      environment: {
+        home: "/home/socrates",
+        path: "/usr/local/bin:/usr/bin:/bin",
+        xdgConfigHome: "/home/socrates/.config/socrates",
+        xdgDataHome: "/home/socrates/.local/share/socrates",
+        xdgRuntimeDirectory: "/run/user/1001",
+        dockerConfigDirectory: "/home/socrates/.config/socrates/docker",
+      },
       readinessTtlMs: 30_000,
       controlTimeoutMs: 10_000,
       executionTimeoutMs: 300_000,
@@ -313,6 +326,18 @@ describe("parseLocalRunnerConfiguration", () => {
       ["controlPlane", "origin"],
       ["roots", "artifacts"],
       ["engine", "executable"],
+      ["engine", "address"],
+      ["engine", "snapshotter"],
+      ["engine", "dataRoot"],
+      ["engine", "configurationPath"],
+      ["engine", "workingDirectory"],
+      ["engine", "environment"],
+      ["engine", "environment", "home"],
+      ["engine", "environment", "path"],
+      ["engine", "environment", "xdgConfigHome"],
+      ["engine", "environment", "xdgDataHome"],
+      ["engine", "environment", "xdgRuntimeDirectory"],
+      ["engine", "environment", "dockerConfigDirectory"],
       ["source", "maximumArchiveBytes"],
       ["request", "maximumBytes"],
       ["runtime", "maximumProtocolBytes"],
@@ -357,8 +382,9 @@ describe("parseLocalRunnerConfiguration", () => {
     [["identity", "deploymentId"], "runner-"],
     [["identity", "runnerId"], "not-a-uuid"],
     [["engine", "executable"], ""],
-    [["engine", "executable"], " nerdctl"],
-    [["engine", "executable"], "nerdctl\0evil"],
+    [["engine", "executable"], "nerdctl"],
+    [["engine", "executable"], "/usr/local/bin/other"],
+    [["engine", "executable"], "/usr/local/bin/nerdctl\0evil"],
     [["engine", "executable"], "n".repeat(4_097)],
   ] as const)("rejects malformed scalar at %j", (path, value) => {
     expectInvalid(changed(path, value));
@@ -391,6 +417,90 @@ describe("parseLocalRunnerConfiguration", () => {
     "/var/lib/cafe\u0301",
   ])("rejects non-canonical root %s", (root) => {
     expectInvalid(changed(["roots", "artifacts"], root));
+  });
+
+  it.each([
+    "",
+    "tcp://127.0.0.1:1234",
+    "http:///run/containerd.sock",
+    "unix://",
+    "unix:///",
+    "unix://relative/socket",
+    "unix:///run/../containerd.sock",
+    "unix:///run//containerd.sock",
+    "unix:///run/containerd.sock/",
+    "unix:///run/%2e/containerd.sock",
+    "unix:///run/containerd.sock?query=1",
+    "unix:///run/containerd.sock#fragment",
+    "unix:///run/containerd\0.sock",
+  ])("rejects ambiguous engine address %s", (address) => {
+    expectInvalid(changed(["engine", "address"], address));
+  });
+
+  it.each(["", "auto", "stargz", "OverlayFS"])(
+    "rejects unselected snapshotter %s",
+    (snapshotter) => {
+      expectInvalid(changed(["engine", "snapshotter"], snapshotter));
+    },
+  );
+
+  it.each([
+    "",
+    ":/usr/bin",
+    "/usr/bin:",
+    "/usr/bin::/bin",
+    "/usr/bin:/usr/bin",
+    "usr/bin:/bin",
+    "/usr/../bin:/bin",
+    "/usr/bin/:/bin",
+    "/usr/bin\0:/bin",
+  ])("rejects ambiguous engine PATH %s", (path) => {
+    expectInvalid(changed(["engine", "environment", "path"], path));
+  });
+
+  it.each([
+    "/run/user/0",
+    "/run/user/01001",
+    "/run/user/not-a-uid",
+    "/run/user/4294967295",
+    "/tmp/runtime",
+  ])("rejects invalid XDG runtime authority %s", (path) => {
+    expectInvalid(
+      changed(["engine", "environment", "xdgRuntimeDirectory"], path),
+    );
+  });
+
+  it.each([
+    [["engine", "environment", "xdgConfigHome"], "/var/lib/socrates/config"],
+    [
+      ["engine", "environment", "xdgDataHome"],
+      "/home/socrates/.config/socrates/data",
+    ],
+    [
+      ["engine", "environment", "dockerConfigDirectory"],
+      "/home/socrates/docker",
+    ],
+    [["engine", "dataRoot"], "/home/socrates/nerdctl"],
+    [["engine", "workingDirectory"], "/var/lib/socrates/working"],
+    [
+      ["engine", "workingDirectory"],
+      "/home/socrates/.local/share/socrates/nerdctl/work",
+    ],
+    [["engine", "dataRoot"], "/var/lib/socrates/artifacts/engine"],
+    [
+      ["engine", "configurationPath"],
+      "/home/socrates/.config/socrates/nerdctl.toml",
+    ],
+  ] as const)("rejects invalid engine path relationship %j", (path, value) => {
+    expectInvalid(changed(path, value));
+  });
+
+  it("rejects a duplicate deployment-selected nerdctl environment key", () => {
+    const candidate = configuration();
+    Object.assign(candidate.engine.environment, {
+      NERDCTL_TOML: "/tmp/redirect.toml",
+    });
+    expectInvalid(candidate);
   });
 
   it.each([

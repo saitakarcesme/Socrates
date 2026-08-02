@@ -11,6 +11,7 @@ import { SourceSnapshotMaterializer } from "../source/materializer";
 import { NerdctlSandboxBackend } from "./backend";
 import { NodeProcessExecutor } from "./process";
 import { createAdmittedImageForTesting } from "../image/testing";
+import { nativeReferenceNerdctlInvocation } from "./native-invocation";
 import {
   NerdctlReadinessVerifier,
   NodeHostReadinessInspector,
@@ -64,6 +65,16 @@ if (!digestPattern.test(imageReference)) {
 }
 
 const runnerId = randomUUID();
+const deploymentId = "native-reference-host";
+const engineHome = argument("--engine-home");
+const engineRuntimeDirectory = argument("--engine-runtime-directory");
+const engineConfigurationPath = "/etc/socrates/runner-local/nerdctl.toml";
+const engineWorkingDirectory = `${engineHome}/.local/state/socrates/runner`;
+const invocation = nativeReferenceNerdctlInvocation({
+  deploymentId,
+  home: engineHome,
+  runtimeDirectory: engineRuntimeDirectory,
+});
 const profile: SandboxResourceProfile = {
   memoryBytes: 64 * 1_024 * 1_024,
   cpuCount: 0.5,
@@ -75,13 +86,28 @@ const profile: SandboxResourceProfile = {
 const processes = new NodeProcessExecutor();
 const readinessVerifier = new NerdctlReadinessVerifier(
   processes,
-  new NodeHostReadinessInspector(),
+  new NodeHostReadinessInspector({
+    configurationPath: engineConfigurationPath,
+    xdgRuntimeDirectory: engineRuntimeDirectory,
+    workingDirectory: engineWorkingDirectory,
+  }),
+  invocation,
+  {
+    configurationPath: engineConfigurationPath,
+    xdgRuntimeDirectory: engineRuntimeDirectory,
+    workingDirectory: engineWorkingDirectory,
+  },
 );
-const backend = new NerdctlSandboxBackend(processes, readinessVerifier, {
-  deploymentId: "native-reference-host",
-  runnerId,
-  executionTimeoutMs: 15_000,
-});
+const backend = new NerdctlSandboxBackend(
+  processes,
+  readinessVerifier,
+  invocation,
+  {
+    deploymentId,
+    runnerId,
+    executionTimeoutMs: 15_000,
+  },
+);
 const image = createAdmittedImageForTesting(imageReference, architecture());
 const sourceStateRoot = await mkdtemp(
   join(tmpdir(), "socrates-native-source-"),
@@ -93,7 +119,7 @@ try {
   );
   const materializer = new SourceSnapshotMaterializer(artifactStore, {
     root: join(sourceStateRoot, "materialized"),
-    deploymentId: "native-reference-host",
+    deploymentId,
     runnerId,
     limits: {
       maximumArchiveBytes: 1 * 1_024 * 1_024,

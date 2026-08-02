@@ -5,7 +5,11 @@ import {
   parseSandboxImageInspection,
   SandboxImageInspectionError,
 } from "./inspection";
-import { successfulResult } from "../oci/test-fixtures";
+import {
+  fixtureNerdctlCommandArguments,
+  fixtureNerdctlInvocation,
+  successfulResult,
+} from "../oci/test-fixtures";
 
 import type {
   ProcessExecutor,
@@ -172,14 +176,17 @@ describe("sandbox image inspection", () => {
 
   it("uses only bounded, platform-specific local image inspection calls", async () => {
     const processes = new FakeProcessExecutor([compatible(), native()]);
-    const inspection = await new NerdctlImageInspector(processes).inspect({
+    const inspection = await new NerdctlImageInspector(
+      processes,
+      fixtureNerdctlInvocation(),
+    ).inspect({
       reference,
       architecture: "amd64",
     });
 
     expect(inspection.manifestDigest).toBe(manifestDigest);
     expect(processes.requests).toHaveLength(2);
-    expect(processes.requests.map((request) => request.arguments)).toEqual([
+    expect(processes.requests.map(fixtureNerdctlCommandArguments)).toEqual([
       [
         "image",
         "inspect",

@@ -154,6 +154,21 @@ jobs:
             '.host.security.rootless == true and .host.cgroupVersion == "v2"'
           nerdctl info
 
+      - name: Provision Socrates nerdctl authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install -d -m 0755 /etc/socrates/runner-local
+          printf '# Managed by Socrates. Intentionally empty.\n' |
+            sudo tee /etc/socrates/runner-local/nerdctl.toml >/dev/null
+          sudo chown root:root /etc/socrates/runner-local/nerdctl.toml
+          sudo chmod 0444 /etc/socrates/runner-local/nerdctl.toml
+          install -d -m 0700 \
+            "$HOME/.config/socrates/docker" \
+            "$HOME/.local/share/nerdctl" \
+            "$HOME/.local/state/socrates/runner"
+          echo "CONTAINERD_NAMESPACE=socrates-native-reference-host" >> "$GITHUB_ENV"
+
       - name: Pre-pull immutable image
         shell: bash
         run: |
@@ -208,7 +223,9 @@ jobs:
         run: |
           set -euo pipefail
           pnpm --filter @socrates/runner-local test:native -- \
-            --image "$IMAGE"
+            --image "$IMAGE" \
+            --engine-home "$HOME" \
+            --engine-runtime-directory "$XDG_RUNTIME_DIR"
 
       - name: Validate admitted task runtime
         if: ${{ inputs.validate_task_runtime }}
@@ -216,7 +233,9 @@ jobs:
         run: |
           set -euo pipefail
           pnpm --filter @socrates/runner-local test:native-runtime -- \
-            --image "$RUNTIME_IMAGE"
+            --image "$RUNTIME_IMAGE" \
+            --engine-home "$HOME" \
+            --engine-runtime-directory "$XDG_RUNTIME_DIR"
 
       - name: Publish comparison summary
         if: always()

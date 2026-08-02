@@ -11,6 +11,7 @@ export {
   verifyNativeSpec,
 } from "./native-spec";
 export { NodeProcessExecutor, ProcessExecutionError } from "./process";
+export { NerdctlInvocation } from "./invocation";
 export { sandboxTerminationReceipt } from "./termination";
 export {
   buildCreateArguments,
@@ -19,6 +20,8 @@ export {
 } from "./profile";
 export {
   NerdctlReadinessVerifier,
+  nerdctlConfigurationBytes,
+  nerdctlConfigurationSha256,
   NodeHostReadinessInspector,
   SandboxReadinessError,
 } from "./readiness";
@@ -32,6 +35,10 @@ export type {
 export type { SandboxAttemptIdentity, SandboxOwnership } from "./identity";
 export type { ProcessExecutor, ProcessRequest, ProcessResult } from "./process";
 export type {
+  NerdctlInvocationOptions,
+  NerdctlRequestBounds,
+} from "./invocation";
+export type {
   SandboxProbeIdentity,
   SandboxProbeIdentitySource,
 } from "./probe-identity";
@@ -44,6 +51,8 @@ export type {
 export type {
   HostReadinessInspector,
   HostReadinessProbe,
+  HostPathAttestation,
+  NodeHostReadinessInspectorOptions,
   ReadinessVerifier,
   SandboxReadiness,
 } from "./readiness";

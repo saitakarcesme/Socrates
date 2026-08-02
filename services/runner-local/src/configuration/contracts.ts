@@ -60,40 +60,109 @@ const controlPlaneOrigin = z
     }
   });
 
-const privateRoot = z
+function canonicalAbsolutePosixPath(message: string) {
+  return z
+    .string()
+    .max(4_096)
+    .superRefine((candidate, context) => {
+      if (
+        Buffer.byteLength(candidate, "utf8") > 4_096 ||
+        hasControlCharacter(candidate) ||
+        candidate.includes(",") ||
+        candidate !== candidate.normalize("NFC") ||
+        !candidate.startsWith("/") ||
+        candidate === "/" ||
+        candidate !== posix.normalize(candidate) ||
+        candidate.endsWith("/")
+      ) {
+        issue(context, [], message);
+      }
+    });
+}
+
+const privateRoot = canonicalAbsolutePosixPath(
+  "Private root must be one canonical absolute POSIX path.",
+);
+
+const enginePath = canonicalAbsolutePosixPath(
+  "Engine path must be one canonical absolute POSIX path.",
+);
+
+const engineAddress = z
   .string()
-  .max(4_096)
+  .max(4_105)
   .superRefine((candidate, context) => {
+    const prefix = "unix://";
+    const path = candidate.slice(prefix.length);
     if (
-      Buffer.byteLength(candidate, "utf8") > 4_096 ||
-      hasControlCharacter(candidate) ||
-      candidate.includes(",") ||
-      candidate !== candidate.normalize("NFC") ||
-      !candidate.startsWith("/") ||
-      candidate === "/" ||
-      candidate !== posix.normalize(candidate) ||
-      candidate.endsWith("/")
+      !candidate.startsWith(prefix) ||
+      candidate.includes("%") ||
+      candidate.includes("?") ||
+      candidate.includes("#") ||
+      path.length === 0 ||
+      Buffer.byteLength(path, "utf8") > 4_096 ||
+      hasControlCharacter(path) ||
+      path.includes(",") ||
+      path !== path.normalize("NFC") ||
+      !path.startsWith("/") ||
+      path === "/" ||
+      path !== posix.normalize(path) ||
+      path.endsWith("/")
     ) {
-      issue(
-        context,
-        [],
-        "Private root must be one canonical absolute POSIX path.",
-      );
+      issue(context, [], "Engine address must be one canonical Unix socket.");
     }
   });
 
-const executable = z
+const executablePath = enginePath.superRefine((candidate, context) => {
+  if (posix.basename(candidate) !== "nerdctl") {
+    issue(context, [], "Engine executable path is invalid.");
+  }
+});
+
+const xdgRuntimeDirectory = enginePath.superRefine((candidate, context) => {
+  const match = /^\/run\/user\/([1-9]\d{0,9})$/u.exec(candidate);
+  const uid = match ? Number(match[1]) : Number.NaN;
+  if (!Number.isSafeInteger(uid) || uid > 4_294_967_294) {
+    issue(context, [], "Engine XDG runtime directory is invalid.");
+  }
+});
+
+const searchPath = z
   .string()
-  .max(4_096)
+  .max(16_384)
   .superRefine((candidate, context) => {
+    const entries = candidate.split(":");
     if (
-      candidate.length === 0 ||
-      candidate !== candidate.trim() ||
-      candidate.includes("\0")
+      entries.length === 0 ||
+      entries.length > 64 ||
+      new Set(entries).size !== entries.length ||
+      entries.some(
+        (entry) =>
+          entry.length === 0 ||
+          Buffer.byteLength(entry, "utf8") > 4_096 ||
+          hasControlCharacter(entry) ||
+          entry !== entry.normalize("NFC") ||
+          !entry.startsWith("/") ||
+          entry === "/" ||
+          entry !== posix.normalize(entry) ||
+          entry.endsWith("/"),
+      )
     ) {
-      issue(context, [], "Engine executable is invalid.");
+      issue(context, [], "Engine PATH is invalid.");
     }
   });
+
+function isStrictChild(parent: string, child: string): boolean {
+  return child.startsWith(`${parent}/`);
+}
+
+function overlaps(left: string, right: string): boolean {
+  return (
+    left === right ||
+    left.startsWith(`${right}/`) ||
+    right.startsWith(`${left}/`)
+  );
+}
 
 const identitySchema = z
   .object({
@@ -141,7 +210,22 @@ const rootsSchema = z
 
 const engineSchema = z
   .object({
-    executable,
+    executable: executablePath,
+    address: engineAddress,
+    snapshotter: z.enum(["overlayfs", "fuse-overlayfs", "native"]),
+    dataRoot: enginePath,
+    configurationPath: enginePath,
+    workingDirectory: enginePath,
+    environment: z
+      .object({
+        home: enginePath,
+        path: searchPath,
+        xdgConfigHome: enginePath,
+        xdgDataHome: enginePath,
+        xdgRuntimeDirectory,
+        dockerConfigDirectory: enginePath,
+      })
+      .strict(),
     readinessTtlMs: positiveDuration,
     controlTimeoutMs: positiveDuration,
     executionTimeoutMs: positiveDuration,
@@ -323,6 +407,94 @@ export const localRunnerConfigurationV1Schema = z
   })
   .strict()
   .superRefine((configuration, context) => {
+    const engine = configuration.engine;
+    const environment = engine.environment;
+    if (!isStrictChild(environment.home, environment.xdgConfigHome)) {
+      issue(
+        context,
+        ["engine", "environment", "xdgConfigHome"],
+        "XDG config home must be a strict child of engine home.",
+      );
+    }
+    if (!isStrictChild(environment.home, environment.xdgDataHome)) {
+      issue(
+        context,
+        ["engine", "environment", "xdgDataHome"],
+        "XDG data home must be a strict child of engine home.",
+      );
+    }
+    if (
+      !isStrictChild(
+        environment.xdgConfigHome,
+        environment.dockerConfigDirectory,
+      )
+    ) {
+      issue(
+        context,
+        ["engine", "environment", "dockerConfigDirectory"],
+        "Docker config must be a strict child of XDG config home.",
+      );
+    }
+    if (!isStrictChild(environment.xdgDataHome, engine.dataRoot)) {
+      issue(
+        context,
+        ["engine", "dataRoot"],
+        "Engine data root must be a strict child of XDG data home.",
+      );
+    }
+    if (!isStrictChild(environment.home, engine.workingDirectory)) {
+      issue(
+        context,
+        ["engine", "workingDirectory"],
+        "Engine working directory must be a strict child of engine home.",
+      );
+    }
+    if (overlaps(environment.xdgConfigHome, environment.xdgDataHome)) {
+      issue(
+        context,
+        ["engine", "environment", "xdgDataHome"],
+        "XDG config and data homes must not overlap.",
+      );
+    }
+    const independentWritableRoots = [
+      ...Object.values(configuration.roots),
+      engine.dataRoot,
+      engine.workingDirectory,
+      environment.dockerConfigDirectory,
+    ];
+    for (let left = 0; left < independentWritableRoots.length; left += 1) {
+      for (
+        let right = left + 1;
+        right < independentWritableRoots.length;
+        right += 1
+      ) {
+        if (
+          overlaps(
+            independentWritableRoots[left]!,
+            independentWritableRoots[right]!,
+          )
+        ) {
+          issue(
+            context,
+            ["engine", "dataRoot"],
+            "Independent writable roots must not overlap.",
+          );
+        }
+      }
+    }
+    for (const writablePath of [
+      environment.home,
+      environment.xdgRuntimeDirectory,
+      ...independentWritableRoots,
+    ]) {
+      if (overlaps(writablePath, engine.configurationPath)) {
+        issue(
+          context,
+          ["engine", "configurationPath"],
+          "Engine configuration path must not overlap writable paths.",
+        );
+      }
+    }
     for (const field of [
       "maximumProtocolBytes",
       "maximumChildOutputBytes",

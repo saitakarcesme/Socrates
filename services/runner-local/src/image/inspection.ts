@@ -1,3 +1,4 @@
+import type { NerdctlInvocation } from "../oci/invocation";
 import type { ProcessExecutor, ProcessResult } from "../oci/process";
 
 type JsonObject = Record<string, unknown>;
@@ -33,7 +34,6 @@ export class SandboxImageInspectionError extends Error {
 }
 
 export type NerdctlImageInspectorOptions = Readonly<{
-  executable?: string;
   timeoutMs?: number;
   maximumOutputBytes?: number;
 }>;
@@ -209,15 +209,14 @@ export function parseSandboxImageInspection(input: {
 }
 
 export class NerdctlImageInspector {
-  readonly #executable: string;
   readonly #timeoutMs: number;
   readonly #maximumOutputBytes: number;
 
   constructor(
     readonly processes: ProcessExecutor,
+    readonly invocation: NerdctlInvocation,
     options: NerdctlImageInspectorOptions = {},
   ) {
-    this.#executable = options.executable ?? "nerdctl";
     this.#timeoutMs = options.timeoutMs ?? 10_000;
     this.#maximumOutputBytes = options.maximumOutputBytes ?? 1 * 1_024 * 1_024;
   }
@@ -235,12 +234,15 @@ export class NerdctlImageInspector {
       "{{json .}}",
     ];
     const run = (mode: "dockercompat" | "native") =>
-      this.processes.run({
-        executable: this.#executable,
-        arguments: [...baseArguments, "--mode", mode, input.reference],
-        timeoutMs: this.#timeoutMs,
-        maximumOutputBytes: this.#maximumOutputBytes,
-      });
+      this.processes.run(
+        this.invocation.request(
+          [...baseArguments, "--mode", mode, input.reference],
+          {
+            timeoutMs: this.#timeoutMs,
+            maximumOutputBytes: this.#maximumOutputBytes,
+          },
+        ),
+      );
     const [dockerCompatible, native] = await Promise.all([
       run("dockercompat"),
       run("native"),

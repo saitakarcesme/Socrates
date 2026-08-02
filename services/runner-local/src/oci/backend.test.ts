@@ -7,6 +7,9 @@ import {
   fixtureIdentity,
   fixtureImage,
   fixtureNativeInspection,
+  fixtureNerdctlCommand,
+  fixtureNerdctlCommandArguments,
+  fixtureNerdctlInvocation,
   fixtureProfile,
   fixtureReadiness,
   successfulResult,
@@ -41,7 +44,7 @@ class LifecycleProcesses implements ProcessExecutor {
 
   async run(request: ProcessRequest): Promise<ProcessResult> {
     this.requests.push(request);
-    const command = request.arguments[0];
+    const command = fixtureNerdctlCommand(request);
     if (command === "create") {
       const nameIndex = request.arguments.indexOf("--name");
       const labels: Record<string, string> = {};
@@ -125,12 +128,17 @@ function backend(
 ) {
   return {
     readiness,
-    value: new NerdctlSandboxBackend(processes, readiness, {
-      deploymentId,
-      runnerId: fixtureIdentity.runnerId,
-      now: () => 1_000,
-      probeIdentitySource,
-    }),
+    value: new NerdctlSandboxBackend(
+      processes,
+      readiness,
+      fixtureNerdctlInvocation(`socrates-${deploymentId}`),
+      {
+        deploymentId,
+        runnerId: fixtureIdentity.runnerId,
+        now: () => 1_000,
+        probeIdentitySource,
+      },
+    ),
   };
 }
 
@@ -152,7 +160,7 @@ function cancellationHarness(
   const processes: ProcessExecutor = {
     async run(request) {
       requests.push(request);
-      const command = request.arguments[0];
+      const command = fixtureNerdctlCommand(request);
       if (command === "create") {
         const nameIndex = request.arguments.indexOf("--name");
         const labels: Record<string, string> = {};
@@ -285,7 +293,7 @@ describe("nerdctl sandbox backend", () => {
     });
 
     const creates = processes.requests.filter(
-      (request) => request.arguments[0] === "create",
+      (request) => fixtureNerdctlCommand(request) === "create",
     );
     const expectedProbe = createSandboxOwnership(deploymentId, {
       runnerId: fixtureIdentity.runnerId,
@@ -401,7 +409,7 @@ describe("nerdctl sandbox backend", () => {
     });
 
     expect(readiness.calls).toBe(1);
-    expect(processes.requests.map((request) => request.arguments[0])).toEqual([
+    expect(processes.requests.map(fixtureNerdctlCommand)).toEqual([
       "create",
       "inspect",
       "inspect",
@@ -413,7 +421,7 @@ describe("nerdctl sandbox backend", () => {
       "start",
       "rm",
     ]);
-    expect(processes.requests[7]?.arguments).toEqual([
+    expect(fixtureNerdctlCommandArguments(processes.requests[7]!)).toEqual([
       "inspect",
       "--mode",
       "native",
@@ -427,7 +435,7 @@ describe("nerdctl sandbox backend", () => {
     const processes: ProcessExecutor = {
       run: async (request) => {
         const result = await lifecycle.run(request);
-        if (request.arguments[0] === "rm" && (removals += 1) === 2) {
+        if (fixtureNerdctlCommand(request) === "rm" && (removals += 1) === 2) {
           return successfulResult("", {
             exitCode: 1,
             stderr: "private engine cleanup detail",
@@ -462,7 +470,7 @@ describe("nerdctl sandbox backend", () => {
     const processes: ProcessExecutor = {
       run: async (request) => {
         if (
-          request.arguments[0] === "start" &&
+          fixtureNerdctlCommand(request) === "start" &&
           request.arguments.includes("--attach")
         ) {
           throw aborted;
@@ -505,10 +513,10 @@ describe("nerdctl sandbox backend", () => {
     });
 
     const creates = processes.requests.filter(
-      (request) => request.arguments[0] === "create",
+      (request) => fixtureNerdctlCommand(request) === "create",
     );
     const starts = processes.requests.filter(
-      (request) => request.arguments[0] === "start",
+      (request) => fixtureNerdctlCommand(request) === "start",
     );
     expect(creates[0]?.arguments).not.toContain("--interactive");
     expect(creates[1]?.arguments).not.toContain("--interactive");
@@ -516,14 +524,16 @@ describe("nerdctl sandbox backend", () => {
       "type=bind,src=/runner/sources/runtime/request.bin,dst=/socrates/request.bin,rro,bind-propagation=rprivate",
     );
     expect(starts[0]?.stdin).toBeUndefined();
-    expect(starts[1]?.arguments).toEqual([
+    expect(fixtureNerdctlCommandArguments(starts[1]!)).toEqual([
       "start",
       "--attach",
       createSandboxOwnership(deploymentId, fixtureIdentity).containerName,
     ]);
     expect(starts[1]?.stdin).toBeUndefined();
     expect(
-      processes.requests.some((entry) => entry.arguments[0] === "attach"),
+      processes.requests.some(
+        (entry) => fixtureNerdctlCommand(entry) === "attach",
+      ),
     ).toBe(false);
   });
 
@@ -614,7 +624,7 @@ describe("nerdctl sandbox backend", () => {
     const originalRun = processes.run.bind(processes);
     processes.run = async (request) => {
       if (
-        request.arguments[0] === "inspect" &&
+        fixtureNerdctlCommand(request) === "inspect" &&
         request.arguments.includes("--mode")
       ) {
         processes.requests.push(request);
@@ -632,7 +642,7 @@ describe("nerdctl sandbox backend", () => {
         command: { executable: "/bin/true", arguments: [] },
       }),
     ).rejects.toThrow("omitted Spec");
-    expect(processes.requests.map((request) => request.arguments[0])).toEqual([
+    expect(processes.requests.map(fixtureNerdctlCommand)).toEqual([
       "create",
       "inspect",
       "inspect",
@@ -660,9 +670,9 @@ describe("nerdctl sandbox backend", () => {
     expect(
       value.requests
         .filter((request) =>
-          ["kill", "wait"].includes(String(request.arguments[0])),
+          ["kill", "wait"].includes(fixtureNerdctlCommand(request)),
         )
-        .map((request) => request.arguments),
+        .map(fixtureNerdctlCommandArguments),
     ).toEqual([
       [
         "kill",
@@ -692,9 +702,9 @@ describe("nerdctl sandbox backend", () => {
     expect(
       value.requests
         .filter((request) =>
-          ["kill", "wait"].includes(String(request.arguments[0])),
+          ["kill", "wait"].includes(fixtureNerdctlCommand(request)),
         )
-        .map((request) => request.arguments),
+        .map(fixtureNerdctlCommandArguments),
     ).toEqual([
       [
         "kill",
@@ -733,12 +743,12 @@ describe("nerdctl sandbox backend", () => {
     });
     expect(
       value.requests
-        .filter(({ arguments: arguments_ }) => arguments_[0] === "kill")
-        .map(({ arguments: arguments_ }) => arguments_[2]),
+        .filter((request) => fixtureNerdctlCommand(request) === "kill")
+        .map((request) => fixtureNerdctlCommandArguments(request)[2]),
     ).toEqual(["TERM", "KILL"]);
     expect(
       value.requests.filter(
-        ({ arguments: arguments_ }) => arguments_[0] === "wait",
+        (request) => fixtureNerdctlCommand(request) === "wait",
       ),
     ).toHaveLength(0);
     value.execution.resolve(
@@ -775,8 +785,8 @@ describe("nerdctl sandbox backend", () => {
     });
     expect(
       value.requests
-        .filter(({ arguments: arguments_ }) => arguments_[0] === "kill")
-        .map(({ arguments: arguments_ }) => arguments_[2]),
+        .filter((request) => fixtureNerdctlCommand(request) === "kill")
+        .map((request) => fixtureNerdctlCommandArguments(request)[2]),
     ).toEqual(["KILL"]);
     value.execution.resolve(
       successfulResult("", { exitCode: 137, signal: "SIGKILL" }),
@@ -793,8 +803,8 @@ describe("nerdctl sandbox backend", () => {
     });
     expect(
       value.requests
-        .filter(({ arguments: arguments_ }) => arguments_[0] === "kill")
-        .map(({ arguments: arguments_ }) => arguments_[2]),
+        .filter((request) => fixtureNerdctlCommand(request) === "kill")
+        .map((request) => fixtureNerdctlCommandArguments(request)[2]),
     ).toEqual(["TERM", "KILL"]);
     value.execution.resolve(successfulResult("", { exitCode: 0 }));
     await value.running;
@@ -812,8 +822,8 @@ describe("nerdctl sandbox backend", () => {
     });
     expect(
       value.requests
-        .filter(({ arguments: arguments_ }) => arguments_[0] === "kill")
-        .map(({ arguments: arguments_ }) => arguments_[2]),
+        .filter((request) => fixtureNerdctlCommand(request) === "kill")
+        .map((request) => fixtureNerdctlCommandArguments(request)[2]),
     ).toEqual(["TERM", "KILL"]);
     value.execution.resolve(
       successfulResult("", { exitCode: 137, signal: "SIGKILL" }),
@@ -833,9 +843,9 @@ describe("nerdctl sandbox backend", () => {
     });
     expect(
       value.requests.filter(
-        ({ arguments: arguments_ }) =>
-          arguments_[0] === "rm" &&
-          arguments_.includes(
+        (request) =>
+          fixtureNerdctlCommand(request) === "rm" &&
+          request.arguments.includes(
             createSandboxOwnership(deploymentId, fixtureIdentity).containerName,
           ),
       ),
@@ -863,9 +873,9 @@ describe("nerdctl sandbox backend", () => {
     ).toHaveLength(0);
     expect(
       value.requests.filter(
-        ({ arguments: arguments_ }) =>
-          arguments_[0] === "rm" &&
-          arguments_.includes(
+        (request) =>
+          fixtureNerdctlCommand(request) === "rm" &&
+          request.arguments.includes(
             createSandboxOwnership(deploymentId, fixtureIdentity).containerName,
           ),
       ),
@@ -896,9 +906,9 @@ describe("nerdctl sandbox backend", () => {
     const processes: ProcessExecutor = {
       async run(request) {
         requests.push(request);
-        if (request.arguments[0] === "ps")
+        if (fixtureNerdctlCommand(request) === "ps")
           return successfulResult(`${ownership.containerName}\n`);
-        if (request.arguments[0] === "inspect")
+        if (fixtureNerdctlCommand(request) === "inspect")
           return successfulResult(fixtureCompatibleInspection(deploymentId));
         return successfulResult();
       },

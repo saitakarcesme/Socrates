@@ -1,9 +1,12 @@
 import { spawn } from "node:child_process";
+import { isAbsolute } from "node:path";
 import { performance } from "node:perf_hooks";
 
 export type ProcessRequest = Readonly<{
   executable: string;
   arguments: readonly string[];
+  environment: Readonly<Record<string, string>>;
+  workingDirectory: string;
   timeoutMs: number;
   maximumOutputBytes: number;
   stdin?: Uint8Array;
@@ -25,10 +28,6 @@ export interface ProcessExecutor {
   run(request: ProcessRequest): Promise<ProcessResult>;
 }
 
-export type NodeProcessExecutorOptions = Readonly<{
-  environment?: Readonly<NodeJS.ProcessEnv>;
-}>;
-
 export class ProcessExecutionError extends Error {
   constructor(
     readonly code: "aborted" | "output_limit" | "spawn" | "timeout",
@@ -40,9 +39,62 @@ export class ProcessExecutionError extends Error {
   }
 }
 
-function assertRequest(request: ProcessRequest): void {
+function exactEnvironment(
+  candidate: Readonly<Record<string, string>>,
+): NodeJS.ProcessEnv {
+  if (typeof candidate !== "object" || candidate === null) {
+    throw new TypeError("Process environment is invalid.");
+  }
+  const prototype = Object.getPrototypeOf(candidate) as unknown;
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError("Process environment is invalid.");
+  }
+  const keys = Reflect.ownKeys(candidate);
+  if (keys.length > 64 || keys.some((key) => typeof key !== "string")) {
+    throw new TypeError("Process environment is invalid.");
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(candidate);
+  const environment = Object.create(null) as NodeJS.ProcessEnv;
+  let aggregateBytes = 0;
+  for (const key of keys as string[]) {
+    const descriptor = descriptors[key];
+    if (
+      !descriptor ||
+      !("value" in descriptor) ||
+      !descriptor.enumerable ||
+      typeof descriptor.value !== "string" ||
+      !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(key) ||
+      key.includes("=") ||
+      descriptor.value.includes("\0")
+    ) {
+      throw new TypeError("Process environment is invalid.");
+    }
+    aggregateBytes +=
+      Buffer.byteLength(key, "utf8") +
+      Buffer.byteLength(descriptor.value, "utf8");
+    if (aggregateBytes > 65_536) {
+      throw new RangeError("Process environment exceeds its byte limit.");
+    }
+    Object.defineProperty(environment, key, {
+      configurable: false,
+      enumerable: true,
+      value: descriptor.value,
+      writable: false,
+    });
+  }
+  return Object.freeze(environment);
+}
+
+function assertRequest(request: ProcessRequest): NodeJS.ProcessEnv {
   if (!request.executable || request.executable.includes("\0")) {
     throw new TypeError("Process executable is invalid.");
+  }
+  if (
+    !request.workingDirectory ||
+    request.workingDirectory.includes("\0") ||
+    !isAbsolute(request.workingDirectory)
+  ) {
+    throw new TypeError("Process working directory is invalid.");
   }
   if (
     !Number.isSafeInteger(request.timeoutMs) ||
@@ -67,17 +119,12 @@ function assertRequest(request: ProcessRequest): void {
   } else if (request.maximumInputBytes !== undefined) {
     throw new TypeError("A process input limit requires stdin bytes.");
   }
+  return exactEnvironment(request.environment);
 }
 
 export class NodeProcessExecutor implements ProcessExecutor {
-  private readonly environment: NodeJS.ProcessEnv;
-
-  constructor(options: NodeProcessExecutorOptions = {}) {
-    this.environment = { ...(options.environment ?? process.env) };
-  }
-
   async run(request: ProcessRequest): Promise<ProcessResult> {
-    assertRequest(request);
+    const environment = assertRequest(request);
     if (request.signal?.aborted) {
       throw new ProcessExecutionError(
         "aborted",
@@ -87,7 +134,8 @@ export class NodeProcessExecutor implements ProcessExecutor {
 
     const startedAt = performance.now();
     const child = spawn(request.executable, [...request.arguments], {
-      env: this.environment,
+      env: environment,
+      cwd: request.workingDirectory,
       shell: false,
       windowsHide: true,
       stdio: ["pipe", "pipe", "pipe"],

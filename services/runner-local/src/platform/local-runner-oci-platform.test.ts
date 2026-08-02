@@ -16,8 +16,10 @@ import { parseLocalRunnerConfiguration } from "../configuration";
 import { createAdmittedImageForTesting } from "../image/testing";
 import { createSandboxOwnership } from "../oci/identity";
 import {
+  fixtureHostReadinessProbe,
   fixtureIdentity,
   fixtureNativeInspection,
+  fixtureNerdctlCommand,
   fixtureProfile,
   successfulResult,
 } from "../oci/test-fixtures";
@@ -50,7 +52,20 @@ function runnerConfiguration() {
       spool: "/var/lib/socrates/spool",
     },
     engine: {
-      executable: "configured-nerdctl",
+      executable: "/usr/local/bin/nerdctl",
+      address: "unix:///run/containerd/containerd.sock",
+      snapshotter: "overlayfs",
+      dataRoot: "/home/socrates/.local/share/socrates/nerdctl",
+      configurationPath: "/etc/socrates/runner-local/nerdctl.toml",
+      workingDirectory: "/home/socrates/.local/state/socrates/runner",
+      environment: {
+        home: "/home/socrates",
+        path: "/usr/local/bin:/usr/bin:/bin",
+        xdgConfigHome: "/home/socrates/.config/socrates",
+        xdgDataHome: "/home/socrates/.local/share/socrates",
+        xdgRuntimeDirectory: "/run/user/1001",
+        dockerConfigDirectory: "/home/socrates/.config/socrates/docker",
+      },
       readinessTtlMs: 30_000,
       controlTimeoutMs: 12_345,
       executionTimeoutMs: 300_000,
@@ -218,10 +233,7 @@ function handshakeResult(): ProcessResult {
 
 function dependencies(run = vi.fn(async () => processResult())) {
   const inspect = vi.fn(async () => ({
-    platform: "linux" as const,
-    uid: 1_000,
-    cgroupControllers: ["cpu", "memory", "pids"],
-    appArmorEnabled: true,
+    ...fixtureHostReadinessProbe,
   }));
   const now = vi.fn(() => 1_785_620_000_000);
   let identity = 4;
@@ -365,7 +377,16 @@ describe("local runner OCI platform composition", () => {
     expect(policy).toEqual({
       deploymentId: configuration.identity.deploymentId,
       runnerId: configuration.identity.runnerId,
-      executable: configuration.engine.executable,
+      invocation: {
+        executable: configuration.engine.executable,
+        address: configuration.engine.address,
+        namespace: `socrates-${configuration.identity.deploymentId}`,
+        snapshotter: configuration.engine.snapshotter,
+        dataRoot: configuration.engine.dataRoot,
+        configurationPath: configuration.engine.configurationPath,
+        workingDirectory: configuration.engine.workingDirectory,
+        environment: configuration.engine.environment,
+      },
       readinessTtlMs: configuration.engine.readinessTtlMs,
       controlTimeoutMs: configuration.engine.controlTimeoutMs,
       executionTimeoutMs: configuration.engine.executionTimeoutMs,
@@ -398,15 +419,76 @@ describe("local runner OCI platform composition", () => {
     await expect(platform.recoverOwned()).resolves.toBe(0);
     expect(run).toHaveBeenCalledOnce();
     expect(requests[0]).toMatchObject({
-      executable: "configured-nerdctl",
+      executable: "/usr/local/bin/nerdctl",
       timeoutMs: 12_345,
       maximumOutputBytes: 234_567,
     });
-    expect(requests[0]?.arguments.slice(0, 3)).toEqual([
+    expect(requests[0]?.arguments.slice(12, 15)).toEqual([
       "ps",
       "--all",
       "--quiet",
     ]);
+  });
+
+  it("shares one detached invocation across backend and inspector paths", async () => {
+    const requests: ProcessRequest[] = [];
+    const configuration = runnerConfiguration();
+    const run = vi.fn(async (request: ProcessRequest) => {
+      requests.push(request);
+      return fixtureNerdctlCommand(request) === "ps"
+        ? processResult()
+        : processResult("not-json");
+    });
+    const platform = new LocalRunnerOciPlatform({
+      configuration,
+      trustedImages: trustedImages(),
+      ...dependencies(run),
+    });
+    configuration.identity.deploymentId = "redirected";
+    configuration.engine.address = "unix:///tmp/redirect.sock";
+    configuration.engine.snapshotter = "native";
+    configuration.engine.dataRoot = "/tmp/redirect-data";
+    configuration.engine.configurationPath = "/tmp/redirect.toml";
+    configuration.engine.workingDirectory = "/tmp/redirect-working";
+    configuration.engine.environment.home = "/tmp/redirect-home";
+    configuration.engine.environment.path = "/tmp/bin";
+
+    await expect(platform.recoverOwned()).resolves.toBe(0);
+    await expect(platform.admit(imageDigest, "amd64")).rejects.toThrow();
+
+    expect(requests).toHaveLength(3);
+    const expectedPrefix = [
+      "--address=unix:///run/containerd/containerd.sock",
+      "--namespace=socrates-runner-prod-1",
+      "--snapshotter=overlayfs",
+      "--data-root=/home/socrates/.local/share/socrates/nerdctl",
+      "--cgroup-manager=systemd",
+      "--debug=false",
+      "--debug-full=false",
+      "--insecure-registry=false",
+      "--experimental=false",
+      "--kube-hide-dupe=false",
+      "--selinux-enabled=false",
+      "--userns-remap=",
+    ];
+    for (const request of requests) {
+      expect(request.arguments.slice(0, 12)).toEqual(expectedPrefix);
+      expect(request.environment).toEqual({
+        HOME: "/home/socrates",
+        PATH: "/usr/local/bin:/usr/bin:/bin",
+        XDG_CONFIG_HOME: "/home/socrates/.config/socrates",
+        XDG_DATA_HOME: "/home/socrates/.local/share/socrates",
+        XDG_RUNTIME_DIR: "/run/user/1001",
+        DOCKER_CONFIG: "/home/socrates/.config/socrates/docker",
+        NERDCTL_TOML: "/etc/socrates/runner-local/nerdctl.toml",
+      });
+      expect(request.workingDirectory).toBe(
+        "/home/socrates/.local/state/socrates/runner",
+      );
+      expect(request.environment).toBe(requests[0]!.environment);
+      expect(request.environment).not.toHaveProperty("CONTAINERD_ADDRESS");
+      expect(request.environment).not.toHaveProperty("HTTP_PROXY");
+    }
   });
 
   it("maps exact inspector bounds before a failed image inspection", async () => {
@@ -426,7 +508,7 @@ describe("local runner OCI platform composition", () => {
     expect(requests).toHaveLength(2);
     for (const request of requests) {
       expect(request).toMatchObject({
-        executable: "configured-nerdctl",
+        executable: "/usr/local/bin/nerdctl",
         timeoutMs: 12_345,
         maximumOutputBytes: 234_567,
       });
@@ -442,7 +524,7 @@ describe("local runner OCI platform composition", () => {
     let starts = 0;
     const run = vi.fn(async (request: ProcessRequest) => {
       requests.push(request);
-      const command = request.arguments[0];
+      const command = fixtureNerdctlCommand(request);
       if (command === "image") {
         return request.arguments.includes("dockercompat")
           ? imageCompatibleInspection()
@@ -532,13 +614,13 @@ describe("local runner OCI platform composition", () => {
     expect(value.calls.next).toHaveBeenCalledTimes(2);
     expect(value.calls.now).toHaveBeenCalledTimes(4);
     expect(
-      requests.filter((request) => request.arguments[0] === "image"),
+      requests.filter((request) => fixtureNerdctlCommand(request) === "image"),
     ).toHaveLength(2);
     expect(
-      requests.filter((request) => request.arguments[0] === "create"),
+      requests.filter((request) => fixtureNerdctlCommand(request) === "create"),
     ).toHaveLength(2);
     expect(
-      requests.filter((request) => request.arguments[0] === "start"),
+      requests.filter((request) => fixtureNerdctlCommand(request) === "start"),
     ).toHaveLength(2);
   });
 
@@ -620,7 +702,7 @@ describe("local runner OCI platform composition", () => {
     expect(requests).toHaveLength(4);
     for (const request of requests.slice(0, 3)) {
       expect(request).toMatchObject({
-        executable: "configured-nerdctl",
+        executable: "/usr/local/bin/nerdctl",
         timeoutMs: 12_345,
         maximumOutputBytes: 234_567,
       });

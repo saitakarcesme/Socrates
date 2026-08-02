@@ -17,6 +17,7 @@ import {
 } from "../request/capability";
 
 import type { SandboxAttemptIdentity, SandboxOwnership } from "./identity";
+import type { NerdctlInvocation } from "./invocation";
 import {
   ProcessExecutionError,
   type ProcessExecutor,
@@ -91,7 +92,6 @@ type PreparedSandboxExecution = Readonly<{
 export type NerdctlSandboxBackendOptions = Readonly<{
   deploymentId: string;
   runnerId: string;
-  executable?: string;
   readinessTtlMs?: number;
   controlTimeoutMs?: number;
   executionTimeoutMs?: number;
@@ -211,7 +211,6 @@ function hasNoProcessCapabilities(value: unknown): boolean {
 }
 
 export class NerdctlSandboxBackend {
-  private readonly executable: string;
   private readonly readinessTtlMs: number;
   private readonly controlTimeoutMs: number;
   private readonly executionTimeoutMs: number;
@@ -226,13 +225,13 @@ export class NerdctlSandboxBackend {
   constructor(
     private readonly processes: ProcessExecutor,
     private readonly readinessVerifier: ReadinessVerifier,
+    private readonly invocation: NerdctlInvocation,
     private readonly options: NerdctlSandboxBackendOptions,
   ) {
     if (!options.deploymentId.trim()) {
       throw new TypeError("deploymentId cannot be empty.");
     }
     runnerOwnershipLabels(options.deploymentId, options.runnerId);
-    this.executable = options.executable ?? "nerdctl";
     this.readinessTtlMs = options.readinessTtlMs ?? 30_000;
     this.controlTimeoutMs = options.controlTimeoutMs ?? 10_000;
     this.executionTimeoutMs = options.executionTimeoutMs ?? 60_000;
@@ -273,16 +272,16 @@ export class NerdctlSandboxBackend {
       signal?: AbortSignal;
     } = {},
   ): Promise<ProcessResult> {
-    return this.processes.run({
-      executable: this.executable,
-      arguments: arguments_,
-      timeoutMs: options.timeoutMs ?? this.controlTimeoutMs,
-      maximumOutputBytes:
-        options.maximumOutputBytes ?? this.maximumControlOutputBytes,
-      stdin: options.stdin,
-      maximumInputBytes: options.maximumInputBytes,
-      signal: options.signal,
-    });
+    return this.processes.run(
+      this.invocation.request(arguments_, {
+        timeoutMs: options.timeoutMs ?? this.controlTimeoutMs,
+        maximumOutputBytes:
+          options.maximumOutputBytes ?? this.maximumControlOutputBytes,
+        stdin: options.stdin,
+        maximumInputBytes: options.maximumInputBytes,
+        signal: options.signal,
+      }),
+    );
   }
 
   private async requireSuccess(
