@@ -43,6 +43,14 @@ Field, list, UTF-8 byte, aggregate byte, depth, and node ceilings are explicit
 exported constants. Every accepted value is rebuilt by the schema and deeply
 frozen. No input object or array identity survives parsing.
 
+The V1 ceilings are:
+
+- 32 nested containers and 10,000 visited structural nodes;
+- 4,096 UTF-8 bytes per executable or argument;
+- 128 arguments and 65,536 aggregate UTF-8 command bytes;
+- 128 environment entries, 8,192 UTF-8 bytes per entry, and 262,144 aggregate
+  UTF-8 environment bytes.
+
 ## Failure contract
 
 `LocalRunnerTrustedImageConfigurationError` exposes only:

@@ -4644,6 +4644,10 @@ Every digest is lowercase `sha256`, commands use one bounded absolute
 executable and at most 128 bounded no-NUL arguments, and environment entries
 have bounded UTF-8 size and aggregate size. Environment names are unique,
 portable uppercase identifiers and credential-like names remain forbidden.
+The structural ceiling is 32 nested containers and 10,000 visited nodes. An
+executable or argument is at most 4,096 UTF-8 bytes and one command is at most
+65,536 aggregate UTF-8 bytes. One image has at most 128 environment entries;
+each is at most 8,192 UTF-8 bytes and their aggregate is at most 262,144 bytes.
 The catalog count, environment count, string-byte, aggregate-byte, depth, and
 node ceilings are explicit exported contract constants and are tested at both
 edges. Invalid candidates receive fixed `invalid_candidate` or
