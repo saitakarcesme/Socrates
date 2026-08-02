@@ -5414,6 +5414,96 @@ and both evidence uploads also passed. This admits ADR-096 and closes Slice
 refresh, fetch and observation policy, bootstrap, process entry, signals,
 shutdown, activation, and runner enablement remain separate decisions.
 
+### ADR-097: the runner credential is admitted from one systemd activation directory
+
+ADR-096 intentionally stops before secret discovery. The bearer token must not
+be supplied in an ordinary environment variable, command argument, public
+configuration file, current working directory, home directory, or stdin. Slice
+2.60 adds one inert Linux-only `NodeLocalRunnerSystemdCredentialLoader`. It has
+no constructor input or override and exposes one asynchronous `load()`
+operation. The operation returns only the existing admitted `RunnerBearerToken`;
+it does not compose or activate a runner.
+
+The only environment authority is the single value read once from
+`CREDENTIALS_DIRECTORY`. It must be the exact canonical absolute POSIX path
+`/run/credentials/socrates-runner-local.service`. Missing, empty, accessor-
+throwing, non-string, differently normalized, or alternate values fail before
+identity, procfs, or credential-tree access. No environment enumeration,
+fallback variable, dotenv file, CLI precedence, default path, test path, or
+production override exists. Although the path is architecture-owned, the
+loader still obtains and validates systemd's environment value rather than
+silently hardcoding credential discovery.
+
+The process must expose a safe, non-root effective UID. The root filesystem
+directory, `run`, and `credentials` are retained one component at a time and
+must be real UID-0 directories with exact mode `0o755`. The final per-unit
+directory must have exact mode `0o500` and be owned either by UID 0 or by that
+effective service UID. These are systemd's two supported access realizations:
+root ownership plus a read/search ACL when ACLs are available, or service-user
+ownership when a read-only credential filesystem permits the fallback. The
+credential file owner must exactly equal the accepted per-unit-directory owner;
+it must be a regular single-link file with exact mode `0o400` and exactly 85
+bytes. Group ownership is not policy because no accepted mode grants group
+authority.
+
+The loader repeats ADR-096's verified procfs descriptor protocol. It requires
+Linux `PROC_SUPER_MAGIC`, opens `/`, and resolves the fixed `run`, `credentials`,
+and `socrates-runner-local.service` components through retained
+`/proc/self/fd/<parent-fd>/<fixed-component>` anchors using
+`O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NONBLOCK | O_NOCTTY`. All directory
+handles remain retained until credential settlement. The final fixed basename
+`runner-bearer-token` is read by ADR-095 beneath the retained unit-directory
+descriptor using the accepted directory owner, mode `0o400`, and the exact
+85-byte ceiling. ADR-094's credential-only admission is then applied
+immediately. No raw byte view, path, descriptor, metadata, or decoded invalid
+secret escapes.
+
+Directory handles close exactly once in reverse order. A primary environment,
+identity, procfs, open, metadata, file, or credential failure remains primary
+if cleanup also fails; cleanup failure after otherwise successful admission is
+`close_failed`. The frozen public taxonomy is limited to `unsupported_host`,
+`invalid_environment`, `invalid_identity`, `invalid_host`, `open_failed`,
+`invalid_metadata`, `credential_failed`, and `close_failed`. Errors contain no
+cause, environment value, path, UID, descriptor, metadata, bytes, token,
+schema detail, syscall code, or nested error.
+
+Systemd credentials are acquired for an activation, exposed in a read-only
+per-unit directory, and released when the unit deactivates. This loader
+therefore adds no watcher, polling, TTL, mutable cache, or in-process rotation.
+A later resource graph may call it once during bootstrap; credential rotation
+requires a new service activation and a fresh graph, preserving ADR-088. A
+second explicit `load()` call is merely another isolated read of the same
+systemd-owned activation boundary and is not a refresh API.
+
+This policy follows systemd's official
+[`Credentials`](https://systemd.io/CREDENTIALS/) contract and the upstream
+[`systemd.exec`](https://github.com/systemd/systemd/blob/main/man/systemd.exec.xml)
+and
+[`exec-credential.c`](https://github.com/systemd/systemd/blob/main/src/core/exec-credential.c)
+implementation. The latter creates credential files as `0o400`, removes write
+permission from the private directory, grants the service UID ACL access where
+possible, falls back to ownership only when the credential filesystem can be
+made read-only, and finally makes that filesystem read-only.
+
+Tests must prove construction silence, platform and required-flag gating before
+environment access, one exact environment read before identity and procfs,
+non-root identity, fixed component and filename resolution, both legitimate
+owner models, exact directory/file modes and link count, strict 85-byte and
+token admission, descriptor retention, reverse single-close cleanup, primary-
+failure precedence, immutable output, and complete secret/path/cause redaction.
+A package-private deterministic core may inject environment, identity, procfs,
+handles, reads, and admission. Production construction accepts none of them.
+Linux CI must provision the exact `/run/credentials` path and prove a valid
+service-owned fallback tree plus missing, alternate environment, final symlink,
+hard link, wrong mode, wrong owner, directory substitution, short, long, and
+malformed credential variants. The fixture is test evidence, not a supported
+non-systemd deployment mechanism.
+
+This decision does not create a systemd unit, source or encrypt the host-side
+credential, read public deployment documents, compose ADR-093, define fetch or
+observation policy, bootstrap resources, create a process entry, handle
+signals, own shutdown, expose an activation flag, or enable the runner.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
