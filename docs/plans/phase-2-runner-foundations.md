@@ -1604,6 +1604,29 @@ ADR-088 is admitted. Credential loading/refresh, environment, trusted image
 declarations, OCI/platform bootstrap, process startup, shutdown ownership, and
 enablement remain deferred.
 
+### Slice 2.52 — trusted image catalog configuration
+
+Status: Planned on 2026-08-02.
+
+Architecture decision: ADR-089.
+
+Detailed plan: `docs/plans/slice-2.52-trusted-image-catalog-configuration.md`.
+
+- admit one closed, bounded V1 trusted-image catalog from unknown data;
+- replace duplicate image reference/manifest authority with one bare digest;
+- share hardened plain-data traversal with ADR-086 while preserving its
+  array-rejecting semantics;
+- detach and deeply freeze every declaration, command, argument, and
+  environment entry;
+- reject mutable references, aliases, duplicates, credential-like environment,
+  sparse/custom arrays, accessors, cycles, and configuration bombs;
+- keep loaders, image inspection/handshake, process and OCI construction,
+  startup, shutdown, and activation out of scope.
+
+Exit: adversarial and property tests prove one digest authority, bounded closed
+data, deterministic detached admission, fixed redacted failure, downstream
+catalog compatibility, and zero external effects.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.

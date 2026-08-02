@@ -4607,6 +4607,62 @@ admits ADR-088 and closes Slice 2.51. Credential loading and refresh, trusted
 image declarations, OCI/platform bootstrap, process entry, shutdown ownership,
 feature flags, and runner enablement remain separate decisions.
 
+### ADR-089: Trusted image declarations have one digest authority
+
+ADR-088 leaves the image-admission capability injected because the existing
+`TrustedSandboxImage` is only a TypeScript structural type. Passing environment
+or file contents directly into that constructor would allow accessors, sparse
+arrays, unbounded strings, duplicate authority, or mutable nested data to reach
+the platform graph. Composing OCI resources before this boundary exists would
+therefore make an unverified deployment document authoritative.
+
+Slice 2.52 introduces one strict V1 trusted-image catalog configuration parser.
+Its unknown candidate is a closed object containing `version: "1"` and between
+one and 32 image declarations. Each declaration contains exactly one bare
+platform-manifest `digest`, one admitted OCI manifest media type, the rootfs
+configuration digest, Linux architecture, runtime build and bundle digests,
+fixed runtime and profile-probe commands, and exact non-secret environment
+defaults. The V1 catalog version implies the current fixed `runtimeAbi`; an
+input ABI alias cannot override code and protocol authority.
+
+The admitted declaration has one digest field. The existing duplicate
+`reference` and `manifestDigest` fields are removed from
+`TrustedSandboxImage`; catalog inspection derives both engine reference and
+expected manifest identity from the same digest at the call boundary. A digest
+may occur only once in a catalog. Tags, registry references, platform aliases,
+fallback images, and caller-selected local names remain unrepresentable.
+
+Candidate admission accepts only plain objects and dense plain arrays. It
+rejects custom prototypes, accessors, functions, symbols, cycles, array holes,
+array extension keys, excessive nesting, and excessive node counts without
+invoking a candidate getter. The structural validator is shared with ADR-086
+while preserving ADR-086's array-rejecting behavior. Successful parsing
+rebuilds and deeply freezes a detached graph; later mutation of the original
+candidate cannot change catalog authority.
+
+Every digest is lowercase `sha256`, commands use one bounded absolute
+executable and at most 128 bounded no-NUL arguments, and environment entries
+have bounded UTF-8 size and aggregate size. Environment names are unique,
+portable uppercase identifiers and credential-like names remain forbidden.
+The catalog count, environment count, string-byte, aggregate-byte, depth, and
+node ceilings are explicit exported contract constants and are tested at both
+edges. Invalid candidates receive fixed `invalid_candidate` or
+`invalid_configuration` errors that never echo input values.
+
+Parsing is deterministic and inert. It performs no environment, file, stdin,
+secret-store, network, process, clock, UUID, image inspection, handshake,
+readiness, or sandbox operation. It does not construct a
+`SandboxImageCatalog`, `NodeProcessExecutor`, `NerdctlReadinessVerifier`, or
+`NerdctlSandboxBackend`. A later platform-composition ADR must consume this
+admitted snapshot together with ADR-086 and prove exact process, readiness,
+backend, inspector, handshake, and catalog mapping.
+
+This slice adds no catalog loader, signature or registry policy, image pull or
+build, credential loading, process entry point, signal handling, shutdown
+owner, feature flag, or runner activation. `LocalRunnerNotEnabledError` remains
+the production entry-point behavior until those independent authorities are
+admitted and composed.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
