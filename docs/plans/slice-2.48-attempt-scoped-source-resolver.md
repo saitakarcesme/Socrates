@@ -1,6 +1,6 @@
 # Slice 2.48 attempt-scoped source resolver factory
 
-Status: Planned
+Status: Admitted
 
 Date: 2026-08-02
 
@@ -89,3 +89,22 @@ signal authority, operation, result, and failure.
    not weaken.
 7. No environment loader, resource process root, signal handler, shutdown
    owner, or runner enablement lands.
+
+## Admission evidence
+
+- Architecture commit: `08660c6`.
+- Implementation commit: `91629b4`.
+- Focused additions: 22 adversarial tests covering exact immutable identity,
+  every identity-field drift, inert and retained factory authority, malformed
+  capabilities, cross-attempt reuse rejection, dependency mutation and getter
+  faults, distinct sequential resolver issuance, and real two-attempt
+  `RunnerHttpClient` plus local artifact-store resolution.
+- Runner-local suite: all 944 tests passed against fresh migrated PostgreSQL
+  database `socrates_ci_adr085`.
+- Local gates: Phase 1 and Phase 2 boundary audits, formatting, typecheck,
+  lint, full workspace tests, database and API integrations, Chromium
+  measured-research E2E, and production build. Native durability validations
+  are Linux-only and passed in CI.
+- GitHub Actions: run `30725526404` passed all required Linux, PostgreSQL, API,
+  runner, native durability, Chromium journey, production-build, and
+  evidence-upload gates.

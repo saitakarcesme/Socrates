@@ -1479,7 +1479,7 @@ ownership, resource composition, and runner enablement remain deferred.
 
 ### Slice 2.48 — attempt-scoped source resolver factory
 
-Status: Planned on 2026-08-02.
+Status: Admitted on 2026-08-02.
 
 Architecture decision: ADR-085.
 
@@ -1497,6 +1497,14 @@ Detailed plan: `docs/plans/slice-2.48-attempt-scoped-source-resolver.md`.
 Exit: adversarial and real resolver tests prove sequential attempts cannot
 share source authority, identity cannot be substituted, constructor inertness
 is preserved, and dependency mutation cannot redirect source bytes.
+
+Admission: implementation commit `91629b4`; 22 new adversarial tests and all
+944 runner-local tests passed against fresh migrated PostgreSQL database
+`socrates_ci_adr085`. Main CI run `30725526404` passed every required Linux,
+PostgreSQL, API, runner, native durability, Chromium journey,
+production-build, and evidence-upload gate. ADR-085 is admitted. Environment
+loading, process resource composition, shutdown ownership, and runner
+enablement remain deferred.
 
 ## Acceptance gates
 

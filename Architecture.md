@@ -4355,6 +4355,19 @@ enablement. `LocalRunnerNotEnabledError` remains the production entry-point
 behavior. Concrete resource composition and configuration remain later
 decisions after the per-attempt authority graph is sound.
 
+Evidence: architecture commit `08660c6` preceded production code.
+Implementation commit `91629b4` added exact immutable identity snapshots,
+attempt-scoped resolver creation, owner-lifetime reuse rejection, the concrete
+bounded resolver factory, and 22 new adversarial tests. All 944 runner-local
+tests and every platform-independent local repository gate passed against
+fresh migrated PostgreSQL database `socrates_ci_adr085`, including the
+Chromium measured-research journey and production build. Main CI run
+`30725526404` passed all PostgreSQL, API, runner, Linux native durability,
+Chromium product-journey, production-build, and evidence-upload gates. This
+admits ADR-085 and closes Slice 2.48. Environment loading, process resource
+composition, shutdown ownership, and runner enablement remain separate
+decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
