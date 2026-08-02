@@ -5077,6 +5077,30 @@ an activation flag, daemonize, or enable the runner. Those remain later
 architecture decisions, and `LocalRunnerNotEnabledError` remains the public
 production entry-point behavior after Slice 2.56.
 
+Architecture commits `2aedd3f` and `d722df1` preceded the production commit;
+the second closes the test-authority boundary so the Node integration proves
+its idle ownership handoff while the existing application integration remains
+the single measured downstream graph. Implementation commit `9480bd9` adds
+`LocalRunnerNodeApplicationPlatform`, its closed cause-free error taxonomy,
+the explicit system sandbox-probe source export, and a shared application test
+fixture that removes duplicated configuration and image policy. Twelve Node-
+platform tests prove configuration-first admission, exact single reads,
+cause-free input and adapter failure, ambient-fetch exclusion, exact host-path
+wiring, construction inertness, opacity, post-construction mutation isolation,
+retained run ownership, exact ADR-092 process policy, pre-aborted silence, and
+one real-adapter idle lifecycle behind controlled process and host boundaries.
+
+All 1,269 locally runnable runner-local tests passed with four Linux/database-
+dependent tests deferred to CI. Local formatting, all 14-package type and lint
+gates, both architecture audits, the complete database-free workspace suite,
+and production build passed. Main CI run `30735011231` passed all 1,273 runner-
+local tests across 62 files on Linux plus formatting, types, lint, PostgreSQL,
+API, native spool and work-journal durability, Chromium, build, and both native-
+evidence uploads. This admits ADR-093 and closes Slice 2.56. Input and secret
+loaders, fetch connection policy, operational logging, refresh, lifecycle
+bootstrap, process entry, signals, shutdown deadlines, activation flags, and
+runner activation remain separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
