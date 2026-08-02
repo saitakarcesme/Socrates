@@ -7,8 +7,7 @@ import {
 } from "@socrates/contracts";
 import {
   createPersistence,
-  developmentSeedIds,
-  seedDevelopmentData,
+  seedEmptyDevelopmentWorkspace,
 } from "@socrates/database";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -24,6 +23,11 @@ const connectionString = process.env["DATABASE_URL"];
 const integration = describe.skipIf(!connectionString);
 
 integration("deterministic fake runner vertical slice", () => {
+  const workspaceId = randomUUID();
+  const projectId = randomUUID();
+  const runId = randomUUID();
+  const metricDefinitionId = randomUUID();
+  const baseExperimentId = randomUUID();
   const runnerId = randomUUID();
   const cancellationExperimentId = randomUUID();
   const gapExperimentId = randomUUID();
@@ -32,7 +36,10 @@ integration("deterministic fake runner vertical slice", () => {
 
   beforeAll(async () => {
     if (!connectionString) return;
-    await seedDevelopmentData(connectionString);
+    await seedEmptyDevelopmentWorkspace(connectionString, {
+      id: workspaceId,
+      name: "Deterministic Fake Runner Integration",
+    });
     persistence = createPersistence({ connectionString });
     fixture = experimentTaskV2Schema.parse(
       JSON.parse(
@@ -47,9 +54,48 @@ integration("deterministic fake runner vertical slice", () => {
     );
 
     await persistence.transaction(async ({ commands, scheduler }) => {
+      await expect(
+        commands.createProject({
+          id: projectId,
+          workspaceId,
+          name: "Deterministic Fake Runner",
+          slug: `deterministic-fake-runner-${projectId}`,
+          objective: "Verify deterministic task evidence independently.",
+          sourceType: null,
+          sourceReference: null,
+          metric: {
+            id: metricDefinitionId,
+            projectId,
+            version: 1,
+            name: "duration",
+            unit: "ms",
+            direction: "minimize",
+            minimumImprovement: "1",
+            noiseTolerance: "0",
+            guardrails: [],
+          },
+        }),
+      ).resolves.toEqual({ state: "created" });
+      await expect(
+        commands.createRun(
+          {
+            id: runId,
+            projectId,
+            metricDefinitionId,
+            title: "Deterministic execution",
+            objective: "Preserve ordered task evidence.",
+            budget: {
+              maximumExperiments: 3,
+              maximumDurationMs: 300_000,
+              maximumCostMinor: 0,
+            },
+          },
+          0,
+        ),
+      ).resolves.toEqual({ sequence: 1 });
       await scheduler.registerRunner({
         id: runnerId,
-        workspaceId: developmentSeedIds.workspace,
+        workspaceId,
         kind: "local",
         softwareVersion: "fake-1",
         taskProtocolVersions: ["2"],
@@ -58,30 +104,48 @@ integration("deterministic fake runner vertical slice", () => {
         capabilities: fixture.environment.requiredCapabilities,
         maximumConcurrentTasks: 3,
       });
-      await commands.createExperiment(
-        {
-          id: cancellationExperimentId,
-          runId: developmentSeedIds.atlasRun,
-          parentExperimentId: developmentSeedIds.atlasExperimentTwo,
-          hypothesis: "Cancellation remains durable.",
-          action: "Cancel deterministic fake work.",
-          estimatedDurationMs: 1_000,
-          estimatedCostMinor: 0,
-        },
-        2,
-      );
-      await commands.createExperiment(
-        {
-          id: gapExperimentId,
-          runId: developmentSeedIds.atlasRun,
-          parentExperimentId: cancellationExperimentId,
-          hypothesis: "Sequence gaps recover without evidence loss.",
-          action: "Replay the deterministic spool in order.",
-          estimatedDurationMs: 1_000,
-          estimatedCostMinor: 0,
-        },
-        3,
-      );
+      await expect(
+        commands.createExperiment(
+          {
+            id: baseExperimentId,
+            runId,
+            parentExperimentId: null,
+            hypothesis: "Deterministic completion remains replayable.",
+            action: "Complete deterministic fake work.",
+            estimatedDurationMs: 1_000,
+            estimatedCostMinor: 0,
+          },
+          0,
+        ),
+      ).resolves.toEqual({ sequence: 1 });
+      await expect(
+        commands.createExperiment(
+          {
+            id: cancellationExperimentId,
+            runId,
+            parentExperimentId: baseExperimentId,
+            hypothesis: "Cancellation remains durable.",
+            action: "Cancel deterministic fake work.",
+            estimatedDurationMs: 1_000,
+            estimatedCostMinor: 0,
+          },
+          1,
+        ),
+      ).resolves.toEqual({ sequence: 2 });
+      await expect(
+        commands.createExperiment(
+          {
+            id: gapExperimentId,
+            runId,
+            parentExperimentId: cancellationExperimentId,
+            hypothesis: "Sequence gaps recover without evidence loss.",
+            action: "Replay the deterministic spool in order.",
+            estimatedDurationMs: 1_000,
+            estimatedCostMinor: 0,
+          },
+          2,
+        ),
+      ).resolves.toEqual({ sequence: 3 });
     });
   });
 
@@ -97,18 +161,18 @@ integration("deterministic fake runner vertical slice", () => {
     const payload = experimentTaskV2Schema.parse({
       ...fixture,
       taskId,
-      runId: developmentSeedIds.atlasRun,
+      runId,
       experimentId,
       measurement: {
         ...fixture.measurement,
-        metricDefinitionId: developmentSeedIds.atlasMetric,
+        metricDefinitionId,
       },
     });
     const write: RunnerTaskWrite = {
       id: taskId,
-      workspaceId: developmentSeedIds.workspace,
-      projectId: developmentSeedIds.atlasProject,
-      runId: developmentSeedIds.atlasRun,
+      workspaceId,
+      projectId,
+      runId,
       experimentId,
       expectedExperimentVersion: 0,
       protocolVersion: "2",
@@ -146,9 +210,7 @@ integration("deterministic fake runner vertical slice", () => {
   };
 
   it("completes and replays a claim-to-terminal lifecycle", async () => {
-    const execution = await claimExecution(
-      developmentSeedIds.atlasExperimentTwo,
-    );
+    const execution = await claimExecution(baseExperimentId);
     const runner = new DeterministicFakeRunner({ measurementAmount: "2.1" });
 
     for await (const event of runner.execute(execution)) {
@@ -213,7 +275,7 @@ integration("deterministic fake runner vertical slice", () => {
     await persistence.transaction(({ scheduler }) =>
       scheduler.requestCancellation({
         requestId: randomUUID(),
-        workspaceId: developmentSeedIds.workspace,
+        workspaceId,
         taskId: execution.lease.taskId,
         gracePeriodMs: 5_000,
         reason: "operator",

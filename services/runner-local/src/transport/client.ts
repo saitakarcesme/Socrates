@@ -332,7 +332,10 @@ export class RunnerHttpClient
     },
     signal?: AbortSignal,
   ): Promise<RunnerTaskHeartbeatResponseV1> {
-    const params = runnerTaskHeartbeatParamsV1Schema.parse(input);
+    const params = runnerTaskHeartbeatParamsV1Schema.parse({
+      taskId: input.taskId,
+      attemptId: input.attemptId,
+    });
     const body = runnerTaskHeartbeatRequestV1Schema.parse(input.request);
     return this.#request(
       `/v1/runner/tasks/${params.taskId}/attempts/${params.attemptId}/heartbeat`,

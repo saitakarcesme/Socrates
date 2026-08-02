@@ -30,6 +30,11 @@ export {
   type LocalRunnerAttemptLifecycleOptions,
 } from "./local-runner-attempt-lifecycle";
 export {
+  LocalRunnerAuthenticatedAttemptLifecycle,
+  LocalRunnerAuthenticatedAttemptLifecycleError,
+  type LocalRunnerAuthenticatedAttemptLifecycleOptions,
+} from "./local-runner-authenticated-attempt-lifecycle";
+export {
   LocalAttemptDispatchLoop,
   LocalAttemptDispatchLoopError,
   type LocalAttemptDispatchDelay,

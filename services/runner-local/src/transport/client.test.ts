@@ -158,6 +158,35 @@ describe("runner HTTP client", () => {
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
   });
 
+  it("heartbeats one exact attempt without mixing the request into route params", async () => {
+    const taskId = randomUUID();
+    const attemptId = randomUUID();
+    const fetchImplementation = vi.fn<typeof fetch>(async (input, init) => {
+      expect(String(input)).toBe(
+        `http://control-plane.test/v1/runner/tasks/${taskId}/attempts/${attemptId}/heartbeat`,
+      );
+      expect(JSON.parse(String(init?.body))).toEqual({
+        version: "1",
+        fence: 3,
+        leaseDurationMs: 30_000,
+      });
+      return jsonResponse({
+        version: "1",
+        leaseExpiresAt: "2026-07-31T12:01:00.000Z",
+        directive: "continue",
+      });
+    });
+
+    await expect(
+      client(fetchImplementation).heartbeat({
+        taskId,
+        attemptId,
+        request: { version: "1", fence: 3, leaseDurationMs: 30_000 },
+      }),
+    ).resolves.toMatchObject({ directive: "continue" });
+    expect(fetchImplementation).toHaveBeenCalledTimes(1);
+  });
+
   it("requires HTTPS unless insecure development mode is explicit", () => {
     expect(
       () =>
