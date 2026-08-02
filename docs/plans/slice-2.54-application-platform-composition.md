@@ -71,11 +71,11 @@ delegates to the one retained authenticated lifecycle and preserves its
 validation, pre-abort, single-run, cooperative shutdown, startup recovery,
 serial dispatch, observation, delay, and fail-stop semantics.
 
-Input and composition errors use fixed public messages. Raw credential and
-untrusted candidate content must not appear in object keys, JSON, inspection,
-messages, stacks asserted by public tests, or enumerable nested state. After
-construction, operational errors are not retried, wrapped, or translated by
-this layer.
+Input and composition errors use fixed public messages and expose no `cause`.
+Raw credential and untrusted candidate content must not appear in object keys,
+JSON, inspection, messages, stacks asserted by public tests, or nested state.
+After construction, operational errors are not retried, wrapped, or translated
+by this layer.
 
 ## Adversarial matrix
 
@@ -89,7 +89,8 @@ this layer.
 - no second OCI backend, catalog, HTTP client, lifecycle, or fallback exists;
 - construction performs no fetch, file, directory, process, host, clock,
   timer, UUID, recovery, image, observer, scheduler, or sandbox effect;
-- platform and errors serialize without credential or untrusted data;
+- platform and cause-free errors inspect and serialize without credential or
+  untrusted data;
 - invalid signal, pre-abort, concurrent/repeated run, and private abort reason;
 - a real idle run performs exactly one OCI recovery before acquisition, then
   observes and delays cooperatively through the composed lifecycle;

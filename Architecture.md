@@ -4825,11 +4825,12 @@ startup-recovery-first lifecycle.
 
 Public construction errors distinguish `invalid_configuration`,
 `invalid_images`, `invalid_credential`, `invalid_dependency`, and
-`composition_failed` with fixed redacted messages. The raw credential and
-untrusted candidates remain private even through serialization and nested
-causes. Child operational failures retain their existing bounded contracts;
-the application platform adds no retry, fallback, or error translation after
-successful construction.
+`composition_failed` with fixed redacted messages and no attached public
+`cause`. Underlying construction details are discarded at this outer boundary;
+the raw credential and untrusted candidates therefore cannot escape through
+error inspection or serialization. Child operational failures retain their
+existing bounded contracts; the application platform adds no retry, fallback,
+or error translation after successful construction.
 
 This slice still does not instantiate `NodeProcessExecutor`,
 `NodeHostReadinessInspector`, `NodeLeaseAuthorityScheduler`,
