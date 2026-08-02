@@ -5172,6 +5172,29 @@ later loader must own those host concerns and pass only bounded byte views into
 this boundary. ADR-093 remains inert, and `LocalRunnerNotEnabledError` remains
 the public production entry-point behavior after Slice 2.57.
 
+Architecture commit `fbc6eaf` preceded production code. Implementation commit
+`5bc8fe0` adds the pure deployment-byte parser, closed cause-free error
+taxonomy, detached frozen result, public deployment module, and sixteen
+adversarial tests. The tests prove exact owner and failure order, fixed byte
+ceilings, fatal UTF-8 and BOM handling, strict semantic admission, duplicate-
+member and alternate-representation rejection, canonical member order,
+credential length and redaction, Buffer and subarray copying, post-admission
+mutation isolation, shared/resizable/detached/proxied storage rejection, and a
+canonical 32-image maximum-capacity catalog whose command and environment byte
+aggregates reach their existing schema ceilings.
+
+Local formatting, all 14-package type and lint gates, both architecture audits,
+the complete database-free workspace suite, production build, and all 1,285
+locally runnable runner-local tests passed; four Linux/database-dependent tests
+were deferred to CI. Main CI run `30735824484` passed all 1,289 runner-local
+tests across 63 files on Linux plus PostgreSQL migrations and seeds, database
+and API integrations, native spool and work-journal durability, the isolated
+Chromium measured journey, production build, and both native-evidence uploads.
+This admits ADR-094 and closes Slice 2.57. Host-path selection, secure file
+loading, systemd credential integration, fetch connection policy, logging,
+refresh, bootstrap, process entry, signals, activation, and runner enablement
+remain separate decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
