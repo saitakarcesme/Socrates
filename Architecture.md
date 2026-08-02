@@ -4527,6 +4527,66 @@ and evidence-upload gate. This admits ADR-087 and closes Slice 2.50. Platform
 resource construction, credentials, environment loading, process startup,
 shutdown ownership, and runner enablement remain separate decisions.
 
+### ADR-088: Authenticated control-plane composition owns one secret snapshot
+
+ADR-087 deliberately injects a broad already-authorized control-plane
+capability because ADR-086 contains no secret. Leaving that capability as the
+root boundary forever would fail to prove that the configured origin,
+transport timeout, response ceiling, source archive ceiling, runner
+credential, and actual HTTP client belong to one resource graph. Constructing
+the OCI backend and image catalog at the same time is not justified: trusted
+image declarations and their deployment-loading policy remain unresolved.
+
+The next boundary will therefore compose only authenticated control-plane
+transport. One `LocalRunnerAuthenticatedAttemptLifecycle` will accept an
+unknown ADR-086 configuration candidate, one separately supplied unknown
+bearer-credential candidate, one required `fetch` capability, and every
+non-transport capability already accepted by ADR-087. It parses and detaches
+the non-secret configuration before reading the credential, fetch, sandbox,
+image, scheduler, time, observer, identity, or directory-sync property.
+Malformed configuration therefore wins before any secret or capability getter
+and before every filesystem, network, process, clock, timer, recovery, image,
+or sandbox effect.
+
+After configuration admission, the wrapper reads the credential exactly once
+and requires the existing strict runner bearer-token contract. It retains no
+secret in a public field, error message, serialized diagnostic, configuration
+snapshot, log, or returned result. A malformed or throwing credential boundary
+becomes one fixed `invalid_credential` error; the original cause may remain
+only in memory. Credential rotation requires a fresh graph rather than
+silently replacing authority beneath an in-flight attempt.
+
+The wrapper requires an injected callable `fetch` instead of falling back to
+ambient `globalThis.fetch`. It constructs exactly one `RunnerHttpClient` with
+`controlPlane.origin`, `controlPlane.timeoutMs`,
+`controlPlane.maximumResponseBytes`, and `source.maximumArchiveBytes`; HTTPS
+remains mandatory and `allowInsecureHttp` is never enabled. The same client
+owns task acquisition, claim/reconciliation, heartbeat, event submission, and
+source-snapshot transport. No alternate URL, timeout, byte ceiling, credential,
+or retry default is introduced.
+
+The admitted detached configuration is passed into ADR-087 and re-admitted at
+that public boundary, producing an equivalent private snapshot without reading
+the original candidate again. The existing injected sandbox, image, scheduler,
+time, observer, journal/spool identity, and directory-sync capabilities remain
+unchanged. The wrapper retains only ADR-087's `run(signal)` operation, is frozen
+and opaque, and construction performs no fetch or other external effect.
+Concurrent or repeated calls share the same underlying lifecycle operation.
+
+Errors are fixed and redacted: non-secret configuration, credential,
+dependency, and unexpected composition failures remain distinguishable.
+Later mutation of the original options, fetch property, or other dependency
+methods cannot redirect the retained graph. A first transport, startup,
+dispatch, observation, or delay failure remains fail-stop through ADR-087 and
+is never used to construct a second client or lifecycle.
+
+This slice adds no credential source, environment/file/stdin/secret-store
+loader, refresh protocol, logging implementation, trusted image catalog,
+`NodeProcessExecutor`, host readiness, `NerdctlSandboxBackend`, image inspector,
+handshake verifier, process entry point, OS signal handling, shutdown timeout,
+feature flag, or runner activation. ADR-086 engine fields remain unconsumed and
+`LocalRunnerNotEnabledError` remains the production entry-point behavior.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

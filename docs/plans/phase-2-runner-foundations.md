@@ -1571,6 +1571,29 @@ durability, Chromium journey, production-build, and evidence-upload gate.
 ADR-087 is admitted. Platform resource composition, credentials, environment
 loading, process startup, shutdown ownership, and enablement remain deferred.
 
+### Slice 2.51 — authenticated control-plane composition
+
+Status: Planned on 2026-08-02.
+
+Architecture decision: ADR-088.
+
+Detailed plan: `docs/plans/slice-2.51-authenticated-control-plane-composition.md`.
+
+- parse ADR-086 before reading a secret or external capability;
+- validate one separately injected bearer credential with fixed redacted
+  failure semantics;
+- require an injected fetch capability and construct exactly one HTTPS
+  `RunnerHttpClient` from ADR-086 transport/source authority;
+- delegate to the retained ADR-087 lifecycle without exposing either graph;
+- prove exact header, URL, timeout, response/source byte mapping and
+  post-construction method capture;
+- keep credential loading/refresh, environment, OCI/image bootstrap, process
+  startup, shutdown, and activation out of scope.
+
+Exit: adversarial and transport integrations prove configuration-before-secret
+ordering, inert construction, exact authenticated client mapping, credential
+redaction, one retained lifecycle, and no ambient or duplicate authority.
+
 ## Acceptance gates
 
 1. No model-provider dependency exists.
