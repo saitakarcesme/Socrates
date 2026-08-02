@@ -1,6 +1,6 @@
 # Slice 2.52 trusted image catalog configuration
 
-Status: Planned
+Status: Admitted
 
 Date: 2026-08-02
 
@@ -105,3 +105,19 @@ digest, executable, argument, or cause text. No partial snapshot is returned.
 5. Failures are fixed and do not echo candidate data.
 6. No loader, inspection, handshake, process/OCI composition, entry point,
    shutdown owner, feature flag, or runner enablement lands.
+
+## Admission evidence
+
+Architecture commit `c27534b` and bounding commit `87f9519` preceded production
+code. Implementation commit `8b950d6` delivered the shared structural
+admission, strict V1 parser, one-digest trusted declarations, and inert catalog
+compatibility.
+
+The final local pass covered 53 trusted-image parser tests, nine catalog tests,
+the preserved 78-test ADR-086 configuration suite, all 1,138 runner-local
+tests, formatting, types, lint, both architecture audits, the production build,
+and the Chromium measured project-to-learning journey against fresh migrated
+PostgreSQL databases. Main CI run `30730132598` passed every required Linux,
+PostgreSQL, API, runner, native durability, Chromium journey,
+production-build, and evidence-upload gate. No loader, OCI/platform resource,
+process entry, shutdown owner, feature flag, or runner activation landed.

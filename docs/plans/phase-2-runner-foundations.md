@@ -1606,7 +1606,7 @@ enablement remain deferred.
 
 ### Slice 2.52 — trusted image catalog configuration
 
-Status: Planned on 2026-08-02.
+Status: Admitted on 2026-08-02.
 
 Architecture decision: ADR-089.
 
@@ -1626,6 +1626,16 @@ Detailed plan: `docs/plans/slice-2.52-trusted-image-catalog-configuration.md`.
 Exit: adversarial and property tests prove one digest authority, bounded closed
 data, deterministic detached admission, fixed redacted failure, downstream
 catalog compatibility, and zero external effects.
+
+Admission: architecture commit `c27534b` and bounding commit `87f9519`
+preceded implementation commit `8b950d6`; 53 trusted-image parser tests, nine
+catalog tests, the preserved 78-test ADR-086 suite, and all 1,138 runner-local
+tests passed with every local repository gate green against fresh migrated
+PostgreSQL. Main CI run `30730132598` passed every required Linux, PostgreSQL,
+API, runner, native durability, Chromium journey, production-build, and
+evidence-upload gate. ADR-089 is admitted. Catalog loading, OCI/platform
+bootstrap, process startup, shutdown ownership, feature flags, and enablement
+remain deferred.
 
 ## Acceptance gates
 

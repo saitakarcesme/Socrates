@@ -4667,6 +4667,27 @@ owner, feature flag, or runner activation. `LocalRunnerNotEnabledError` remains
 the production entry-point behavior until those independent authorities are
 admitted and composed.
 
+Architecture commit `c27534b` and bounding commit `87f9519` preceded production
+code. Implementation commit `8b950d6` extracts the shared descriptor-based
+plain-data traversal, adds the closed trusted-image V1 parser and explicit
+policy ceilings, removes duplicate reference/manifest authority from trusted
+declarations, and keeps the existing catalog inert. Fifty-three parser tests,
+nine catalog tests, and the preserved 78-test ADR-086 parser suite cover dense
+data admission, proxy and accessor failure, exact identity, both admitted
+architectures and manifest formats, command and environment byte ceilings,
+internal dot segments, mutation isolation, redaction, and downstream catalog
+compatibility.
+
+All 1,138 runner-local tests and every locally applicable repository gate
+passed against fresh migrated PostgreSQL databases, including production build
+and the Chromium measured project-to-learning journey. Main CI run
+`30730132598` passed every formatting, type, lint, architecture-audit,
+PostgreSQL, API, runner, Linux native durability, Chromium product-journey,
+production-build, and evidence-upload gate. This admits ADR-089 and closes
+Slice 2.52. Catalog loading, OCI/platform resource composition, process entry,
+shutdown ownership, feature flags, and runner enablement remain separate
+decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
