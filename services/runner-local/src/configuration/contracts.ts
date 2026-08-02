@@ -1,11 +1,13 @@
 import { posix } from "node:path";
 
+import { runtimeProtocolLimits } from "@socrates/runtime-protocol";
 import { z } from "zod";
 
 const maximumBytes = 2 ** 50;
 const maximumDurationMs = 86_400_000;
 const maximumCount = 1_000_000;
 const maximumMicros = 1_000_000_000;
+const minimumRuntimeProtocolBytes = runtimeProtocolLimits.maximumFrameBytes + 4;
 
 const positiveBytes = z.number().int().min(1).max(maximumBytes);
 const positiveDuration = z.number().int().min(1).max(maximumDurationMs);
@@ -179,7 +181,7 @@ const requestSchema = z.object({ maximumBytes: positiveBytes }).strict();
 
 const runtimeSchema = z
   .object({
-    maximumProtocolBytes: positiveBytes,
+    maximumProtocolBytes: positiveBytes.min(minimumRuntimeProtocolBytes),
     maximumChildOutputBytes: positiveBytes,
   })
   .strict();
@@ -284,18 +286,23 @@ const lifecycleSchema = z
   })
   .strict()
   .superRefine((lifecycle, context) => {
-    if (lifecycle.heartbeatIntervalMs >= lifecycle.leaseDurationMs) {
+    if (
+      lifecycle.heartbeatIntervalMs > Math.floor(lifecycle.leaseDurationMs / 3)
+    ) {
       issue(
         context,
         ["heartbeatIntervalMs"],
-        "Heartbeat interval must be shorter than lease duration.",
+        "Heartbeat interval cannot exceed one third of lease duration.",
       );
     }
-    if (lifecycle.revocationGracePeriodMs > lifecycle.leaseDurationMs) {
+    if (
+      lifecycle.revocationGracePeriodMs > lifecycle.leaseDurationMs ||
+      lifecycle.revocationGracePeriodMs > 60_000
+    ) {
       issue(
         context,
         ["revocationGracePeriodMs"],
-        "Revocation grace cannot exceed lease duration.",
+        "Revocation grace cannot exceed lease duration or 60000 milliseconds.",
       );
     }
   });

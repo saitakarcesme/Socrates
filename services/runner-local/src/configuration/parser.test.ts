@@ -1,4 +1,5 @@
 import fc from "fast-check";
+import { runtimeProtocolLimits } from "@socrates/runtime-protocol";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -399,9 +400,20 @@ describe("parseLocalRunnerConfiguration", () => {
   });
 
   it.each([
-    ["heartbeat equality", [["lifecycle", "heartbeatIntervalMs"], 30_000]],
-    ["heartbeat overflow", [["lifecycle", "heartbeatIntervalMs"], 30_001]],
+    ["heartbeat overflow", [["lifecycle", "heartbeatIntervalMs"], 10_001]],
     ["revocation overflow", [["lifecycle", "revocationGracePeriodMs"], 30_001]],
+    [
+      "revocation ceiling overflow",
+      [["lifecycle", "leaseDurationMs"], 60_002],
+      [["lifecycle", "revocationGracePeriodMs"], 60_001],
+    ],
+    [
+      "protocol frame underflow",
+      [
+        ["runtime", "maximumProtocolBytes"],
+        runtimeProtocolLimits.maximumFrameBytes + 3,
+      ],
+    ],
     ["source file overflow", [["source", "maximumFileBytes"], 67_108_865]],
     ["source component overflow", [["source", "maximumComponentBytes"], 4_097]],
     ["protocol overflow", [["runtime", "maximumProtocolBytes"], 2_097_153]],
@@ -424,8 +436,8 @@ describe("parseLocalRunnerConfiguration", () => {
     ["engine timeout underflow", [["engine", "executionTimeoutMs"], 299_999]],
     ["CPU quota inversion", [["execution", "minimumCpuQuotaMicros"], 100_001]],
     ["CPU period shape", [["execution", "cpuQuotaPeriodMicros"], 99_999]],
-  ] as const)("rejects relational %s", (_name, entry) => {
-    expectInvalid(changed(entry[0], entry[1]));
+  ] as const)("rejects relational %s", (_name, ...entries) => {
+    expectInvalid(withValues(entries));
   });
 
   it("rejects writable reservation equality and overflow", () => {
@@ -439,7 +451,7 @@ describe("parseLocalRunnerConfiguration", () => {
 
   it("accepts every exact relational boundary", () => {
     const candidate = withValues([
-      [["lifecycle", "heartbeatIntervalMs"], 29_999],
+      [["lifecycle", "heartbeatIntervalMs"], 10_000],
       [["lifecycle", "revocationGracePeriodMs"], 30_000],
       [["source", "maximumFileBytes"], 67_108_864],
       [["source", "maximumComponentBytes"], 4_096],
@@ -456,28 +468,42 @@ describe("parseLocalRunnerConfiguration", () => {
     expect(parseLocalRunnerConfiguration(candidate)).toMatchObject(candidate);
   });
 
+  it("accepts exactly one complete runtime frame budget", () => {
+    const maximumProtocolBytes = runtimeProtocolLimits.maximumFrameBytes + 4;
+    expect(
+      parseLocalRunnerConfiguration(
+        changed(["runtime", "maximumProtocolBytes"], maximumProtocolBytes),
+      ).runtime.maximumProtocolBytes,
+    ).toBe(maximumProtocolBytes);
+  });
+
   it("enforces lifecycle relations across generated one-unit boundaries", () => {
     fc.assert(
       fc.property(
-        fc.integer({ min: 2, max: 86_400_000 }),
+        fc.integer({ min: 3, max: 86_400_000 }),
         (leaseDurationMs) => {
+          const heartbeatIntervalMs = Math.floor(leaseDurationMs / 3);
+          const revocationGracePeriodMs = Math.min(leaseDurationMs, 60_000);
           expect(
             parseLocalRunnerConfiguration(
               withValues([
                 [["lifecycle", "leaseDurationMs"], leaseDurationMs],
-                [["lifecycle", "heartbeatIntervalMs"], leaseDurationMs - 1],
-                [["lifecycle", "revocationGracePeriodMs"], leaseDurationMs],
+                [["lifecycle", "heartbeatIntervalMs"], heartbeatIntervalMs],
+                [
+                  ["lifecycle", "revocationGracePeriodMs"],
+                  revocationGracePeriodMs,
+                ],
               ]),
             ).lifecycle,
           ).toMatchObject({
             leaseDurationMs,
-            heartbeatIntervalMs: leaseDurationMs - 1,
-            revocationGracePeriodMs: leaseDurationMs,
+            heartbeatIntervalMs,
+            revocationGracePeriodMs,
           });
           expectInvalid(
             withValues([
               [["lifecycle", "leaseDurationMs"], leaseDurationMs],
-              [["lifecycle", "heartbeatIntervalMs"], leaseDurationMs],
+              [["lifecycle", "heartbeatIntervalMs"], heartbeatIntervalMs + 1],
             ]),
           );
         },

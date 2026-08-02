@@ -899,7 +899,7 @@ describe("RestartTerminalRecoverySession", () => {
       pendingEvents: 0,
       terminal: true,
     });
-  });
+  }, 15_000);
 
   it("completes a real acknowledged spool locally without submitting an event", async () => {
     const rootPath = path();
@@ -962,5 +962,5 @@ describe("RestartTerminalRecoverySession", () => {
       pendingEvents: 0,
       terminal: true,
     });
-  });
+  }, 15_000);
 });

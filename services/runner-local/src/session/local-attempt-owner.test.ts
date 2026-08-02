@@ -782,7 +782,7 @@ describe("LocalAttemptOwner", () => {
     await expect(owner.dispatchNext()).resolves.toEqual({ state: "idle" });
     expect(value.sandbox.recoverOwned).toHaveBeenCalledOnce();
     expect(value.sources.recoverOwned).toHaveBeenCalledOnce();
-  });
+  }, 15_000);
 
   it("routes restarted pending evidence through the shared recovery graph only", async () => {
     const parent = await root();

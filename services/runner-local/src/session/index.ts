@@ -24,6 +24,12 @@ export {
   type LocalAttemptSpoolConfiguration,
 } from "./local-attempt-owner";
 export {
+  LocalRunnerAttemptLifecycle,
+  LocalRunnerAttemptLifecycleError,
+  type LocalRunnerAttemptControlPlane,
+  type LocalRunnerAttemptLifecycleOptions,
+} from "./local-runner-attempt-lifecycle";
+export {
   LocalAttemptDispatchLoop,
   LocalAttemptDispatchLoopError,
   type LocalAttemptDispatchDelay,
