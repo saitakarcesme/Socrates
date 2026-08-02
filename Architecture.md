@@ -4897,8 +4897,13 @@ snapshotter is the closed deployment choice `overlayfs`, `fuse-overlayfs`, or
 `native`; no empty, environment-selected, plugin-arbitrary, or automatic value
 is admitted. Executable, data-root, TOML, home, XDG, Docker-config, and runtime
 paths are canonical absolute POSIX paths. The executable must not be resolved
-through `PATH`. Private writable roots are pairwise non-overlapping and may not
-contain or equal the provisioned TOML path.
+through `PATH`. `XDG_CONFIG_HOME` and `XDG_DATA_HOME` are strict children of
+`HOME`; the Docker-config directory is a strict child of `XDG_CONFIG_HOME` and
+the nerdctl data root is a strict child of `XDG_DATA_HOME`. These are the only
+permitted engine-path containments. The engine data root and Docker-config
+directory do not overlap each other or ADR-086's artifact, source, journal, or
+spool roots. No writable path may contain, equal, or be contained by the
+provisioned TOML path.
 
 The admitted host environment is rebuilt as a null-prototype frozen record
 containing exactly `HOME`, `PATH`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`,
@@ -4928,14 +4933,19 @@ the runner never creates, repairs, or rewrites host engine configuration.
 
 `NerdctlInvocation` owns the executable and one frozen global argument prefix:
 exact address, derived namespace, selected snapshotter, data root,
-`--cgroup-manager=systemd`, `--insecure-registry=false`,
-`--experimental=false`, and the remaining security-relevant global defaults
-that v2.3.1 exposes. It rejects a command that is empty, contains a NUL, or
-attempts to introduce a global engine selector. Its only operation constructs
-a fresh frozen process request by prefixing command arguments and attaching the
-exact frozen host environment and caller-provided timeout, output, input, and
-abort bounds. Global flags precede the subcommand on every version, info,
-help, inspect, create, start, wait, kill, remove, and recovery operation.
+`--cgroup-manager=systemd`, `--debug=false`, `--debug-full=false`,
+`--insecure-registry=false`, `--experimental=false`,
+`--kube-hide-dupe=false`, `--selinux-enabled=false`, and
+`--userns-remap=`. The root-owned empty TOML fixes hidden DNS, health-check,
+host, CNI, CDI, bridge, and gateway settings at nerdctl v2.3.1 built-ins; none
+is accepted from deployment input. Readiness therefore admits exactly v2.3.1,
+not an arbitrary 2.3.x patch with potentially different defaults. The
+invocation rejects a command that is empty, contains a NUL, or attempts to
+introduce a global engine selector. Its only operation constructs a fresh
+frozen process request by prefixing command arguments and attaching the exact
+frozen host environment and caller-provided timeout, output, input, and abort
+bounds. Global flags precede the subcommand on every version, info, help,
+inspect, create, start, wait, kill, remove, and recovery operation.
 
 `ProcessRequest` therefore carries an exact environment rather than relying on
 executor construction state. `NodeProcessExecutor` requires that environment,
