@@ -106,6 +106,65 @@ jobs:
       - name: Test runner integrations
         run: pnpm --filter @socrates/runner-local test
 
+      - name: Validate adversarial public deployment trees
+        run: |
+          run_failure() {
+            SOCRATES_TEST_PUBLIC_DEPLOYMENT_FAILURE="$1" pnpm --filter @socrates/runner-local exec vitest run src/deployment/public-deployment-loader.test.ts
+          }
+
+          sudo mv /etc/socrates/runner-local/configuration.v1.json /etc/socrates/runner-local/configuration.v1.real
+          run_failure configuration_failed
+          sudo mv /etc/socrates/runner-local/configuration.v1.real /etc/socrates/runner-local/configuration.v1.json
+
+          sudo mv /etc/socrates/runner-local/configuration.v1.json /etc/socrates/runner-local/configuration.v1.real
+          sudo ln -s configuration.v1.real /etc/socrates/runner-local/configuration.v1.json
+          run_failure configuration_failed
+          sudo rm -f /etc/socrates/runner-local/configuration.v1.json
+          sudo mv /etc/socrates/runner-local/configuration.v1.real /etc/socrates/runner-local/configuration.v1.json
+
+          sudo ln /etc/socrates/runner-local/configuration.v1.json /etc/socrates/runner-local/configuration.v1.alias
+          run_failure configuration_failed
+          sudo rm -f /etc/socrates/runner-local/configuration.v1.alias
+
+          sudo chmod 0644 /etc/socrates/runner-local/configuration.v1.json
+          run_failure configuration_failed
+          sudo chmod 0444 /etc/socrates/runner-local/configuration.v1.json
+
+          sudo chown 1:0 /etc/socrates/runner-local/configuration.v1.json
+          run_failure configuration_failed
+          sudo chown 0:0 /etc/socrates/runner-local/configuration.v1.json
+
+          sudo mv /etc/socrates/runner-local/configuration.v1.json /etc/socrates/runner-local/configuration.v1.real
+          sudo install -d -o root -g root -m 0555 /etc/socrates/runner-local/configuration.v1.json
+          run_failure configuration_failed
+          sudo rmdir /etc/socrates/runner-local/configuration.v1.json
+          sudo mv /etc/socrates/runner-local/configuration.v1.real /etc/socrates/runner-local/configuration.v1.json
+
+          sudo mv /etc/socrates/runner-local/configuration.v1.json /etc/socrates/runner-local/configuration.v1.real
+          sudo dd if=/dev/zero of=/etc/socrates/runner-local/configuration.v1.json bs=1048577 count=1 status=none
+          sudo chmod 0444 /etc/socrates/runner-local/configuration.v1.json
+          run_failure configuration_failed
+          sudo rm -f /etc/socrates/runner-local/configuration.v1.json
+          sudo mv /etc/socrates/runner-local/configuration.v1.real /etc/socrates/runner-local/configuration.v1.json
+
+          printf '\n' | sudo tee -a /etc/socrates/runner-local/configuration.v1.json >/dev/null
+          run_failure configuration_failed
+          sudo truncate -s -1 /etc/socrates/runner-local/configuration.v1.json
+
+          printf '\n' | sudo tee -a /etc/socrates/runner-local/trusted-images.v1.json >/dev/null
+          run_failure trusted_images_failed
+          sudo truncate -s -1 /etc/socrates/runner-local/trusted-images.v1.json
+
+          sudo chmod 0775 /etc/socrates/runner-local
+          run_failure invalid_metadata
+          sudo chmod 0755 /etc/socrates/runner-local
+
+          sudo mv /etc/socrates/runner-local /etc/socrates/runner-local.real
+          sudo ln -s runner-local.real /etc/socrates/runner-local
+          run_failure open_failed
+          sudo rm -f /etc/socrates/runner-local
+          sudo mv /etc/socrates/runner-local.real /etc/socrates/runner-local
+
       - name: Remove bounded-reader FIFO fixture
         if: ${{ always() }}
         run: rm -f "$SOCRATES_TEST_FIFO"
@@ -113,8 +172,19 @@ jobs:
       - name: Remove public deployment fixture
         if: ${{ always() }}
         run: |
-          sudo rm -f /etc/socrates/runner-local/configuration.v1.json /etc/socrates/runner-local/trusted-images.v1.json
-          sudo rmdir /etc/socrates/runner-local /etc/socrates
+          if [ -L /etc/socrates/runner-local ]; then
+            sudo rm -f /etc/socrates/runner-local
+          fi
+          for directory in /etc/socrates/runner-local /etc/socrates/runner-local.real; do
+            if [ -d "$directory/configuration.v1.json" ] && [ ! -L "$directory/configuration.v1.json" ]; then
+              sudo rmdir "$directory/configuration.v1.json"
+            else
+              sudo rm -f "$directory/configuration.v1.json"
+            fi
+            sudo rm -f "$directory/configuration.v1.real" "$directory/configuration.v1.alias" "$directory/trusted-images.v1.json"
+            sudo rmdir "$directory" 2>/dev/null || true
+          done
+          sudo rmdir /etc/socrates 2>/dev/null || true
 
       - name: Validate native runner spool durability
         run: pnpm --filter @socrates/runner-local test:native-spool

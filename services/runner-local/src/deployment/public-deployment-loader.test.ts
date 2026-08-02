@@ -37,7 +37,8 @@ describe("NodeLocalRunnerPublicDeploymentLoader", () => {
 
   it.skipIf(
     process.platform !== "linux" ||
-      process.env.SOCRATES_TEST_PUBLIC_DEPLOYMENT !== "1",
+      process.env.SOCRATES_TEST_PUBLIC_DEPLOYMENT !== "1" ||
+      process.env.SOCRATES_TEST_PUBLIC_DEPLOYMENT_FAILURE !== undefined,
   )("admits the fixed root-owned CI deployment tree", async () => {
     const result = await new NodeLocalRunnerPublicDeploymentLoader().load();
 
@@ -53,5 +54,29 @@ describe("NodeLocalRunnerPublicDeploymentLoader", () => {
     expect(Object.isFrozen(result)).toBe(true);
     expect(Object.isFrozen(result.configuration)).toBe(true);
     expect(Object.isFrozen(result.trustedImages.images)).toBe(true);
+  });
+
+  it.skipIf(
+    process.platform !== "linux" ||
+      process.env.SOCRATES_TEST_PUBLIC_DEPLOYMENT_FAILURE === undefined,
+  )("fails closed for the CI-provisioned adversarial tree", async () => {
+    const expected = process.env.SOCRATES_TEST_PUBLIC_DEPLOYMENT_FAILURE;
+    expect([
+      "open_failed",
+      "invalid_metadata",
+      "configuration_failed",
+      "trusted_images_failed",
+    ]).toContain(expected);
+
+    const error = await new NodeLocalRunnerPublicDeploymentLoader()
+      .load()
+      .catch((failure: unknown) => failure);
+
+    expect(error).toBeInstanceOf(LocalRunnerPublicDeploymentLoadError);
+    expect(error).toMatchObject({ code: expected });
+    expect(Object.isFrozen(error)).toBe(true);
+    expect("cause" in (error as object)).toBe(false);
+    expect(JSON.stringify(error)).not.toContain("/etc/socrates");
+    expect((error as Error).message).not.toContain("/etc/socrates");
   });
 });
