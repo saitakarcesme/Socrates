@@ -5781,6 +5781,114 @@ Observer policy, ADR-093 bootstrap, process entry, systemd unit, signals,
 shutdown deadlines, activation, and runner enablement remain separate
 decisions.
 
+### ADR-100: dispatch observation is one bounded canonical stderr record
+
+ADR-084 makes observation a fail-stop transition: a dispatch result cannot
+authorize another dispatch until its observer fulfills. ADR-093 consequently
+refuses to install an implicit console or no-op observer. Slice 2.63 closes the
+production observation format and Node sink without turning operational logs
+into durable attempt truth. It adds one inert, zero-input
+`NodeLocalRunnerDispatchObserver` implementing the existing
+`LocalAttemptDispatchObserver` contract and exposes only `observe(result)`.
+
+The observer emits exactly one UTF-8 canonical JSON record followed by exactly
+one LF byte for each already admitted dispatch result. The complete encoded
+record, including LF, must be at most 2,048 bytes and is passed to the sink in
+one write call; it is never split. Canonical encoding uses the repository's
+existing recursively key-sorted `canonicalJson` boundary. There is no pretty
+printing, ANSI control sequence, platform newline, interpolated text,
+multi-line stack, or fallback representation.
+
+Every record has exact schema
+`socrates.local-runner.dispatch-observation.v1` and the observed top-level
+state. `idle` contains nothing else. `rejected` contains only the admitted
+delivery/task/attempt UUIDs, recovered flag, fixed conflict reason, HTTP status,
+and API error code; the unbounded request ID is deliberately omitted.
+`indeterminate` contains the admitted delivery and lease identity, recovered
+flag, server-observed instant, and server lease-expiry instant. `retired`
+contains that identity, recovered flag, and admitted retirement reason.
+`completed` contains that identity, recovered flag, and acknowledged evidence
+sequence. `settled` contains the identity and exact fresh or restart-recovery
+path. A completed settlement adds only `result: "completed"`, the appended or
+recovered publication disposition, and the terminal authority state. A fresh
+no-evidence settlement adds only `result: "no_evidence"`, its closed reason,
+and terminal authority state. Cancellation payloads and termination receipts
+are not logged.
+
+Lease and delivery UUIDs, fence, recovered flag, bounded timestamps, closed
+reason/code enums, publication disposition, authority state, and acknowledged
+sequence are the complete allowlist. The observer never generically serializes
+the input and never emits the task, goal, hypothesis, action, command, source
+descriptor, repository location, image configuration, metric, budget,
+environment, filesystem path, request ID, bearer credential, headers, body,
+runtime output, terminal evidence payload, cancellation content, native error,
+or abort reason. Operational records are diagnostic correlation only; they do
+not create or modify journal/spool truth, experiment events, metrics, or
+learnings.
+
+The package-private projection core re-admits every allowlisted scalar from
+the deeply frozen plain dispatch snapshot before constructing a fresh frozen
+record. Proxy, accessor, mutable, malformed, unknown-state, inconsistent
+identity, invalid enum, invalid timestamp, non-canonical encoding, or oversized
+input becomes one frozen, cause-free
+`NodeLocalRunnerDispatchObservationError` with code `projection_failed` before
+sink access. Projection errors contain no inspected value. The existing
+dispatch loop remains the authoritative full-result validator; this second
+projection is intentionally narrow defense at the externalization boundary,
+not another copy of the attempt state machine.
+
+Production construction accepts no writer, stream, encoder, formatter, clock,
+environment, path, level, filter, sample rate, buffer, or override. It captures
+the current `process.stderr` owner and its `write` method once during inert
+construction. It does not call `console`, replace a process stream, inspect
+`JOURNAL_STREAM`, open a journal socket, add an error listener, or write during
+construction. A package-private core may inject one byte-write capability for
+deterministic tests; that seam is not exported through the package barrel.
+
+`observe()` awaits the single Node write callback. Node defines that callback
+as settlement after the chunk has been fully handled, so the existing awaited
+observer boundary also prevents this observer from issuing a second write
+while its prior record is buffered. Synchronous throws, callback errors, and
+injected write rejections become the same frozen cause-free error with code
+`write_failed`. There is no retry, secondary sink, memory queue, file fallback,
+drop-on-backpressure mode, console fallback, or success after write failure.
+ADR-084 then stops the dispatch lifecycle on that rejection; a future process
+root owns process-level reporting and restart.
+
+The observer does not own fd 2 and therefore has no `close()` operation. A
+future bootstrap may construct exactly one instance, pass it to ADR-093, abort
+and settle the application graph during shutdown, and leave process stream
+closure to Node. systemd service policy may route stderr to the journal, which
+is its default stream behavior, but this slice neither creates the unit nor
+claims journal durability. Running outside systemd writes the same record to
+the inherited stderr destination.
+
+Tests must prove exact projections for every top-level state, both settled
+paths, completed/no-evidence outcomes, every terminal authority state, fixed
+canonical bytes and LF, the 2,048-byte ceiling, one write per call, write
+settlement ordering, construction silence, mutation isolation, zero console or
+stdout use, all malformed/proxy/accessor/mutable denial before write, native
+failure normalization, public-surface minimality, and complete exclusion of
+secret and payload sentinel values. Linux CI must launch a child using the
+zero-input production observer with stderr piped to a bounded parent reader and
+prove byte-exact one-line output, empty stdout, successful child exit only
+after write settlement, and no extra record.
+
+This decision follows Node's official
+[`process.stderr`](https://nodejs.org/docs/latest-v22.x/api/process.html#processstderr)
+and
+[`Writable.write`](https://nodejs.org/docs/latest-v22.x/api/stream.html#writablewritechunk-encoding-callback)
+contracts and systemd's official
+[`Journal Native Protocol`](https://systemd.io/JOURNAL_NATIVE_PROTOCOL/)
+description. Node specifies fd 2 stream behavior and callback settlement;
+systemd documents stdout/stderr journal routing as the service defaults and
+also explains why native journal metadata would require a separate protocol.
+
+This decision does not define log levels or sampling, add native journal or
+remote telemetry transport, compose ADR-093, load deployment inputs, create a
+process entry point or systemd unit, handle signals, set a shutdown deadline,
+own process exit, expose an activation flag, or enable the runner.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations
