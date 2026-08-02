@@ -5263,6 +5263,37 @@ names; inspect ancestor directories; compose ADR-094; read environment or CLI
 state; integrate systemd credentials; refresh files; log; bootstrap; handle
 signals; create a process entry; activate work; or enable the runner.
 
+Architecture commits `381ac84`, `5cea1c0`, `a8e5977`, and `c008c46` preceded
+production code and successively closed final-component scope, absolute
+allocation authority, caller-owned result mutability, and nonblocking special-
+file opens. Implementation commit `171cb0c` adds the frozen public contract,
+concrete Linux Node reader, package-private descriptor protocol, deterministic
+core tests, native filesystem tests, and an audit-compliant CI-provisioned FIFO
+fixture. The production reader accepts no filesystem override and neither the
+core nor its handle seam is exported through the package barrel.
+
+Twenty deterministic core tests prove one retained handle, two bigint metadata
+snapshots, bounded partial reads, explicit EOF, tracked metadata drift, initial
+kind/link/owner/mode and size rejection, syscall normalization, and primary-
+failure-preserving close semantics. Thirty-two public tests prove strict owner,
+proxy and accessor rejection, canonical path and numeric policy, redaction,
+opacity, unsupported-host ordering, post-call mutation isolation, detached
+output, and real Linux missing, symlink, directory, hard-link, owner, mode,
+empty, over-limit, and FIFO behavior.
+
+All 1,333 locally runnable runner-local tests passed with eight Linux/database-
+dependent tests deferred to CI. Local formatting, all 14-package type and lint
+gates, both architecture audits, the complete database-free workspace suite,
+and production build passed. Main CI run `30736933595` passed all 1,341 runner-
+local tests across 65 files on Linux plus FIFO provisioning and cleanup,
+PostgreSQL migrations and seeds, database and API integrations, native spool
+and work-journal durability, the isolated Chromium measured journey,
+production build, and both native-evidence uploads. This admits ADR-095 and
+closes Slice 2.58. Deployment path and ancestor authority, three-file loading,
+systemd credential integration, environment policy, refresh, bootstrap,
+process entry, signals, activation, and runner enablement remain separate
+decisions.
+
 ## 19. Explicit non-goals for the first commit
 
 - autonomous agents or provider integrations

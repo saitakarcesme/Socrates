@@ -1,6 +1,6 @@
 # Slice 2.58 descriptor-bound bounded file reader
 
-Status: Proposed
+Status: Admitted
 
 Date: 2026-08-02
 
@@ -138,3 +138,34 @@ the package or accepted by `NodeBoundedRegularFileReader`.
 4. Windows-local and Linux-native evidence together cover the full protocol.
 5. Deployment path authority, three-file loading, credentials, environment,
    bootstrap, process entry, and runner activation remain absent.
+
+## Admission evidence
+
+Architecture commits `381ac84`, `5cea1c0`, `a8e5977`, and `c008c46` preceded
+production code. They separated ancestor authority from final-component
+protection, capped allocation at 16 MiB, clarified caller-owned byte mutability,
+and added nonblocking/no-controlling-terminal flags before implementation
+commit `171cb0c` introduced the reader, package-private descriptor core, public
+contracts, tests, and CI FIFO fixture.
+
+Twenty core tests prove one handle, two metadata snapshots, bounded partial
+reads, explicit EOF, every tracked metadata drift, initial kind/link/owner/mode
+and size rejection, syscall normalization, and exact close precedence. Thirty-
+two public tests cover strict plain-owner admission, proxy/accessor rejection,
+canonical path and numeric policy, redaction, opacity, unsupported-host order,
+post-call mutation isolation, detached results, and native missing, symlink,
+directory, hard-link, owner, mode, empty, over-limit, and FIFO behavior. The
+four native cases skip on Windows and run twice in CI: once through workspace
+units and once through the dedicated runner integration gate.
+
+All 1,333 locally runnable runner-local tests passed; eight Linux/database-
+dependent tests were deferred to CI. Local formatting, all 14-package type and
+lint gates, both architecture audits, the complete database-free workspace
+suite, and production build passed. Main CI run `30736933595` passed all 1,341
+runner-local tests across 65 files on Linux plus FIFO provisioning and cleanup,
+PostgreSQL migrations and seeds, database and API integrations, native spool
+and work-journal durability, the isolated Chromium measured journey,
+production build, and both native-evidence uploads. No path selection,
+ancestor inspection, three-file loader, systemd credential integration,
+environment loader, bootstrap, process entry, activation, or runner enablement
+landed.
