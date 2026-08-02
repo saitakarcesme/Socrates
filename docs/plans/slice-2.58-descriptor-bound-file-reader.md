@@ -9,10 +9,12 @@ Architecture: ADR-094, ADR-095
 ## Outcome
 
 Add one Linux-only Node primitive that reads a bounded regular file through a
-single retained descriptor and returns detached immutable bytes. It provides
-the final-component, inode, metadata, growth, and mutation guarantees needed by
-a later deployment loader without selecting deployment paths, composing three
-files, reading environment state, or activating the local runner.
+single retained descriptor and returns one detached caller-owned byte snapshot.
+The mutable `Uint8Array` is never retained by the reader and will be copied
+again by ADR-094. It provides the final-component, inode, metadata, growth, and
+mutation guarantees needed by a later deployment loader without selecting
+deployment paths, composing three files, reading environment state, or
+activating the local runner.
 
 ## Threat boundary
 
