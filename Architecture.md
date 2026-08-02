@@ -4884,8 +4884,8 @@ Slice 2.55 will replace the executable-only policy with one immutable
 `NerdctlInvocation` shared by all three consumers. ADR-086's strict V1 engine
 configuration gains an absolute canonical nerdctl executable, one exact
 `unix://` containerd socket address, a selected rootless snapshotter, one
-canonical private nerdctl data root, one provisioned nerdctl TOML path, and an
-exact host-process environment. The namespace is not a second deployment
+canonical private nerdctl data root, one provisioned nerdctl TOML path, one
+dedicated working directory, and an exact host-process environment. The namespace is not a second deployment
 input: it is derived as `socrates-<deploymentId>` from the already admitted
 identity. The cgroup manager is fixed by architecture to `systemd`, because
 the selected rootless cgroup-v2 resource enforcement depends on systemd.
@@ -4897,13 +4897,16 @@ snapshotter is the closed deployment choice `overlayfs`, `fuse-overlayfs`, or
 `native`; no empty, environment-selected, plugin-arbitrary, or automatic value
 is admitted. Executable, data-root, TOML, home, XDG, Docker-config, and runtime
 paths are canonical absolute POSIX paths. The executable must not be resolved
-through `PATH`. `XDG_CONFIG_HOME` and `XDG_DATA_HOME` are strict children of
+through `PATH`. The working directory is a strict child of `HOME`, contains no
+configuration, credential, image, source, journal, spool, or task data, and is
+used only as nerdctl's rootless `nsenter` working-directory anchor.
+`XDG_CONFIG_HOME` and `XDG_DATA_HOME` are strict children of
 `HOME`; the Docker-config directory is a strict child of `XDG_CONFIG_HOME` and
 the nerdctl data root is a strict child of `XDG_DATA_HOME`. These are the only
-permitted engine-path containments. The engine data root and Docker-config
-directory do not overlap each other or ADR-086's artifact, source, journal, or
-spool roots. No writable path may contain, equal, or be contained by the
-provisioned TOML path.
+permitted engine-path containments. The working directory, engine data root,
+and Docker-config directory do not overlap each other or ADR-086's artifact,
+source, journal, or spool roots. No writable path may contain, equal, or be
+contained by the provisioned TOML path.
 
 The admitted host environment is rebuilt as a null-prototype frozen record
 containing exactly `HOME`, `PATH`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`,
@@ -4943,18 +4946,22 @@ not an arbitrary 2.3.x patch with potentially different defaults. The
 invocation rejects a command that is empty, contains a NUL, or attempts to
 introduce a global engine selector. Its only operation constructs a fresh
 frozen process request by prefixing command arguments and attaching the exact
-frozen host environment and caller-provided timeout, output, input, and abort
-bounds. Global flags precede the subcommand on every version, info, help,
+frozen host environment, dedicated working directory, and caller-provided
+timeout, output, input, and abort bounds. Global flags precede the subcommand on every version, info, help,
 inspect, create, start, wait, kill, remove, and recovery operation.
 
-`ProcessRequest` therefore carries an exact environment rather than relying on
-executor construction state. `NodeProcessExecutor` requires that environment,
-copies it without getters or prototypes, and passes exactly it to `spawn`; its
-zero-option fallback to `process.env` is removed. Missing or malformed process
-environment fails before spawn. The generic executor still owns shell-free
-argument-array execution, byte limits, cancellation, and timeouts; it does not
-know nerdctl policy. Native validation must now supply the same explicit
-environment and invocation contract as production composition.
+`ProcessRequest` therefore carries an exact environment and absolute working
+directory rather than relying on executor construction state.
+`NodeProcessExecutor` requires both, copies the environment without getters or
+prototypes, and passes them exactly to `spawn`; its zero-option fallback to
+`process.env` and inherited current-working-directory fallback are removed.
+Missing or malformed process environment or working directory fails before
+spawn. Host readiness proves that the working directory is a symlink-free
+directory owned by the effective runner UID with no group/other access. The
+generic executor still owns shell-free argument-array execution, byte limits,
+cancellation, and timeouts; it does not know nerdctl policy. Native validation
+must now supply the same explicit environment, working directory, and
+invocation contract as production composition.
 
 `LocalRunnerOciPlatform` constructs exactly one invocation from its detached
 ADR-086 snapshot and gives that same frozen object to one readiness verifier,
